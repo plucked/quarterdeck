@@ -13,7 +13,7 @@ use qc_cache::{
     ViewedFile, ViewedScope,
 };
 use qc_diff::FileDiff;
-use qc_file_tree::{FileTree, NodeId};
+use qc_file_tree::{FileGroup, FileTree, NodeId};
 use qc_github::{GitHubClient, PullRequest, PullRequestFile, PullRequestStack, StackMembership};
 use qc_markdown::MarkdownDocument;
 use qc_syntax::DiffSyntax;
@@ -28,7 +28,6 @@ use super::fetch_combined_files::fetch_combined_files;
 use super::fetch_stack::{cached_stack, refresh_stack};
 use super::file_review_state::FileReviewState;
 use super::file_tree_state::FileTreeState;
-use super::filter_toggle::FilterToggle;
 use super::folder_viewed_state::FolderViewedState;
 use super::load_progress::LoadProgress;
 use super::loaded_file::LoadedFile;
@@ -202,7 +201,7 @@ impl PullRequestDetail {
             code_segments: CodeSegments::default(),
             diff_selection: None,
             is_selecting: false,
-            file_tree: FileTreeState::new(layout),
+            file_tree: FileTreeState::new(layout.clone()),
             is_description_expanded: false,
             description_scroll: ScrollHandle::new(),
             review_mode: layout.stack_review,
@@ -825,10 +824,7 @@ impl PullRequestDetail {
         let Some(loaded) = self.loaded_files().get(file) else {
             return;
         };
-        let is_shown = self.file_tree.filter().shows(
-            loaded.filename(),
-            self.file_review.is_viewed(loaded.filename()),
-        );
+        let is_shown = self.file_tree.shows(loaded, &self.file_review);
         let rows = if is_shown {
             DetailRowList::file_rows(
                 file,
@@ -881,16 +877,24 @@ impl PullRequestDetail {
     }
 
     /// Flips one hide toggle of the filter; the tree and the diff follow, and it is saved.
-    pub(super) fn toggle_filter(&mut self, toggle: FilterToggle, cx: &mut Context<Self>) {
-        self.file_tree.toggle_filter(toggle);
+    pub(super) fn toggle_filter(&mut self, group: FileGroup, cx: &mut Context<Self>) {
+        self.file_tree.toggle_group(group);
         UiStateRecorder::record_review_layout(cx, self.review_layout());
         self.rebuild_rows(self.anchor_at_top());
         cx.notify();
     }
 
-    /// Hides or shows the files with `extension` in the tree and the diff.
-    pub(super) fn toggle_extension(&mut self, extension: &str, cx: &mut Context<Self>) {
-        self.file_tree.toggle_extension(extension);
+    /// Shows every file, or hides every group (the "All" chip), and saves the hide toggles.
+    pub(super) fn toggle_all_filters(&mut self, cx: &mut Context<Self>) {
+        self.file_tree.toggle_all_filters();
+        UiStateRecorder::record_review_layout(cx, self.review_layout());
+        self.rebuild_rows(self.anchor_at_top());
+        cx.notify();
+    }
+
+    /// Hides or shows the files of `file_type` in the tree and the diff.
+    pub(super) fn toggle_file_type(&mut self, file_type: &str, cx: &mut Context<Self>) {
+        self.file_tree.toggle_file_type(file_type);
         self.rebuild_rows(self.anchor_at_top());
         cx.notify();
     }

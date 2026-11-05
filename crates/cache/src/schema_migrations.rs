@@ -258,6 +258,11 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     ALTER TABLE review_layout ADD COLUMN stack_review TEXT NOT NULL DEFAULT 'layer'
         CHECK (stack_review IN ('layer', 'combined'));
 ",
+    r"
+    -- Whether files moved or copied without changes are hidden.
+    ALTER TABLE review_layout ADD COLUMN hide_unchanged_moves INTEGER NOT NULL DEFAULT 0
+        CHECK (hide_unchanged_moves IN (0, 1));
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

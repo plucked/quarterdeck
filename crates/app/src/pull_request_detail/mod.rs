@@ -22,7 +22,6 @@
 //! - `file_set_update.rs`: `FileSetUpdate`, whether cached files are confirmed or refetched.
 //! - `loaded_file.rs`: `LoadedFile`, a changed file with its built diff, colors and sizes.
 //! - `file_tree_state.rs`: `FileTreeState`, the file tree panel's tree, filter, folders and rows.
-//! - `filter_toggle.rs`: `FilterToggle`, one hide switch of the file filter.
 //! - `folder_viewed_state.rs`: `FolderViewedState`, none, some or all of a folder viewed.
 //! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
 //! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.
@@ -48,7 +47,6 @@ mod file_review_state;
 mod file_set_update;
 mod file_tree_rendering;
 mod file_tree_state;
-mod filter_toggle;
 mod folder_viewed_state;
 mod load_progress;
 mod loaded_file;

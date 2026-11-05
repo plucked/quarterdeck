@@ -94,6 +94,13 @@ pub fn extension_of(path: &str) -> Option<String> {
     (!stem.is_empty()).then(|| format!(".{}", extension.to_lowercase()))
 }
 
+/// What the file-type filter groups the file by: its extension (as
+/// [`extension_of`] gives it) or, for a name without one, the whole file
+/// name as written (`Dockerfile`, `.gitignore`).
+pub fn file_type_of(path: &str) -> String {
+    extension_of(path).unwrap_or_else(|| split_path(path).1.to_owned())
+}
+
 /// The folder names and the file name of a path.
 fn split_path(path: &str) -> (Vec<&str>, &str) {
     let mut segments: Vec<&str> = path.split('/').collect();
@@ -155,5 +162,13 @@ mod tests {
         );
         assert_eq!(extension_of("Makefile"), None);
         assert_eq!(extension_of(".gitignore"), None);
+    }
+
+    /// Names without an extension are their own file type.
+    #[test]
+    fn reads_file_types() {
+        assert_eq!(file_type_of("src/Main.RS"), ".rs");
+        assert_eq!(file_type_of("docker/Dockerfile"), "Dockerfile");
+        assert_eq!(file_type_of(".gitignore"), ".gitignore");
     }
 }

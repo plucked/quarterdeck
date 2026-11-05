@@ -147,12 +147,13 @@ fn file_note(
     }
     // No patch: a move or copy without changes, else a binary or too large file.
     if loaded.file.patch.is_none() {
-        let is_unchanged = loaded.file.additions == 0 && loaded.file.deletions == 0;
-        return Some(match (loaded.file.status.as_str(), is_unchanged) {
-            ("renamed", true) => FileNote::RenamedWithoutChanges,
-            ("copied", true) => FileNote::CopiedWithoutChanges,
-            (_, true | false) => FileNote::NoPatch,
-        });
+        return Some(
+            match (loaded.file.status.as_str(), loaded.is_unchanged_move()) {
+                ("renamed", true) => FileNote::RenamedWithoutChanges,
+                ("copied", true) => FileNote::CopiedWithoutChanges,
+                (_, true | false) => FileNote::NoPatch,
+            },
+        );
     }
     if !loaded.diff.is_empty() {
         return None;

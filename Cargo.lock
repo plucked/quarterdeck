@@ -3536,6 +3536,7 @@ dependencies = [
  "anyhow",
  "dirs 7.0.0",
  "qc-diff",
+ "qc-file-tree",
  "qc-github",
  "rusqlite",
 ]

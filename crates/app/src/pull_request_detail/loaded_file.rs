@@ -66,6 +66,13 @@ impl LoadedFile {
         &self.file.filename
     }
 
+    /// Whether the file was moved or copied with its content unchanged:
+    /// GitHub sends no patch and counts no changed lines for it.
+    pub fn is_unchanged_move(&self) -> bool {
+        let is_move = matches!(self.file.status.as_str(), "renamed" | "copied");
+        is_move && self.file.patch.is_none() && self.file.additions == 0 && self.file.deletions == 0
+    }
+
     /// Whether the file is big enough to start collapsed.
     pub fn is_large(&self) -> bool {
         self.diff.changed_line_count() > LARGE_DIFF_LINES

@@ -4,9 +4,8 @@ use gpui::{
     AnyElement, Context, Div, FontWeight, IntoElement, Rgba, SharedString, Styled, div, prelude::*,
     px, relative, uniform_list,
 };
-use qc_file_tree::{TreeNodeKind, TreeRow};
+use qc_file_tree::{FileGroup, TreeNodeKind, TreeRow};
 
-use super::filter_toggle::FilterToggle;
 use super::folder_viewed_state::FolderViewedState;
 use super::pull_request_detail::PullRequestDetail;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
@@ -47,6 +46,8 @@ impl PullRequestDetail {
 
     /// Title, viewed progress and the filter chips. Chips show what is
     /// shown: clicking one hides that group from the tree and the diff.
+    /// "All" shows everything when anything is hidden, else hides it all;
+    /// "Moved" (files moved without changes) appears when there are any.
     fn render_tree_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let files = self.loaded_files();
         let viewed = files
@@ -58,45 +59,60 @@ impl PullRequestDetail {
         let toggle_chip = |id: &'static str,
                            label: &'static str,
                            is_hidden: bool,
-                           toggle: FilterToggle,
+                           toggle: FileGroup,
                            cx: &mut Context<Self>| {
             render_chip(id.into(), label.into(), !is_hidden)
                 .on_click(cx.listener(move |detail, _, _, cx| detail.toggle_filter(toggle, cx)))
         };
         let mut chips = vec![
+            render_chip("chip-all".into(), "All".into(), !filter.is_active())
+                .on_click(cx.listener(|detail, _, _, cx| detail.toggle_all_filters(cx))),
             toggle_chip(
                 "chip-viewed",
                 "Viewed",
-                filter.hide_viewed,
-                FilterToggle::Viewed,
+                filter.hides(FileGroup::Viewed),
+                FileGroup::Viewed,
                 cx,
             ),
             toggle_chip(
                 "chip-tests",
                 "Tests",
-                filter.hide_tests,
-                FilterToggle::Tests,
+                filter.hides(FileGroup::Tests),
+                FileGroup::Tests,
                 cx,
             ),
             toggle_chip(
                 "chip-generated",
                 "Generated",
-                filter.hide_generated,
-                FilterToggle::Generated,
+                filter.hides(FileGroup::Generated),
+                FileGroup::Generated,
                 cx,
             ),
         ];
-        for count in self.file_tree().extensions() {
-            let extension = count.extension.clone();
-            let is_shown = !filter.hidden_extensions.contains(&extension);
+        let unchanged_moves = self.file_tree().unchanged_moves();
+        if unchanged_moves > 0 {
             chips.push(
                 render_chip(
-                    SharedString::from(format!("chip-extension-{extension}")),
-                    format!("{extension} {}", count.count).into(),
+                    "chip-unchanged-moves".into(),
+                    format!("Moved {unchanged_moves}").into(),
+                    !filter.hides(FileGroup::UnchangedMoves),
+                )
+                .on_click(cx.listener(|detail, _, _, cx| {
+                    detail.toggle_filter(FileGroup::UnchangedMoves, cx);
+                })),
+            );
+        }
+        for count in self.file_tree().file_types() {
+            let file_type = count.file_type.clone();
+            let is_shown = !filter.hidden_file_types.contains(&file_type);
+            chips.push(
+                render_chip(
+                    SharedString::from(format!("chip-file-type-{file_type}")),
+                    format!("{file_type} {}", count.count).into(),
                     is_shown,
                 )
                 .on_click(
-                    cx.listener(move |detail, _, _, cx| detail.toggle_extension(&extension, cx)),
+                    cx.listener(move |detail, _, _, cx| detail.toggle_file_type(&file_type, cx)),
                 ),
             );
         }
