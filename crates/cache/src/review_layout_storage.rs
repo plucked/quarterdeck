@@ -5,12 +5,13 @@ use qc_file_tree::FileKind;
 use rusqlite::{OptionalExtension, params};
 
 use crate::ui_state_store::SINGLE_ROW_ID;
-use crate::{PanelVisibility, ReviewLayoutState, StackReviewMode, UiStateStore};
+use crate::{NoteDestination, PanelVisibility, ReviewLayoutState, StackReviewMode, UiStateStore};
 
 /// The columns of the `review_layout` row, read before decoding.
 struct StoredReviewLayout {
     file_tree_visible: i64,
     stack_review: String,
+    comment_destination: String,
     hide_viewed: bool,
     hidden_kinds: BTreeSet<FileKind>,
 }
@@ -26,7 +27,7 @@ fn kind_column(kind: FileKind) -> &'static str {
 }
 
 /// Columns read before the kind columns.
-const FIXED_COLUMNS: usize = 3;
+const FIXED_COLUMNS: usize = 4;
 
 impl UiStateStore {
     /// The last saved review layout.
@@ -39,7 +40,7 @@ impl UiStateStore {
             .connection()
             .query_row(
                 &format!(
-                    "SELECT file_tree_visible, stack_review, hide_viewed, {}
+                    "SELECT file_tree_visible, stack_review, hide_viewed, comment_destination, {}
                      FROM review_layout WHERE id = ?1",
                     kind_columns.join(", ")
                 ),
@@ -55,6 +56,7 @@ impl UiStateStore {
                         file_tree_visible: row.get(0)?,
                         stack_review: row.get(1)?,
                         hide_viewed: row.get(2)?,
+                        comment_destination: row.get(3)?,
                         hidden_kinds,
                     })
                 },
@@ -69,7 +71,15 @@ impl UiStateStore {
             .ok_or_else(|| anyhow!("unknown file tree visibility {}", stored.file_tree_visible))?;
         let stack_review = StackReviewMode::from_sql_text(&stored.stack_review)
             .ok_or_else(|| anyhow!("unknown stack review mode {:?}", stored.stack_review))?;
+        let comment_destination = NoteDestination::from_sql_text(&stored.comment_destination)
+            .ok_or_else(|| {
+                anyhow!(
+                    "unknown comment destination {:?}",
+                    stored.comment_destination
+                )
+            })?;
         Ok(Some(ReviewLayoutState {
+            comment_destination,
             file_tree,
             hide_viewed: stored.hide_viewed,
             hidden_kinds: stored.hidden_kinds,
@@ -82,15 +92,16 @@ impl UiStateStore {
         let hides = |kind| layout.hidden_kinds.contains(&kind);
         self.connection().execute(
             "INSERT INTO review_layout (id, file_tree_visible, stack_review, hide_viewed,
-                hide_code, hide_tests, hide_generated, hide_unchanged_moves)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                hide_code, hide_tests, hide_generated, hide_unchanged_moves, comment_destination)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT (id) DO UPDATE SET
                 file_tree_visible = excluded.file_tree_visible,
                 stack_review = excluded.stack_review,
                 hide_viewed = excluded.hide_viewed,
                 hide_code = excluded.hide_code, hide_tests = excluded.hide_tests,
                 hide_generated = excluded.hide_generated,
-                hide_unchanged_moves = excluded.hide_unchanged_moves",
+                hide_unchanged_moves = excluded.hide_unchanged_moves,
+                comment_destination = excluded.comment_destination",
             params![
                 SINGLE_ROW_ID,
                 layout.file_tree.as_sql_integer(),
@@ -99,7 +110,8 @@ impl UiStateStore {
                 hides(FileKind::Code),
                 hides(FileKind::Tests),
                 hides(FileKind::Generated),
-                hides(FileKind::Moved)
+                hides(FileKind::Moved),
+                layout.comment_destination.as_sql_text()
             ],
         )?;
         Ok(())
@@ -120,6 +132,7 @@ mod tests {
             hide_viewed: true,
             hidden_kinds: BTreeSet::from([FileKind::Code, FileKind::Moved]),
             stack_review: StackReviewMode::Combined,
+            comment_destination: NoteDestination::Local,
         };
         store.put_review_layout(&layout).unwrap();
         assert_eq!(store.review_layout().unwrap(), Some(layout));

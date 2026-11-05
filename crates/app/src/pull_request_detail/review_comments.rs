@@ -47,15 +47,13 @@ pub struct ReviewComments {
 }
 
 impl ReviewComments {
-    /// The cards to show for comments going to `destination`: GitHub's
-    /// conversations and drafts, or the local notes.
-    pub fn cards(&self, destination: NoteDestination) -> Vec<PlacedCard> {
+    /// The cards to show: GitHub's conversations and drafts (with
+    /// `include_github`, on a single pull request) and the local notes.
+    pub fn cards(&self, include_github: bool) -> Vec<PlacedCard> {
         let mut cards = Vec::new();
 
         // GitHub's conversations, each with the drafts replying to it.
-        if destination == NoteDestination::GitHub
-            && let Some(state) = &self.github
-        {
+        if include_github && let Some(state) = &self.github {
             for (index, thread) in state.threads.iter().enumerate() {
                 let replies = self
                     .notes
@@ -78,11 +76,11 @@ impl ReviewComments {
             }
         }
 
-        // The user's notes on lines.
+        // The user's notes on lines: GitHub drafts only where GitHub conversations show.
         for note in self
             .notes
             .iter()
-            .filter(|note| note.destination == destination)
+            .filter(|note| include_github || note.destination == NoteDestination::Local)
         {
             if let NoteAnchor::Line {
                 side,

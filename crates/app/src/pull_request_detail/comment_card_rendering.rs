@@ -8,6 +8,7 @@ use super::review_comments::{CommentCard, note_key};
 use crate::button::Button;
 use crate::diff_view::frame_file_row;
 use crate::markdown_view::MarkdownView;
+use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
 impl PullRequestDetail {
@@ -56,14 +57,12 @@ impl PullRequestDetail {
             return div().into_any_element();
         };
         let lines = lines_label(*side, *line, *start_line);
-        let destination = match self.active_destination() {
-            NoteDestination::GitHub => "Draft for your GitHub review",
-            NoteDestination::Local => "Local note",
-        };
+        let destination = self.render_composer_destination(cx);
         let card = card_frame()
             .child(
                 div()
                     .flex()
+                    .items_center()
                     .gap_2()
                     .text_xs()
                     .child(
@@ -71,7 +70,7 @@ impl PullRequestDetail {
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(format!("New comment · {lines}")),
                     )
-                    .child(div().text_color(theme::accent()).child(destination))
+                    .child(destination)
                     .child(
                         div()
                             .flex_1()
@@ -83,6 +82,41 @@ impl PullRequestDetail {
             .child(editor.text.clone())
             .child(Self::render_editor_buttons("composer", "Add comment", cx));
         frame_file_row(div().px_3().py_1().child(card)).into_any_element()
+    }
+
+    /// Where the new comment goes: a GitHub / Local switch on a single pull
+    /// request (kept for the next comments), else a local note.
+    fn render_composer_destination(&self, cx: &mut Context<Self>) -> AnyElement {
+        if !self.can_review_on_github() {
+            return div()
+                .text_color(theme::renamed())
+                .child("Local note")
+                .into_any_element();
+        }
+        let destination = self.review().destination;
+        let detail = cx.entity().downgrade();
+        let pick = move |destination: NoteDestination| {
+            let detail = detail.clone();
+            move |_: &mut gpui::Window, cx: &mut gpui::App| {
+                detail
+                    .update(cx, |detail, cx| {
+                        detail.set_comment_destination(destination, cx);
+                    })
+                    .ok();
+            }
+        };
+        SegmentedControl::new("composer-destination")
+            .option(
+                "GitHub draft",
+                destination == NoteDestination::GitHub,
+                pick(NoteDestination::GitHub),
+            )
+            .option(
+                "Local note",
+                destination == NoteDestination::Local,
+                pick(NoteDestination::Local),
+            )
+            .into_any_element()
     }
 
     /// A GitHub conversation: its state and actions, every comment, the

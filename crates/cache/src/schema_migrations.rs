@@ -315,6 +315,11 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         body   TEXT    NOT NULL
     );
 ",
+    r"
+    -- Where new review comments go: GitHub drafts or local notes.
+    ALTER TABLE review_layout ADD COLUMN comment_destination TEXT NOT NULL DEFAULT 'github'
+        CHECK (comment_destination IN ('local', 'github'));
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

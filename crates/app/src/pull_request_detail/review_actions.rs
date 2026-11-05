@@ -41,7 +41,6 @@ impl PullRequestDetail {
     /// Recomputes the cards for the active destination and where they and
     /// the composer go; the row rebuild that follows places them.
     pub(super) fn refresh_comment_layout(&mut self) {
-        let destination = self.active_destination();
         let composer = match self.review().editor.as_ref().map(|editor| &editor.target) {
             Some(EditorTarget::NewComment {
                 file, side, line, ..
@@ -53,9 +52,10 @@ impl PullRequestDetail {
             .iter()
             .map(|loaded| loaded.filename().to_owned())
             .collect();
+        let include_github = self.can_review_on_github();
         let review = self.review_mut();
         review.comments.refresh_documents();
-        review.cards = review.comments.cards(destination);
+        review.cards = review.comments.cards(include_github);
         review.placement = CommentPlacement::build(
             &review.cards,
             |path| files.iter().position(|file| file == path),
@@ -112,7 +112,9 @@ impl PullRequestDetail {
         self.review_mut().load_task = Some(task);
     }
 
-    /// Sends new comments to GitHub drafts or local notes, and saves it.
+    /// Sends new comments to GitHub drafts or local notes (from the comment
+    /// being written or the review tab), and keeps the choice for the next
+    /// comments and launches. An open comment stays open.
     pub(super) fn set_comment_destination(
         &mut self,
         destination: NoteDestination,
@@ -122,8 +124,7 @@ impl PullRequestDetail {
             return;
         }
         self.review_mut().destination = destination;
-        self.review_mut().editor = None;
-        self.rebuild_rows_in_place();
+        UiStateRecorder::record_review_layout(cx, self.review_layout());
         cx.notify();
     }
 
@@ -269,6 +270,35 @@ impl PullRequestDetail {
                 rebuilt.push(*file);
             }
         }
+    }
+
+    /// The lines the comment being written or edited is about: file, side,
+    /// first and last line; `None` without one (or for a reply).
+    pub(super) fn comment_range(&self) -> Option<(usize, LineSide, u32, u32)> {
+        let editor = self.review().editor.as_ref()?;
+        let (file, side, line, start_line) = match &editor.target {
+            EditorTarget::NewComment {
+                file,
+                side,
+                line,
+                start_line,
+                ..
+            } => (*file, *side, *line, *start_line),
+            EditorTarget::EditNote(id) => {
+                let note = self.review().comments.note(*id)?;
+                let NoteAnchor::Line {
+                    side,
+                    line,
+                    start_line,
+                } = &note.anchor
+                else {
+                    return None;
+                };
+                (self.file_of_path(&note.path)?, *side, *line, *start_line)
+            }
+            EditorTarget::Reply { .. } | EditorTarget::EditGitHubComment { .. } => return None,
+        };
+        Some((file, side, start_line.unwrap_or(line), line))
     }
 
     /// Lets the list measure the editor's row again as its text grows.

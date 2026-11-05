@@ -225,7 +225,10 @@ impl PullRequestDetail {
             stack_task: None,
             highlight_progress: None,
             stack_map_scroll: UniformListScrollHandle::new(),
-            review: ReviewPane::default(),
+            review: ReviewPane {
+                destination: layout.comment_destination,
+                ..ReviewPane::default()
+            },
             side_panel_width: cx
                 .global::<UiStateRecorder>()
                 .saved_panel_widths()
@@ -247,6 +250,11 @@ impl PullRequestDetail {
 
     pub(super) fn focus(&self) -> &FocusHandle {
         &self.focus
+    }
+
+    /// Drops the diff selection (a double click opening a comment selected a word).
+    pub(super) fn clear_diff_selection(&mut self) {
+        self.diff_selection = None;
     }
 
     pub(super) fn code_segments(&self) -> &CodeSegments {
@@ -509,9 +517,10 @@ impl PullRequestDetail {
     }
 
     /// The layout to save: the file tree's part and the review mode.
-    fn review_layout(&self) -> ReviewLayoutState {
+    pub(super) fn review_layout(&self) -> ReviewLayoutState {
         ReviewLayoutState {
             stack_review: self.review_mode,
+            comment_destination: self.review.destination,
             ..self.file_tree.layout()
         }
     }

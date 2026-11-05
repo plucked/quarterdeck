@@ -14,7 +14,7 @@ use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
 use crate::app_commands::Copy;
 use crate::diff_view::{
-    DiffRowStyle, DiffSummary, DiffSummaryBar, FileClickHandler, render_file_end,
+    DiffRowStyle, DiffSide, DiffSummary, DiffSummaryBar, FileClickHandler, render_file_end,
     render_file_header, render_file_note, render_hunk_header, render_split_row,
     render_unified_line,
 };
@@ -23,6 +23,8 @@ use crate::theme;
 
 /// Size of the `+` that comments on a line.
 const COMMENT_BUTTON_WIDTH: f32 = 14.;
+/// Clicks on a line that open a comment on it.
+const DOUBLE_CLICK: usize = 2;
 
 impl Render for PullRequestDetail {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -145,13 +147,14 @@ impl PullRequestDetail {
             DetailRow::HunkHeader { file, hunk } => self.render_hunk_header_row(file, hunk),
             DetailRow::UnifiedLine { file, hunk, line } => {
                 let cells = self.code_cells(index);
-                let anchor = self.loaded_files().get(file).and_then(|loaded| {
-                    let diff_line = loaded.diff.hunks().get(hunk)?.lines.get(line)?;
-                    diff_line
-                        .new_number
-                        .map(|number| (LineSide::New, number))
-                        .or(diff_line.old_number.map(|number| (LineSide::Old, number)))
-                });
+                let numbers = self
+                    .loaded_files()
+                    .get(file)
+                    .and_then(|loaded| loaded.diff.hunks().get(hunk)?.lines.get(line))
+                    .map_or_else(RowLines::default, |diff_line| RowLines {
+                        old: diff_line.old_number,
+                        new: diff_line.new_number,
+                    });
                 let content = self.with_horizontal_scroll(file, cx, |loaded, style| {
                     let diff_line = &loaded.diff.hunks()[hunk].lines[line];
                     let spans = loaded
@@ -160,22 +163,18 @@ impl PullRequestDetail {
                         .map_or(&[][..], |syntax| syntax.spans(hunk, line));
                     render_unified_line(diff_line, spans, style, &cells)
                 });
-                Self::with_comment_button(index, file, anchor, content, cx)
+                self.with_comment_button(index, file, numbers, content, cx)
             }
             DetailRow::SplitLine { file, hunk, row } => {
                 let cells = self.code_cells(index);
-                let anchor = self.loaded_files().get(file).and_then(|loaded| {
-                    let lines = &loaded.diff.hunks().get(hunk)?.lines;
-                    let new = row
-                        .new
-                        .and_then(|index| lines.get(index)?.new_number)
-                        .map(|number| (LineSide::New, number));
-                    let old = row
-                        .old
-                        .and_then(|index| lines.get(index)?.old_number)
-                        .map(|number| (LineSide::Old, number));
-                    new.or(old)
-                });
+                let numbers = self
+                    .loaded_files()
+                    .get(file)
+                    .and_then(|loaded| loaded.diff.hunks().get(hunk))
+                    .map_or_else(RowLines::default, |hunk| RowLines {
+                        old: row.old.and_then(|index| hunk.lines.get(index)?.old_number),
+                        new: row.new.and_then(|index| hunk.lines.get(index)?.new_number),
+                    });
                 let content = self.with_horizontal_scroll(file, cx, |loaded, style| {
                     render_split_row(
                         &loaded.diff.hunks()[hunk],
@@ -186,7 +185,7 @@ impl PullRequestDetail {
                         &cells,
                     )
                 });
-                Self::with_comment_button(index, file, anchor, content, cx)
+                self.with_comment_button(index, file, numbers, content, cx)
             }
             DetailRow::FileEnd { .. } => render_file_end().into_any_element(),
             DetailRow::CommentCard { card, .. } => self.render_comment_card_row(card, cx),
@@ -316,27 +315,70 @@ impl PullRequestDetail {
 
 /// A one-line status (loading, failure) below the description.
 impl PullRequestDetail {
-    /// A diff line with the `+` that comments on it (`anchor`), shown left of
-    /// the line while the line or the `+` is hovered; shift-clicking it
-    /// stretches the open comment.
+    /// A diff line with the `+` that comments on it, shown left of the line
+    /// while the line or the `+` is hovered (shift-clicking it stretches the
+    /// open comment); a double click on the line opens a comment too. The
+    /// lines of the comment being written are tinted.
     fn with_comment_button(
+        &self,
         index: usize,
         file: usize,
-        anchor: Option<(LineSide, u32)>,
+        numbers: RowLines,
         content: AnyElement,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some((side, line)) = anchor else {
+        let Some((side, line)) = numbers.primary() else {
             return content;
         };
+        let is_in_comment =
+            self.comment_range()
+                .is_some_and(|(range_file, range_side, first, last)| {
+                    range_file == file
+                        && numbers
+                            .on(range_side)
+                            .is_some_and(|number| (first..=last).contains(&number))
+                });
+
         // The hover area reaches into the pane's padding where the `+` sits,
         // so moving the pointer onto the `+` keeps it shown.
         div()
+            .id(("diff-line", index))
             .relative()
             .group("diff-line")
             .ml(px(-COMMENT_BUTTON_WIDTH))
             .pl(px(COMMENT_BUTTON_WIDTH))
+            .on_click(cx.listener(move |detail, event: &ClickEvent, window, cx| {
+                if event.click_count() != DOUBLE_CLICK {
+                    return;
+                }
+                // The side clicked in a split row, else the line's main side.
+                let clicked_side = detail
+                    .code_segments()
+                    .hit(event.position())
+                    .map(|(side, _)| side);
+                let (side, line) = match (clicked_side, numbers.old) {
+                    (Some(DiffSide::Old), Some(old)) => (LineSide::Old, old),
+                    (Some(DiffSide::Old | DiffSide::New | DiffSide::Unified) | None, _) => {
+                        (side, line)
+                    }
+                };
+                detail.clear_diff_selection();
+                detail.open_composer(file, side, line, false, window, cx);
+            }))
             .child(content)
+            .when(is_in_comment, |row| {
+                row.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .bottom_0()
+                        .left(px(COMMENT_BUTTON_WIDTH))
+                        .right_0()
+                        .bg(theme::comment_range())
+                        .border_l_2()
+                        .border_color(theme::accent()),
+                )
+            })
             .child(
                 div()
                     .id(("comment-line", index))
@@ -357,11 +399,36 @@ impl PullRequestDetail {
                     .group_hover("diff-line", |style| style.opacity(1.))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |detail, event: &ClickEvent, window, cx| {
+                        cx.stop_propagation();
                         detail.open_composer(file, side, line, event.modifiers().shift, window, cx);
                     }))
                     .child("+"),
             )
             .into_any_element()
+    }
+}
+
+/// The line numbers a diff row shows on each side.
+#[derive(Clone, Copy, Default)]
+struct RowLines {
+    old: Option<u32>,
+    new: Option<u32>,
+}
+
+impl RowLines {
+    /// The line a comment on the row goes to: the new side's, else the old side's.
+    fn primary(self) -> Option<(LineSide, u32)> {
+        self.new
+            .map(|line| (LineSide::New, line))
+            .or(self.old.map(|line| (LineSide::Old, line)))
+    }
+
+    /// The row's line on `side`.
+    fn on(self, side: LineSide) -> Option<u32> {
+        match side {
+            LineSide::Old => self.old,
+            LineSide::New => self.new,
+        }
     }
 }
 

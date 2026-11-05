@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use gpui::UniformListScrollHandle;
-use qc_cache::{PanelVisibility, ReviewLayoutState, StackReviewMode};
+use qc_cache::{PanelVisibility, ReviewLayoutState};
 use qc_file_tree::{
     FacetCount, FacetFilter, FileFilter, FileKind, FileTree, FilteredFile, NodeId, TreeRow,
 };
@@ -60,13 +60,14 @@ impl FileTreeState {
     }
 
     /// The panel visibility, viewed switch and hidden kinds, as saved; the
-    /// review mode is the detail's and left at its default here.
+    /// review mode and comment destination are the detail's and left at
+    /// their defaults here.
     pub fn layout(&self) -> ReviewLayoutState {
         ReviewLayoutState {
             file_tree: self.visibility,
             hide_viewed: self.filter.hide_viewed,
             hidden_kinds: self.filter.kinds.hidden.clone(),
-            stack_review: StackReviewMode::default(),
+            ..ReviewLayoutState::default()
         }
     }
 

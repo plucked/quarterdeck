@@ -48,6 +48,10 @@ pub fn scrollbar_thumb_active() -> Rgba {
 pub fn text_selection() -> Rgba {
     rgba(0x54_8a_f7_59)
 }
+/// Tint over the diff lines a comment being written is about.
+pub fn comment_range() -> Rgba {
+    rgba(0x54_8a_f7_2a)
+}
 /// Background of code blocks and inline code in rendered Markdown.
 pub fn code_background() -> Rgba {
     rgb(0x1b_1c_1f)
