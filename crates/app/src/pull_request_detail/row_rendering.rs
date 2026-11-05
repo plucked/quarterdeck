@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, ClickEvent, Context, Div, IntoElement, Render, Styled, Window, div, list,
-    prelude::*,
+    AnyElement, Canvas, ClickEvent, Context, DispatchPhase, Div, IntoElement, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, WeakEntity, Window, canvas, div,
+    list, prelude::*,
 };
 use qc_cache::{DiffLayout, LineWrapping};
 use qc_github::PullRequest;
@@ -11,6 +12,7 @@ use super::changed_files::ChangedFiles;
 use super::detail_row::DetailRow;
 use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
+use crate::app_commands::Copy;
 use crate::diff_view::{
     DiffRowStyle, DiffSummary, DiffSummaryBar, FileClickHandler, render_file_end,
     render_file_header, render_file_note, render_hunk_header, render_split_row,
@@ -22,12 +24,23 @@ use crate::theme;
 
 impl Render for PullRequestDetail {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // This frame's code texts register again as they paint.
+        self.code_segments().clear();
+
         // `min_w_0` lets the pane shrink to the window, so its text wraps.
         div()
             .relative()
             .flex_1()
             .min_w_0()
             .h_full()
+            .track_focus(self.focus())
+            .on_action(cx.listener(|detail, _: &Copy, _, cx| detail.copy_diff_selection(cx)))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|detail, event: &MouseDownEvent, window, cx| {
+                    detail.begin_diff_selection(event.position, event.click_count, window, cx);
+                }),
+            )
             .child(
                 list(
                     self.list().clone(),
@@ -39,7 +52,44 @@ impl Render for PullRequestDetail {
                 "detail-scrollbar",
                 ScrollbarTarget::List(self.list().clone()),
             ))
+            .child(
+                drag_listener(cx.entity().downgrade())
+                    .absolute()
+                    .size_full(),
+            )
     }
+}
+
+/// An empty overlay whose paint listens to mouse moves and releases
+/// anywhere in the window, so a code selection keeps following a drag that
+/// leaves the pane (which also scrolls it).
+fn drag_listener(detail: WeakEntity<PullRequestDetail>) -> Canvas<()> {
+    canvas(
+        |_, _, _| {},
+        move |_, (), window, _| {
+            let moving = detail.clone();
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, _window, cx| {
+                let is_drag = event.pressed_button == Some(MouseButton::Left);
+                if phase != DispatchPhase::Bubble || !is_drag {
+                    return;
+                }
+                moving
+                    .update(cx, |detail, cx| {
+                        if detail.is_selecting() {
+                            detail.extend_diff_selection(event.position, cx);
+                        }
+                    })
+                    .ok();
+            });
+            window.on_mouse_event(move |event: &MouseUpEvent, phase, _window, cx| {
+                if phase == DispatchPhase::Bubble && event.button == MouseButton::Left {
+                    detail
+                        .update(cx, PullRequestDetail::finish_diff_selection)
+                        .ok();
+                }
+            });
+        },
+    )
 }
 
 impl PullRequestDetail {
@@ -69,16 +119,18 @@ impl PullRequestDetail {
             }
             DetailRow::HunkHeader { file, hunk } => self.render_hunk_header_row(file, hunk),
             DetailRow::UnifiedLine { file, hunk, line } => {
+                let cells = self.code_cells(index);
                 self.with_horizontal_scroll(file, cx, |loaded, style| {
                     let diff_line = &loaded.diff.hunks()[hunk].lines[line];
                     let spans = loaded
                         .syntax
                         .as_deref()
                         .map_or(&[][..], |syntax| syntax.spans(hunk, line));
-                    render_unified_line(diff_line, spans, style)
+                    render_unified_line(diff_line, spans, style, &cells)
                 })
             }
             DetailRow::SplitLine { file, hunk, row } => {
+                let cells = self.code_cells(index);
                 self.with_horizontal_scroll(file, cx, |loaded, style| {
                     render_split_row(
                         &loaded.diff.hunks()[hunk],
@@ -86,6 +138,7 @@ impl PullRequestDetail {
                         row,
                         loaded.syntax.as_deref(),
                         style,
+                        &cells,
                     )
                 })
             }

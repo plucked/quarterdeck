@@ -11,6 +11,8 @@
 //! - `detail_row_list.rs`: `DetailRowList`, the rows in order and each file's row range.
 //! - `detail_content.rs`: `DetailContent`, what the row list is built from.
 //! - `detail_event.rs`: `DetailEvent`, what the view tells its owner.
+//! - `diff_selection.rs`: `DiffSelection`, a text selection in one code column of the diff.
+//! - `selected_diff_text.rs`: the code a selection covers, as copied.
 //! - `parsed_description.rs`: `ParsedDescription`, the description of one version, parsed once.
 //! - `changed_files.rs`: `ChangedFiles`, the load state of the files.
 //! - `fetch_changed_files.rs`: gets a pull request's files from the cache, asking GitHub as little as possible.
@@ -24,6 +26,7 @@ mod detail_content;
 mod detail_event;
 mod detail_row;
 mod detail_row_list;
+mod diff_selection;
 mod fetch_changed_files;
 mod file_review_state;
 mod file_set_update;
@@ -31,6 +34,7 @@ mod loaded_file;
 mod parsed_description;
 mod pull_request_detail;
 mod row_rendering;
+mod selected_diff_text;
 mod viewed_toggle;
 
 pub use detail_event::DetailEvent;

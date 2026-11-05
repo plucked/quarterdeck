@@ -1,11 +1,11 @@
-use gpui::{Div, Rgba, StyledText, div, prelude::*, px};
+use gpui::{CursorStyle, Div, Rgba, StyledText, canvas, div, prelude::*, px};
 use qc_cache::LineWrapping;
 use qc_diff::{DiffLine, DiffLineKind};
 use qc_syntax::SyntaxSpan;
 
-use super::DiffRowStyle;
 use super::code_highlights::code_highlights;
 use super::file_card_rendering::frame_file_row;
+use super::{CodeCells, CodeSegment, DiffRowStyle, DiffSide};
 use crate::theme;
 
 /// Height of one unwrapped diff row.
@@ -51,17 +51,41 @@ pub fn render_marker(kind: DiffLineKind) -> Div {
 }
 
 /// A line's text in its syntax colors, with its changed ranges on a
-/// stronger background. Wraps within the row, or stays on one line clipped
-/// to the row and shifted left by the file's horizontal offset.
-pub fn render_code(line: &DiffLine, syntax: &[SyntaxSpan], style: DiffRowStyle) -> Div {
+/// stronger background and its selected part on the selection background.
+/// Wraps within the row, or stays on one line clipped to the row and
+/// shifted left by the file's horizontal offset. The text registers itself
+/// in `cells.segments` when painted, under its row and column `side`, so the
+/// mouse can select it.
+pub fn render_code(
+    line: &DiffLine,
+    syntax: &[SyntaxSpan],
+    style: DiffRowStyle,
+    cells: &CodeCells,
+    side: DiffSide,
+) -> Div {
+    let selected = cells.selected_range(side);
     let highlights = code_highlights(
         line.text.len(),
         syntax,
         &line.changed_ranges,
         emphasis_background(line.kind),
+        selected.as_ref(),
     );
     let text = StyledText::new(line.text.clone()).with_highlights(highlights);
-    match style.wrapping {
+
+    // Paint runs after layout, so the layout registered here has its bounds.
+    let segment = CodeSegment {
+        row: cells.row,
+        side,
+        layout: text.layout().clone(),
+        text_length: line.text.len(),
+    };
+    let segments = cells.segments.clone();
+    let registration = canvas(|_, _, _| {}, move |_, (), _, _| segments.register(segment))
+        .absolute()
+        .size_full();
+
+    let cell = match style.wrapping {
         LineWrapping::Wrap => div().flex_1().min_w_0().pr_2().child(text),
         LineWrapping::Scroll => div().flex_1().min_w_0().overflow_hidden().child(
             div()
@@ -69,7 +93,10 @@ pub fn render_code(line: &DiffLine, syntax: &[SyntaxSpan], style: DiffRowStyle) 
                 .whitespace_nowrap()
                 .child(text),
         ),
-    }
+    };
+    cell.relative()
+        .cursor(CursorStyle::IBeam)
+        .child(registration)
 }
 
 /// The row background for a line of `kind`.

@@ -16,12 +16,20 @@
 //! - `file_note.rs`: `FileNote`, why a file shows a note.
 //! - `file_diff_state.rs`: `FileDiffState`, whether a file is collapsed, viewed or large.
 //! - `diff_row_style.rs`: `DiffRowStyle`, what a file's rows share.
+//! - `diff_side.rs`: `DiffSide`, the code column of a row (unified, old, new).
+//! - `diff_position.rs`: `DiffPosition`, a row and byte in the diff text.
+//! - `code_segments.rs`: `CodeSegments`, the code texts painted this frame, for hit testing.
+//! - `code_cells.rs`: `CodeCells` and `SideSelection`, what a row's code cells need for selection.
 //! - `diff_summary_bar.rs`: `DiffSummaryBar`, totals and collapse/expand all.
 //! - `diff_summary.rs`: `DiffSummary`, file, line and viewed counts.
 
+mod code_cells;
 mod code_highlights;
+mod code_segments;
 mod diff_cell_rendering;
+mod diff_position;
 mod diff_row_style;
+mod diff_side;
 mod diff_summary;
 mod diff_summary_bar;
 mod file_card_rendering;
@@ -32,8 +40,12 @@ mod file_note_rendering;
 mod split_rendering;
 mod unified_rendering;
 
+pub use code_cells::{CodeCells, SideSelection};
+pub use code_segments::{CodeSegment, CodeSegments};
 pub use diff_cell_rendering::{DIFF_CHARACTER_WIDTH, gutter_width, render_hunk_header};
+pub use diff_position::DiffPosition;
 pub use diff_row_style::DiffRowStyle;
+pub use diff_side::DiffSide;
 pub use diff_summary::DiffSummary;
 pub use diff_summary_bar::DiffSummaryBar;
 pub use file_card_rendering::render_file_end;

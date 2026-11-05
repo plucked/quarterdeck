@@ -1,3 +1,6 @@
+//! `word_range_at`: the word around an offset, for double-click selection in
+//! rendered Markdown and in diffs.
+
 use std::ops::Range;
 
 /// The word around byte `index` of `text`, for a double click: the run of

@@ -2,17 +2,10 @@ use gpui::{Div, IntoElement, div, prelude::*, px};
 use qc_diff::{DiffHunk, SplitRow};
 use qc_syntax::DiffSyntax;
 
-use super::DiffRowStyle;
 use super::diff_cell_rendering::{render_code, render_gutter, render_marker, render_row};
 use super::file_card_rendering::frame_file_row;
+use super::{CodeCells, DiffRowStyle, DiffSide};
 use crate::theme;
-
-/// Which side of a split view a line is shown on.
-#[derive(Clone, Copy)]
-enum Side {
-    Old,
-    New,
-}
 
 /// One row of a side-by-side diff: the old line (left) beside the new line
 /// (right) of hunk `hunk_index`, each half with its own gutter, in syntax
@@ -24,16 +17,17 @@ pub fn render_split_row(
     row: SplitRow,
     syntax: Option<&DiffSyntax>,
     style: DiffRowStyle,
+    cells: &CodeCells,
 ) -> Div {
-    let half = |line_index: Option<usize>, side: Side| {
-        render_half(hunk, hunk_index, line_index, side, syntax, style)
+    let half = |line_index: Option<usize>, side: DiffSide| {
+        render_half(hunk, hunk_index, line_index, side, syntax, style, cells)
     };
     frame_file_row(
         div()
             .flex()
-            .child(half(row.old, Side::Old))
+            .child(half(row.old, DiffSide::Old))
             .child(render_divider())
-            .child(half(row.new, Side::New)),
+            .child(half(row.new, DiffSide::New)),
     )
 }
 
@@ -43,9 +37,10 @@ fn render_half(
     hunk: &DiffHunk,
     hunk_index: usize,
     line_index: Option<usize>,
-    side: Side,
+    side: DiffSide,
     syntax: Option<&DiffSyntax>,
     style: DiffRowStyle,
+    cells: &CodeCells,
 ) -> Div {
     let line = line_index.and_then(|line_index| hunk.lines.get(line_index));
     let half = render_row(line.map(|line| line.kind)).flex_1().min_w_0();
@@ -53,13 +48,13 @@ fn render_half(
         return half;
     };
     let number = match side {
-        Side::Old => line.old_number,
-        Side::New => line.new_number,
+        DiffSide::Old | DiffSide::Unified => line.old_number,
+        DiffSide::New => line.new_number,
     };
     let spans = syntax.map_or(&[][..], |syntax| syntax.spans(hunk_index, line_index));
     half.child(render_gutter(number, style.gutter_width))
         .child(render_marker(line.kind))
-        .child(render_code(line, spans, style))
+        .child(render_code(line, spans, style, cells, side))
 }
 
 fn render_divider() -> impl IntoElement {

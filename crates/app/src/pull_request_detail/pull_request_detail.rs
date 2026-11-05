@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::{
-    Context, EventEmitter, ListAlignment, ListOffset, ListState, ScrollWheelEvent, Subscription,
-    Task, Window, px,
+    ClipboardItem, Context, EventEmitter, FocusHandle, ListAlignment, ListOffset, ListState,
+    Pixels, Point, ScrollWheelEvent, Subscription, Task, Window, px,
 };
 use qc_cache::{DetailScrollPosition, DiffViewSettings, LineWrapping, ViewedFile};
 use qc_diff::FileDiff;
@@ -15,14 +15,18 @@ use super::changed_files::ChangedFiles;
 use super::detail_content::DetailContent;
 use super::detail_event::DetailEvent;
 use super::detail_row_list::DetailRowList;
+use super::diff_selection::DiffSelection;
 use super::fetch_changed_files::fetch_changed_files;
 use super::file_review_state::FileReviewState;
 use super::loaded_file::LoadedFile;
 use super::parsed_description::ParsedDescription;
+use super::selected_diff_text::{row_code_text, selected_diff_text};
 use super::viewed_toggle::ViewedToggle;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
+use crate::diff_view::{CodeCells, CodeSegments, DiffPosition, SideSelection};
 use crate::ui_state::{UiStateRecorder, read_viewed_files};
+use crate::word_range_at::word_range_at;
 
 /// How far beyond the visible area rows are laid out, so fast scrolling
 /// rarely shows rows before they are drawn.
@@ -31,6 +35,11 @@ const LIST_OVERDRAW: f32 = 600.;
 const DEFAULT_HIGHLIGHT_BATCHES: usize = 4;
 /// Code width that stays visible when a file is scrolled sideways to its end.
 const MIN_VISIBLE_CODE_WIDTH: f32 = 240.;
+/// How a press selects, by click count.
+const SINGLE_CLICK: usize = 1;
+const DOUBLE_CLICK: usize = 2;
+/// Dragging past the pane's edge scrolls by this share of the overshoot per mouse move.
+const AUTOSCROLL_SHARE: f32 = 0.5;
 
 /// Where the list scrolls after its rows are rebuilt.
 #[derive(Clone, Copy)]
@@ -82,6 +91,13 @@ pub struct PullRequestDetail {
     diff_task: Option<Task<()>>,
     /// The syntax highlighting of the loaded diffs.
     syntax_task: Option<Task<()>>,
+    /// Focused when code is pressed, so cmd-c copies the diff selection.
+    focus: FocusHandle,
+    /// The code texts painted this frame, for mouse hit testing.
+    code_segments: CodeSegments,
+    diff_selection: Option<DiffSelection>,
+    /// Whether a press in the code is being dragged.
+    is_selecting: bool,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -119,6 +135,10 @@ impl PullRequestDetail {
             files_task: None,
             diff_task: None,
             syntax_task: None,
+            focus: cx.focus_handle(),
+            code_segments: CodeSegments::default(),
+            diff_selection: None,
+            is_selecting: false,
             _settings_subscription: settings_subscription,
         };
         detail.rebuild_rows(ScrollAnchor::Top);
@@ -131,6 +151,130 @@ impl PullRequestDetail {
 
     pub(super) fn rows(&self) -> &DetailRowList {
         &self.rows
+    }
+
+    pub(super) fn focus(&self) -> &FocusHandle {
+        &self.focus
+    }
+
+    pub(super) fn code_segments(&self) -> &CodeSegments {
+        &self.code_segments
+    }
+
+    pub(super) fn is_selecting(&self) -> bool {
+        self.is_selecting
+    }
+
+    /// What row `row`'s code cells need: where to register and their selected part.
+    pub(super) fn code_cells(&self, row: usize) -> CodeCells {
+        CodeCells {
+            row,
+            segments: self.code_segments.clone(),
+            selection: self.diff_selection.and_then(|selection| {
+                Some(SideSelection {
+                    side: selection.side,
+                    range: selection.range_in_row(row)?,
+                })
+            }),
+        }
+    }
+
+    /// Starts a selection in the code under `point` for a press with
+    /// `click_count` clicks (one: drag; two: a word; three: the line). A
+    /// press outside the code drops the selection and leaves focus alone,
+    /// so the description keeps its own selection and copy.
+    pub(super) fn begin_diff_selection(
+        &mut self,
+        point: Point<Pixels>,
+        click_count: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some((side, position)) = self.code_segments.hit(point) else {
+            if self.diff_selection.take().is_some() {
+                cx.notify();
+            }
+            return;
+        };
+        window.focus(&self.focus);
+
+        // One click starts a drag; more select a word or the line at once.
+        let text = self
+            .rows
+            .get(position.row)
+            .and_then(|row| row_code_text(row, side, self.loaded_files()))
+            .unwrap_or_default();
+        let range = match click_count {
+            0 | SINGLE_CLICK => position.byte..position.byte,
+            DOUBLE_CLICK => word_range_at(text, position.byte),
+            _ => 0..text.len(),
+        };
+        let at = |byte| DiffPosition {
+            row: position.row,
+            byte,
+        };
+        self.diff_selection = Some(DiffSelection {
+            side,
+            anchor: at(range.start),
+            head: at(range.end),
+        });
+        self.is_selecting = click_count <= SINGLE_CLICK;
+        cx.notify();
+    }
+
+    /// Moves the selection's head to the code nearest `point` in its column;
+    /// past the pane's top or bottom edge, also scrolls that way.
+    pub(super) fn extend_diff_selection(&mut self, point: Point<Pixels>, cx: &mut Context<Self>) {
+        if !self.is_selecting {
+            return;
+        }
+        let Some(selection) = self.diff_selection else {
+            return;
+        };
+
+        // Scroll toward the pointer when it left the pane vertically.
+        let viewport = self.list.viewport_bounds();
+        if point.y < viewport.top() {
+            self.list
+                .scroll_by((point.y - viewport.top()) * AUTOSCROLL_SHARE);
+        } else if point.y > viewport.bottom() {
+            self.list
+                .scroll_by((point.y - viewport.bottom()) * AUTOSCROLL_SHARE);
+        }
+
+        if let Some(head) = self.code_segments.nearest_on_side(selection.side, point)
+            && head != selection.head
+        {
+            self.diff_selection = Some(DiffSelection { head, ..selection });
+        }
+        cx.notify();
+    }
+
+    /// Ends a drag; a press released where it started selected nothing.
+    pub(super) fn finish_diff_selection(&mut self, cx: &mut Context<Self>) {
+        if !self.is_selecting {
+            return;
+        }
+        self.is_selecting = false;
+        if self
+            .diff_selection
+            .is_some_and(|selection| selection.is_empty())
+        {
+            self.diff_selection = None;
+        }
+        cx.notify();
+    }
+
+    /// Copies the selected code to the clipboard (cmd-c), if any is selected.
+    pub(super) fn copy_diff_selection(&self, cx: &mut Context<Self>) {
+        let Some(selection) = self
+            .diff_selection
+            .filter(|selection| !selection.is_empty())
+        else {
+            return;
+        };
+        let text = selected_diff_text(&selection, &self.rows, self.loaded_files());
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
     }
 
     pub(super) fn pull_request(&self) -> Option<&PullRequest> {
@@ -238,6 +382,8 @@ impl PullRequestDetail {
     /// then scrolls to the pending position once the files are in, or else
     /// to `anchor`.
     fn rebuild_rows(&mut self, anchor: ScrollAnchor) {
+        // Row numbers change, so a selection would point at other text.
+        self.diff_selection = None;
         self.rows = DetailRowList::build(&DetailContent {
             has_pull_request: self.pull_request.is_some(),
             has_description: self.description().is_some(),
@@ -291,6 +437,7 @@ impl PullRequestDetail {
             self.diff_settings,
         );
         let new_length = rows.len();
+        self.diff_selection = None;
         if let Some(old_range) = self.rows.replace_file(file, rows) {
             self.list.splice(old_range, new_length);
         }

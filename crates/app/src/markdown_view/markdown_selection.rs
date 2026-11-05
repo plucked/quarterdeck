@@ -7,7 +7,7 @@ use super::open_web_link::open_web_link;
 use super::selected_text::selected_text;
 use super::text_segment::TextSegment;
 use super::text_selection::TextSelection;
-use super::word_range_at::word_range_at;
+use crate::word_range_at::word_range_at;
 
 /// How a press selects, by click count.
 const SINGLE_CLICK: usize = 1;

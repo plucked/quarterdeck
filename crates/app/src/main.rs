@@ -8,8 +8,9 @@
 //! - `app_services.rs`: `AppServices`, the GitHub client and cache handed to views.
 //! - `scrollbar/`: `VerticalScrollbar`, a draggable scrollbar for any scroll container.
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
+//! - `word_range_at.rs`: the word around an offset, for double-click selection.
 //! - `theme.rs`: the color palette and fonts.
-//! - `diff_view/`: `FileDiffView` and `DiffToolbar`, how changed files show.
+//! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
@@ -32,6 +33,7 @@ mod settings_window;
 mod shared_cache;
 mod theme;
 mod ui_state;
+mod word_range_at;
 
 fn main() {
     launch_app::launch_app();
