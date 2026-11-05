@@ -178,10 +178,11 @@ impl PullRequestDetail {
             .loaded_files()
             .iter()
             .all(|loaded| self.file_review().is_viewed(loaded.filename()));
-        let message = if all_viewed {
-            "Every file is viewed."
+        let filter = self.file_tree().filter();
+        let message = if all_viewed && filter.hide_viewed && !filter.has_chips_set() {
+            "Every file is viewed.".to_owned()
         } else {
-            "No file matches the filters."
+            format!("No file matches: {}.", filter.describe().join(" · "))
         };
         render_status_line(message, theme::muted())
     }

@@ -1,10 +1,10 @@
 use std::ops::Range;
 
 use gpui::{
-    AnyElement, Context, Div, FontWeight, IntoElement, Rgba, SharedString, Styled, div, prelude::*,
-    px, relative, uniform_list,
+    AnyElement, Context, Div, FontWeight, IntoElement, Rgba, Styled, div, prelude::*, px, relative,
+    uniform_list,
 };
-use qc_file_tree::{FileGroup, TreeNodeKind, TreeRow};
+use qc_file_tree::{TreeNodeKind, TreeRow};
 
 use super::folder_viewed_state::FolderViewedState;
 use super::pull_request_detail::PullRequestDetail;
@@ -44,79 +44,13 @@ impl PullRequestDetail {
             })
     }
 
-    /// Title, viewed progress and the filter chips. Chips show what is
-    /// shown: clicking one hides that group from the tree and the diff.
-    /// "All" shows everything when anything is hidden, else hides it all;
-    /// "Moved" (files moved without changes) appears when there are any.
+    /// Title, viewed progress and the filter controls.
     fn render_tree_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let files = self.loaded_files();
         let viewed = files
             .iter()
             .filter(|loaded| self.file_review().is_viewed(loaded.filename()))
             .count();
-        let filter = self.file_tree().filter();
-
-        let toggle_chip = |id: &'static str,
-                           label: &'static str,
-                           is_hidden: bool,
-                           toggle: FileGroup,
-                           cx: &mut Context<Self>| {
-            render_chip(id.into(), label.into(), !is_hidden)
-                .on_click(cx.listener(move |detail, _, _, cx| detail.toggle_filter(toggle, cx)))
-        };
-        let mut chips = vec![
-            render_chip("chip-all".into(), "All".into(), !filter.is_active())
-                .on_click(cx.listener(|detail, _, _, cx| detail.toggle_all_filters(cx))),
-            toggle_chip(
-                "chip-viewed",
-                "Viewed",
-                filter.hides(FileGroup::Viewed),
-                FileGroup::Viewed,
-                cx,
-            ),
-            toggle_chip(
-                "chip-tests",
-                "Tests",
-                filter.hides(FileGroup::Tests),
-                FileGroup::Tests,
-                cx,
-            ),
-            toggle_chip(
-                "chip-generated",
-                "Generated",
-                filter.hides(FileGroup::Generated),
-                FileGroup::Generated,
-                cx,
-            ),
-        ];
-        let unchanged_moves = self.file_tree().unchanged_moves();
-        if unchanged_moves > 0 {
-            chips.push(
-                render_chip(
-                    "chip-unchanged-moves".into(),
-                    format!("Moved {unchanged_moves}").into(),
-                    !filter.hides(FileGroup::UnchangedMoves),
-                )
-                .on_click(cx.listener(|detail, _, _, cx| {
-                    detail.toggle_filter(FileGroup::UnchangedMoves, cx);
-                })),
-            );
-        }
-        for count in self.file_tree().file_types() {
-            let file_type = count.file_type.clone();
-            let is_shown = !filter.hidden_file_types.contains(&file_type);
-            chips.push(
-                render_chip(
-                    SharedString::from(format!("chip-file-type-{file_type}")),
-                    format!("{file_type} {}", count.count).into(),
-                    is_shown,
-                )
-                .on_click(
-                    cx.listener(move |detail, _, _, cx| detail.toggle_file_type(&file_type, cx)),
-                ),
-            );
-        }
-
         div()
             .flex()
             .flex_col()
@@ -144,7 +78,7 @@ impl PullRequestDetail {
                     ),
             )
             .child(render_progress_bar(viewed, files.len()))
-            .child(div().flex().flex_wrap().gap_1().children(chips))
+            .child(self.render_filter_controls(cx))
     }
 
     /// The tree rows as a uniform list with its scrollbar, or a note when
@@ -283,26 +217,6 @@ impl PullRequestDetail {
             }
         }
     }
-}
-
-/// A filter chip: bright when its group is shown, dimmed and struck
-/// through when hidden.
-fn render_chip(id: SharedString, label: SharedString, is_shown: bool) -> gpui::Stateful<Div> {
-    div()
-        .id(id)
-        .px_2()
-        .rounded_md()
-        .border_1()
-        .border_color(theme::border())
-        .text_xs()
-        .cursor_pointer()
-        .when(is_shown, |chip| {
-            chip.bg(theme::selected()).text_color(theme::text())
-        })
-        .when(!is_shown, |chip| {
-            chip.text_color(theme::muted()).line_through()
-        })
-        .child(label)
 }
 
 /// A viewed checkbox glyph that can be clicked on its own.

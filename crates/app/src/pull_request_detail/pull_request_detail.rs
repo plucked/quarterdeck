@@ -13,12 +13,13 @@ use qc_cache::{
     ViewedFile, ViewedScope,
 };
 use qc_diff::FileDiff;
-use qc_file_tree::{FileGroup, FileTree, NodeId};
+use qc_file_tree::{FileKind, FileTree, NodeId};
 use qc_github::{GitHubClient, PullRequest, PullRequestFile, PullRequestStack, StackMembership};
 use qc_markdown::MarkdownDocument;
 use qc_syntax::DiffSyntax;
 
 use super::changed_files::ChangedFiles;
+use super::chip_click::ChipClick;
 use super::detail_content::DetailContent;
 use super::detail_event::{DetailEvent, LayerRequest};
 use super::detail_row_list::DetailRowList;
@@ -876,26 +877,46 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Flips one hide toggle of the filter; the tree and the diff follow, and it is saved.
-    pub(super) fn toggle_filter(&mut self, group: FileGroup, cx: &mut Context<Self>) {
-        self.file_tree.toggle_group(group);
+    /// Hides viewed files or shows them again (the switch under the
+    /// progress bar); the tree and the diff follow, and it is saved.
+    pub(super) fn toggle_hide_viewed(&mut self, cx: &mut Context<Self>) {
+        self.file_tree.toggle_hide_viewed();
         UiStateRecorder::record_review_layout(cx, self.review_layout());
         self.rebuild_rows(self.anchor_at_top());
         cx.notify();
     }
 
-    /// Shows every file, or hides every group (the "All" chip), and saves the hide toggles.
-    pub(super) fn toggle_all_filters(&mut self, cx: &mut Context<Self>) {
-        self.file_tree.toggle_all_filters();
+    /// Picks or hides a kind chip; hidden kinds are saved.
+    pub(super) fn click_kind(&mut self, kind: FileKind, click: ChipClick, cx: &mut Context<Self>) {
+        self.file_tree.click_kind(kind, click);
         UiStateRecorder::record_review_layout(cx, self.review_layout());
         self.rebuild_rows(self.anchor_at_top());
         cx.notify();
     }
 
-    /// Hides or shows the files of `file_type` in the tree and the diff.
-    pub(super) fn toggle_file_type(&mut self, file_type: &str, cx: &mut Context<Self>) {
-        self.file_tree.toggle_file_type(file_type);
+    /// Picks or hides a file type chip, for this pull request.
+    pub(super) fn click_file_type(
+        &mut self,
+        file_type: &str,
+        click: ChipClick,
+        cx: &mut Context<Self>,
+    ) {
+        self.file_tree.click_file_type(file_type, click);
         self.rebuild_rows(self.anchor_at_top());
+        cx.notify();
+    }
+
+    /// Clears both chip rows (the summary's Reset), and saves that no kind is hidden.
+    pub(super) fn clear_filter_chips(&mut self, cx: &mut Context<Self>) {
+        self.file_tree.clear_chips();
+        UiStateRecorder::record_review_layout(cx, self.review_layout());
+        self.rebuild_rows(self.anchor_at_top());
+        cx.notify();
+    }
+
+    /// Shows every type chip, or only the most common again.
+    pub(super) fn toggle_types_expanded(&mut self, cx: &mut Context<Self>) {
+        self.file_tree.toggle_types_expanded();
         cx.notify();
     }
 
@@ -1217,7 +1238,7 @@ impl PullRequestDetail {
                             detail.file_review =
                                 FileReviewState::for_loaded(&fetched.files, &fetched.viewed_marks);
                             detail.viewed_scope = Some(fetched.scope);
-                            detail.file_tree.reset_for(fetched.tree, &fetched.files);
+                            detail.file_tree.reset_for(fetched.tree);
                             ChangedFiles::Loaded(fetched.files)
                         }
                         Err(error) => ChangedFiles::Failed(format!("{error:#}").into()),

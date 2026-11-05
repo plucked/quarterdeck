@@ -1,0 +1,82 @@
+use std::collections::BTreeSet;
+
+use crate::FacetChoice;
+
+/// One row of filter chips over values every file has exactly one of
+/// (its kind, its type). Nothing picked admits every value; picked values
+/// admit only themselves; hidden values never pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FacetFilter<T: Ord> {
+    pub only: BTreeSet<T>,
+    pub hidden: BTreeSet<T>,
+}
+
+impl<T: Ord> Default for FacetFilter<T> {
+    fn default() -> Self {
+        Self {
+            only: BTreeSet::new(),
+            hidden: BTreeSet::new(),
+        }
+    }
+}
+
+impl<T: Ord + Clone> FacetFilter<T> {
+    /// Whether a file with `value` passes this row.
+    pub fn admits(&self, value: &T) -> bool {
+        !self.hidden.contains(value) && (self.only.is_empty() || self.only.contains(value))
+    }
+
+    pub fn choice_of(&self, value: &T) -> FacetChoice {
+        match (self.only.contains(value), self.hidden.contains(value)) {
+            (_, true) => FacetChoice::Hidden,
+            (true, false) => FacetChoice::Only,
+            (false, false) => FacetChoice::Open,
+        }
+    }
+
+    /// Picks `value` (a click), or unpicks it; a hidden value is shown again and picked.
+    pub fn toggle_only(&mut self, value: &T) {
+        self.hidden.remove(value);
+        if !self.only.remove(value) {
+            self.only.insert(value.clone());
+        }
+    }
+
+    /// Hides `value` (an ⌥-click), or shows it again; a picked value is unpicked.
+    pub fn toggle_hidden(&mut self, value: &T) {
+        self.only.remove(value);
+        if !self.hidden.remove(value) {
+            self.hidden.insert(value.clone());
+        }
+    }
+
+    /// Whether this row narrows anything.
+    pub fn is_active(&self) -> bool {
+        !self.only.is_empty() || !self.hidden.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Nothing picked admits all; picks admit only themselves; hidden never passes.
+    #[test]
+    fn picks_and_hides() {
+        let mut filter: FacetFilter<u8> = FacetFilter::default();
+        assert!(filter.admits(&1) && filter.admits(&2));
+
+        filter.toggle_only(&1);
+        assert!(filter.admits(&1) && !filter.admits(&2));
+        assert_eq!(filter.choice_of(&1), FacetChoice::Only);
+
+        filter.toggle_hidden(&1);
+        assert!(!filter.admits(&1) && filter.admits(&2));
+        assert_eq!(filter.choice_of(&1), FacetChoice::Hidden);
+
+        filter.toggle_only(&1);
+        assert_eq!(filter.choice_of(&1), FacetChoice::Only);
+        filter.toggle_only(&1);
+        assert!(!filter.is_active());
+    }
+}

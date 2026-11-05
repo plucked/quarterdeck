@@ -263,6 +263,12 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     ALTER TABLE review_layout ADD COLUMN hide_unchanged_moves INTEGER NOT NULL DEFAULT 0
         CHECK (hide_unchanged_moves IN (0, 1));
 ",
+    r"
+    -- The kind filter can hide code too (an option-click on Code). The
+    -- other hide_* columns keep their kinds: tests, generated, moved.
+    ALTER TABLE review_layout ADD COLUMN hide_code INTEGER NOT NULL DEFAULT 0
+        CHECK (hide_code IN (0, 1));
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

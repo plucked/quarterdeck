@@ -1,64 +1,120 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
-use crate::file_category::{file_type_of, is_generated_path, is_test_path};
-use crate::{FileGroup, FilteredFile};
+use crate::{FacetCount, FacetFilter, FileKind, FilteredFile};
 
-/// Which changed files to hide, in the tree and the diff alike.
+/// Which changed files show, in the tree and the diff alike: a switch for
+/// viewed files, and two rows of chips that narrow together, by kind and
+/// by file type (a file passes when both rows admit it).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FileFilter {
-    pub hidden_groups: BTreeSet<FileGroup>,
-    /// File types (as [`file_type_of`] gives them: `.rs`, `Dockerfile`)
-    /// whose files are hidden.
-    pub hidden_file_types: BTreeSet<String>,
+    pub hide_viewed: bool,
+    pub kinds: FacetFilter<FileKind>,
+    /// File types as [`crate::file_type_of`] gives them: `.rs`, `Dockerfile`.
+    pub file_types: FacetFilter<String>,
 }
 
 impl FileFilter {
     /// Whether `file` shows.
     pub fn shows(&self, file: &FilteredFile<'_>) -> bool {
-        let hidden_by_type = self.hidden_file_types.contains(&file_type_of(file.path));
-        let hidden_by_group = self
-            .hidden_groups
-            .iter()
-            .any(|group| is_in_group(file, *group));
-        !(hidden_by_group || hidden_by_type)
+        !(self.hide_viewed && file.is_viewed) && self.shows_ignoring_viewed(file)
     }
 
-    pub fn hides(&self, group: FileGroup) -> bool {
-        self.hidden_groups.contains(&group)
+    /// Whether `file` passes the kind and type rows; a folder's viewed
+    /// checkbox covers these files, viewed or not.
+    pub fn shows_ignoring_viewed(&self, file: &FilteredFile<'_>) -> bool {
+        self.kinds.admits(&file.kind()) && self.file_types.admits(&file.file_type())
     }
 
-    /// Hides `group`, or shows it again.
-    pub fn toggle_group(&mut self, group: FileGroup) {
-        if !self.hidden_groups.remove(&group) {
-            self.hidden_groups.insert(group);
+    /// Whether the chip rows narrow anything (the viewed switch aside).
+    pub fn has_chips_set(&self) -> bool {
+        self.kinds.is_active() || self.file_types.is_active()
+    }
+
+    /// Clears both chip rows; the viewed switch stays.
+    pub fn clear_chips(&mut self) {
+        self.kinds = FacetFilter::default();
+        self.file_types = FacetFilter::default();
+    }
+
+    /// Each kind present among `files` (Code always), with how many files
+    /// it has and how many the viewed switch and the type row let through.
+    pub fn kind_counts(&self, files: &[FilteredFile<'_>]) -> Vec<FacetCount<FileKind>> {
+        FileKind::ALL
+            .into_iter()
+            .filter_map(|kind| {
+                let of_kind = files.iter().filter(|file| file.kind() == kind);
+                let total = of_kind.clone().count();
+                let matching = of_kind
+                    .filter(|file| self.passes_other_than_kind(file))
+                    .count();
+                (total > 0 || kind == FileKind::Code).then_some(FacetCount {
+                    value: kind,
+                    total,
+                    matching,
+                })
+            })
+            .collect()
+    }
+
+    /// Each file type among `files`, most files first then by name, with
+    /// how many files it has and how many the viewed switch and the kind
+    /// row let through.
+    pub fn file_type_counts(&self, files: &[FilteredFile<'_>]) -> Vec<FacetCount<String>> {
+        let mut counts: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+        for file in files {
+            let entry = counts.entry(file.file_type()).or_default();
+            entry.0 += 1;
+            entry.1 += usize::from(self.passes_other_than_type(file));
         }
+        let mut counts: Vec<FacetCount<String>> = counts
+            .into_iter()
+            .map(|(value, (total, matching))| FacetCount {
+                value,
+                total,
+                matching,
+            })
+            .collect();
+        counts.sort_by(|left, right| {
+            right
+                .total
+                .cmp(&left.total)
+                .then_with(|| left.value.cmp(&right.value))
+        });
+        counts
     }
 
-    /// Whether anything is hidden by this filter at all.
-    pub fn is_active(&self) -> bool {
-        !self.hidden_groups.is_empty() || !self.hidden_file_types.is_empty()
+    /// What narrows the files, in words, for the summary line and the
+    /// empty diff: `Moved`, `.schema`, `not Tests`, `not viewed`.
+    pub fn describe(&self) -> Vec<String> {
+        let mut parts: Vec<String> = Vec::new();
+        parts.extend(self.kinds.only.iter().map(|kind| kind.label().to_owned()));
+        parts.extend(self.file_types.only.iter().cloned());
+        parts.extend(
+            self.kinds
+                .hidden
+                .iter()
+                .map(|kind| format!("not {}", kind.label())),
+        );
+        parts.extend(
+            self.file_types
+                .hidden
+                .iter()
+                .map(|file_type| format!("not {file_type}")),
+        );
+        if self.hide_viewed {
+            parts.push("not viewed".to_owned());
+        }
+        parts
     }
 
-    /// Hides every group, and every one of `file_types`, so they can be
-    /// shown again one by one.
-    pub fn hide_all(&mut self, file_types: impl IntoIterator<Item = String>) {
-        self.hidden_groups.extend(FileGroup::ALL);
-        self.hidden_file_types.extend(file_types);
+    /// Whether `file` passes everything but the kind row.
+    fn passes_other_than_kind(&self, file: &FilteredFile<'_>) -> bool {
+        !(self.hide_viewed && file.is_viewed) && self.file_types.admits(&file.file_type())
     }
 
-    /// Hides nothing.
-    pub fn show_all(&mut self) {
-        *self = Self::default();
-    }
-}
-
-/// Whether `file` belongs to `group`.
-fn is_in_group(file: &FilteredFile<'_>, group: FileGroup) -> bool {
-    match group {
-        FileGroup::Viewed => file.is_viewed,
-        FileGroup::Tests => is_test_path(file.path),
-        FileGroup::Generated => is_generated_path(file.path),
-        FileGroup::UnchangedMoves => file.is_unchanged_move,
+    /// Whether `file` passes everything but the type row.
+    fn passes_other_than_type(&self, file: &FilteredFile<'_>) -> bool {
+        !(self.hide_viewed && file.is_viewed) && self.kinds.admits(&file.kind())
     }
 }
 
@@ -66,55 +122,83 @@ fn is_in_group(file: &FilteredFile<'_>, group: FileGroup) -> bool {
 mod tests {
     use super::*;
 
-    fn file(path: &str, is_viewed: bool) -> FilteredFile<'_> {
+    fn file(path: &str, is_unchanged_move: bool) -> FilteredFile<'_> {
         FilteredFile {
             path,
-            is_viewed,
-            is_unchanged_move: false,
+            is_viewed: false,
+            is_unchanged_move,
         }
     }
 
-    /// Each kind of filter hides its files and nothing else.
+    /// Picking Moved shows every moved file, whatever its type.
     #[test]
-    fn filters_hide_their_files() {
+    fn picking_a_kind_ignores_other_types() {
         let mut filter = FileFilter::default();
-        assert!(filter.shows(&file("src/a_test.go", true)));
-
-        filter.toggle_group(FileGroup::Viewed);
-        assert!(!filter.shows(&file("src/a.rs", true)));
-        assert!(filter.shows(&file("src/a.rs", false)));
-
-        filter.toggle_group(FileGroup::Tests);
-        assert!(!filter.shows(&file("src/a_test.go", false)));
-
-        filter.hidden_file_types.insert(".md".into());
-        assert!(!filter.shows(&file("README.md", false)));
-        filter.hidden_file_types.insert("Dockerfile".into());
-        assert!(!filter.shows(&file("web/Dockerfile", false)));
-        assert!(filter.shows(&file("src/a.rs", false)));
-        assert!(filter.is_active());
-    }
-
-    /// Unchanged moves hide alone; a moved file with changes still shows.
-    #[test]
-    fn hides_unchanged_moves() {
-        let mut filter = FileFilter::default();
-        filter.toggle_group(FileGroup::UnchangedMoves);
-        let moved = FilteredFile {
-            is_unchanged_move: true,
-            ..file("src/moved.rs", false)
-        };
-        assert!(!filter.shows(&moved));
-        assert!(filter.shows(&file("src/edited.rs", false)));
-    }
-
-    /// Hiding all hides every file; showing all hides none.
-    #[test]
-    fn hide_all_and_show_all() {
-        let mut filter = FileFilter::default();
-        filter.hide_all([".rs".to_owned()]);
+        filter.kinds.toggle_only(&FileKind::Moved);
+        assert!(filter.shows(&file("contracts/a.schema", true)));
         assert!(!filter.shows(&file("src/a.rs", false)));
-        filter.show_all();
-        assert!(!filter.is_active());
+    }
+
+    /// The rows narrow together: Moved and `.schema` together show moved schemas only.
+    #[test]
+    fn rows_narrow_together() {
+        let mut filter = FileFilter::default();
+        filter.kinds.toggle_only(&FileKind::Moved);
+        filter.file_types.toggle_only(&".schema".to_owned());
+        assert!(filter.shows(&file("a.schema", true)));
+        assert!(!filter.shows(&file("a.cs", true)));
+        assert_eq!(filter.describe(), ["Moved", ".schema"]);
+    }
+
+    /// Counts say what each chip would show given the other row.
+    #[test]
+    fn counts_follow_the_other_row() {
+        let files = [
+            file("a.schema", true),
+            file("b.schema", true),
+            file("c.cs", true),
+            file("d.cs", false),
+        ];
+        let mut filter = FileFilter::default();
+        filter.kinds.toggle_only(&FileKind::Moved);
+        let types = filter.file_type_counts(&files);
+        assert_eq!(
+            types,
+            [
+                FacetCount {
+                    value: ".cs".to_owned(),
+                    total: 2,
+                    matching: 1
+                },
+                FacetCount {
+                    value: ".schema".to_owned(),
+                    total: 2,
+                    matching: 2
+                },
+            ]
+        );
+        let kinds = filter.kind_counts(&files);
+        assert_eq!(
+            kinds
+                .iter()
+                .map(|count| (count.value, count.total))
+                .collect::<Vec<_>>(),
+            [(FileKind::Code, 1), (FileKind::Moved, 3)]
+        );
+    }
+
+    /// The viewed switch hides viewed files on top of the chips.
+    #[test]
+    fn hide_viewed_hides_viewed_files() {
+        let filter = FileFilter {
+            hide_viewed: true,
+            ..FileFilter::default()
+        };
+        let viewed = FilteredFile {
+            is_viewed: true,
+            ..file("a.rs", false)
+        };
+        assert!(!filter.shows(&viewed));
+        assert!(filter.shows_ignoring_viewed(&viewed));
     }
 }

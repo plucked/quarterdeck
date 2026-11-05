@@ -9,7 +9,8 @@
 //! - `pull_request_detail.rs`: `PullRequestDetail`, the view's state, loading and actions.
 //! - `row_rendering.rs`: renders the pane's layout and each diff row.
 //! - `sticky_header_rendering.rs`: the header above the diff: title, metadata, description.
-//! - `file_tree_rendering.rs`: the file tree panel: progress, filter chips, folders and files.
+//! - `file_tree_rendering.rs`: the file tree panel: progress, folders and files.
+//! - `filter_rendering.rs`: the filter: viewed switch, kind and type chip rows, summary.
 //! - `detail_row.rs`: `DetailRow`, one row of the list.
 //! - `detail_row_list.rs`: `DetailRowList`, the rows in order and each file's row range.
 //! - `detail_content.rs`: `DetailContent`, what the row list is built from.
@@ -25,6 +26,7 @@
 //! - `folder_viewed_state.rs`: `FolderViewedState`, none, some or all of a folder viewed.
 //! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
 //! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.
+//! - `chip_click.rs`: `ChipClick`, a filter chip clicked to pick or (option) to hide.
 //! - `load_progress.rs`: `LoadProgress`, how far loading the files has come.
 //! - `review_target.rs`: `ReviewTarget`, one layer or a combined range of stack layers.
 //! - `fetch_combined_files.rs`: gets a combined range's files from the cache or one diff download.
@@ -35,6 +37,7 @@
 
 mod activity_rendering;
 mod changed_files;
+mod chip_click;
 mod detail_content;
 mod detail_event;
 mod detail_row;
@@ -47,6 +50,7 @@ mod file_review_state;
 mod file_set_update;
 mod file_tree_rendering;
 mod file_tree_state;
+mod filter_rendering;
 mod folder_viewed_state;
 mod load_progress;
 mod loaded_file;
