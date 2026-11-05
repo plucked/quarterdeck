@@ -28,6 +28,7 @@ impl ReviewQueue {
                     self.pull_requests().len(),
                     cx.processor(|queue, range, _window, cx| queue.render_queue_rows(range, cx)),
                 )
+                .track_scroll(self.queue_list_scroll().clone())
                 .flex_1(),
             )
     }

@@ -1,27 +1,43 @@
 use std::time::Instant;
 
-use gpui::{Context, FocusHandle, Subscription, Task, Window, div, prelude::*};
-use qc_cache::PullRequestListKey;
+use gpui::{
+    App, Context, FocusHandle, ScrollHandle, ScrollStrategy, Subscription, Task,
+    UniformListScrollHandle, Window, div, point, prelude::*, px,
+};
+use qc_cache::{PullRequestListKey, ReviewQueueViewState};
 use qc_github::PullRequest;
 
 use super::activation_refresh::ActivationRefresh;
 use super::changed_files::ChangedFiles;
 use super::refresh_schedule::RefreshSchedule;
 use super::refresh_status::RefreshStatus;
+use super::restore_phase::RestorePhase;
 use super::selection_after_refresh::SelectionAfterRefresh;
+use super::selection_restore::SelectionRestore;
 use crate::app_commands::Refresh;
 use crate::app_services::AppServices;
 use crate::theme;
+use crate::ui_state::UiStateRecorder;
 
 const QUEUE_LIST: PullRequestListKey = PullRequestListKey::REVIEW_REQUESTED;
+
+/// A selection saved before the last relaunch, not yet matched to the queue.
+struct PendingRestore {
+    pull_request_id: u64,
+    detail_scroll_offset: f32,
+}
 
 /// The main view: pull requests that request the viewer's review, and the
 /// changed files of the selected one.
 ///
 /// The queue is shown from the cache at once and refreshed from GitHub in the
 /// background: at launch, on cmd-r, on a timer after each refresh and when the
-/// window becomes active with a stale queue. Changed files are read from the cache when still current for
-/// the pull request's `updated_at`, otherwise fetched and cached.
+/// window becomes active with a stale queue. Changed files are read from the
+/// cache when still current for the pull request's `updated_at`, otherwise
+/// fetched and cached.
+///
+/// The selection and detail scroll are recorded as UI state on every change and restored after a relaunch; a selected pull request that left
+/// the queue falls back to no selection.
 pub struct ReviewQueue {
     services: AppServices,
     focus: FocusHandle,
@@ -30,6 +46,12 @@ pub struct ReviewQueue {
     changed_files: Option<ChangedFiles>,
     refresh_status: RefreshStatus,
     refresh_schedule: RefreshSchedule,
+    queue_list_scroll: UniformListScrollHandle,
+    detail_scroll: ScrollHandle,
+    /// The saved selection, until the queue it is in has loaded.
+    pending_restore: Option<PendingRestore>,
+    /// The saved detail scroll, applied once the restored files have loaded.
+    pending_detail_scroll: Option<f32>,
     /// The in-flight refresh; replacing it cancels the previous one.
     refresh_task: Option<Task<()>>,
     /// The timer waiting for the next timed refresh; any refresh replaces it.
@@ -61,6 +83,19 @@ impl ReviewQueue {
             ),
         };
 
+        // Nothing saved, or a row that no longer reads, restores nothing.
+        let saved = cx
+            .global::<UiStateRecorder>()
+            .saved_review_queue_view_state()
+            .unwrap_or_default();
+        let pending_restore =
+            saved
+                .selected_pull_request_id
+                .map(|pull_request_id| PendingRestore {
+                    pull_request_id,
+                    detail_scroll_offset: saved.detail_scroll_offset,
+                });
+
         let mut queue = Self {
             services,
             focus,
@@ -69,13 +104,26 @@ impl ReviewQueue {
             changed_files: None,
             refresh_status,
             refresh_schedule: RefreshSchedule::default(),
+            queue_list_scroll: UniformListScrollHandle::new(),
+            detail_scroll: ScrollHandle::new(),
+            pending_restore,
+            pending_detail_scroll: None,
             refresh_task: None,
             auto_refresh_task: None,
             files_task: None,
             _activation_subscription: activation_subscription,
         };
+        queue.restore_selection(RestorePhase::CachedQueue, cx);
         queue.refresh(cx);
         queue
+    }
+
+    pub(super) fn queue_list_scroll(&self) -> &UniformListScrollHandle {
+        &self.queue_list_scroll
+    }
+
+    pub(super) fn detail_scroll(&self) -> &ScrollHandle {
+        &self.detail_scroll
     }
 
     pub(super) fn pull_requests(&self) -> &[PullRequest] {
@@ -187,6 +235,7 @@ impl ReviewQueue {
                 self.selected_index = None;
                 self.changed_files = None;
                 self.files_task = None;
+                self.record_view_state(cx);
             }
             SelectionAfterRefresh::Kept(index) => self.selected_index = Some(index),
             SelectionAfterRefresh::KeptAndUpdated(index) => {
@@ -194,16 +243,78 @@ impl ReviewQueue {
                 self.load_changed_files(cx);
             }
         }
+
+        // A selection saved before the relaunch gets its last chance here.
+        self.restore_selection(RestorePhase::RefreshedQueue, cx);
         cx.notify();
     }
 
-    /// Selects the pull request at `index` and loads its changed files.
+    /// Selects the pull request at `index` for the user: shows its files from
+    /// the top and records the new selection.
     pub(super) fn select(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.selected_index == Some(index) {
             return;
         }
+        // A choice by the user replaces whatever was being restored.
+        self.pending_restore = None;
+        self.pending_detail_scroll = None;
+        self.detail_scroll.set_offset(point(px(0.), px(0.)));
+
         self.selected_index = Some(index);
         self.load_changed_files(cx);
+        self.record_view_state(cx);
+    }
+
+    /// Matches the selection saved before the relaunch against the current
+    /// queue: selects it with its scroll position, keeps waiting for the
+    /// refreshed queue, or drops it.
+    fn restore_selection(&mut self, phase: RestorePhase, cx: &mut Context<Self>) {
+        let Some(pending) = &self.pending_restore else {
+            return;
+        };
+        match SelectionRestore::decide(pending.pull_request_id, &self.pull_requests, phase) {
+            SelectionRestore::Select(index) => {
+                // The scroll waits for the files; the list scrolls to the row now.
+                self.pending_detail_scroll = Some(pending.detail_scroll_offset);
+                self.pending_restore = None;
+                self.selected_index = Some(index);
+                self.queue_list_scroll
+                    .scroll_to_item(index, ScrollStrategy::Center);
+                self.load_changed_files(cx);
+            }
+            SelectionRestore::WaitForRefresh => {}
+            SelectionRestore::Abandon => {
+                self.pending_restore = None;
+                self.record_view_state(cx);
+            }
+        }
+    }
+
+    /// Records the selection and detail scroll as UI state. A
+    /// selection or scroll still waiting to be restored is recorded as saved,
+    /// so a relaunch before it resolves does not lose it.
+    pub fn record_view_state(&self, cx: &mut App) {
+        let selected_pull_request_id = self
+            .selected_pull_request()
+            .map(|pull_request| pull_request.id)
+            .or(self
+                .pending_restore
+                .as_ref()
+                .map(|pending| pending.pull_request_id));
+        let detail_scroll_offset = self
+            .pending_detail_scroll
+            .or(self
+                .pending_restore
+                .as_ref()
+                .map(|pending| pending.detail_scroll_offset))
+            .unwrap_or_else(|| self.detail_scroll.offset().y.into());
+        UiStateRecorder::record_review_queue_view_state(
+            cx,
+            ReviewQueueViewState {
+                selected_pull_request_id,
+                detail_scroll_offset,
+            },
+        );
     }
 
     /// Loads the selected pull request's changed files: from the cache when
@@ -235,13 +346,17 @@ impl ReviewQueue {
                 })
                 .await;
 
-            // Show the result; a closed view simply drops it.
+            // Show the result and apply a restored scroll, which gpui clamps
+            // if the files got shorter; a closed view simply drops it.
             queue
                 .update(cx, |queue, cx| {
                     queue.changed_files = Some(match loaded {
                         Ok(files) => ChangedFiles::Loaded(files),
                         Err(error) => ChangedFiles::Failed(format!("{error:#}").into()),
                     });
+                    if let Some(offset) = queue.pending_detail_scroll.take() {
+                        queue.detail_scroll.set_offset(point(px(0.), px(offset)));
+                    }
                     cx.notify();
                 })
                 .ok();
@@ -265,6 +380,6 @@ impl Render for ReviewQueue {
             .text_color(theme::text())
             .text_sm()
             .child(self.render_sidebar(cx))
-            .child(self.render_detail())
+            .child(self.render_detail(cx))
     }
 }

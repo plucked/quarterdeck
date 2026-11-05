@@ -1,4 +1,4 @@
-use gpui::{AnyElement, div, prelude::*};
+use gpui::{AnyElement, Context, div, prelude::*};
 use qc_github::PullRequest;
 
 use super::ReviewQueue;
@@ -9,9 +9,12 @@ use crate::theme;
 impl ReviewQueue {
     /// The right column: the selected pull request's header, description and
     /// changed files, scrolling as one.
-    pub(super) fn render_detail(&self) -> impl IntoElement {
+    pub(super) fn render_detail(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        // Scrolling is recorded so a relaunch returns to the same place.
         let container = div()
             .id("detail")
+            .track_scroll(self.detail_scroll())
+            .on_scroll_wheel(cx.listener(|queue, _, _, cx| queue.record_view_state(cx)))
             .flex_1()
             .h_full()
             .overflow_y_scroll()

@@ -1,0 +1,16 @@
+//! Remembers what the UI showed (window placement, the review queue's
+//! selection and scroll) in the local database, so a rebuild-and-relaunch
+//! returns to the same place. Every step falls back to defaults: nothing
+//! saved, a row that no longer reads, or a value that no longer fits (a
+//! window off every display, a pull request that left the queue) restores
+//! nothing for that part, never an error.
+//!
+//! Files:
+//! - `ui_state_recorder.rs`: `UiStateRecorder`, the gpui global that reads saved state and batches writes.
+//! - `window_placement_conversion.rs`: converts between gpui window bounds and the saved placement.
+
+mod ui_state_recorder;
+mod window_placement_conversion;
+
+pub use ui_state_recorder::UiStateRecorder;
+pub use window_placement_conversion::{placement_from_window, window_bounds_from_placement};
