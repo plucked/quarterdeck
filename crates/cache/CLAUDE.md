@@ -18,6 +18,7 @@
 | `viewed_file` / `patch_fingerprint` / `viewed_files_storage` / `review_scope` | viewed marks per `ReviewScope` (a PR, or a combined range of stack layers) and file, with an FNV-1a patch fingerprint (stable across Rust versions) |
 | `review_note` / `note_id` / `note_destination` / `note_anchor` / `review_summary` / `review_notes_storage` | the user's review comments: `ReviewNote` (local note or GitHub draft) per `ReviewScope`, on lines (`NoteAnchor::Line`) or replying to a GitHub thread (`NoteAnchor::Reply`); `NoteId` made by the app (time-based, unique per process) so writes can be batched; `ReviewSummary` (verdict + body) per PR |
 | `panel_widths` / `panel_widths_storage` | `PanelWidths` (sidebar, side panel; defaults 380 / 300): one row, each width saved on its own |
+| `folded_groups` / `folded_groups_storage` | `FoldedGroups` (repositories, `FoldedStack`s): the folded sidebar groups in `folded_repositories` + `folded_stacks`, replaced whole in one transaction |
 | `queue_tab` / `stack_review_mode` | `QueueTab` (authored, review requested) in the queue state; `StackReviewMode` (layer, combined) in the review layout |
 | `review_layout_state` / `panel_visibility` / `review_layout_storage` | `ReviewLayoutState` (one row): file tree `PanelVisibility`, `hide_viewed`, hidden `qd_file_tree::FileKind`s (`hide_code`, `hide_tests`, `hide_generated`, `hide_unchanged_moves`), stack review mode, comment destination |
 | `stack_storage` / `cached_stack` | `pr_stacks` + `pr_stack_layers`: a stack's layers with the response ETag |

@@ -39,6 +39,8 @@
 //! - `viewed_files_storage.rs`: reads and writes of viewed marks.
 //! - `review_scope.rs`: `ReviewScope`, what viewed marks and review notes belong to: a pull request or a combined range of stack layers.
 //! - `queue_tab.rs`: `QueueTab`, which list the queue shows.
+//! - `folded_groups.rs`: `FoldedGroups` and `FoldedStack`, the sidebar groups the user folded.
+//! - `folded_groups_storage.rs`: reads and writes of the folded groups.
 //! - `stack_review_mode.rs`: `StackReviewMode`, one layer or combined layers.
 //! - `cached_stack.rs`: `CachedStack`, a stack with the tag of its response.
 //! - `stack_storage.rs`: reads and writes of cached stacks and their layers.
@@ -68,6 +70,8 @@ mod diff_view_settings_storage;
 mod display_uuid;
 mod file_set_revision;
 mod file_set_storage;
+mod folded_groups;
+mod folded_groups_storage;
 mod github_cache;
 mod line_wrapping;
 mod note_anchor;
@@ -107,6 +111,7 @@ pub use diff_layout::DiffLayout;
 pub use diff_view_settings::DiffViewSettings;
 pub use display_uuid::DisplayUuid;
 pub use file_set_revision::FileSetRevision;
+pub use folded_groups::{FoldedGroups, FoldedStack};
 pub use github_cache::GitHubCache;
 pub use line_wrapping::LineWrapping;
 pub use note_anchor::NoteAnchor;

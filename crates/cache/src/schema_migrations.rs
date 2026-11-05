@@ -325,6 +325,20 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     ALTER TABLE review_queue_view ADD COLUMN sidebar_visible INTEGER NOT NULL DEFAULT 1
         CHECK (sidebar_visible IN (0, 1));
 ",
+    r"
+    -- The sidebar groups the user folded: repositories, and stacks by number.
+    CREATE TABLE folded_repositories (
+        repo_owner  TEXT NOT NULL,
+        repo_name   TEXT NOT NULL,
+        PRIMARY KEY (repo_owner, repo_name)
+    );
+    CREATE TABLE folded_stacks (
+        repo_owner    TEXT    NOT NULL,
+        repo_name     TEXT    NOT NULL,
+        stack_number  INTEGER NOT NULL CHECK (stack_number > 0),
+        PRIMARY KEY (repo_owner, repo_name, stack_number)
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

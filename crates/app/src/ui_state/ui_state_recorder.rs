@@ -6,8 +6,9 @@ use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 
 use super::review_change::ReviewChange;
 use qd_cache::{
-    CacheTtl, DiffViewSettings, NoteDestination, PanelWidths, ReviewLayoutState, ReviewNote,
-    ReviewQueueViewState, ReviewScope, ReviewSummary, UiStateStore, ViewedFile, WindowPlacement,
+    CacheTtl, DiffViewSettings, FoldedGroups, NoteDestination, PanelWidths, ReviewLayoutState,
+    ReviewNote, ReviewQueueViewState, ReviewScope, ReviewSummary, UiStateStore, ViewedFile,
+    WindowPlacement,
 };
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
@@ -24,6 +25,7 @@ struct PendingUiState {
     review_layout: Option<ReviewLayoutState>,
     sidebar_width: Option<f32>,
     side_panel_width: Option<f32>,
+    folded_groups: Option<FoldedGroups>,
     /// Every viewed mark change, in the order made: unlike settings, each counts.
     viewed_changes: Vec<ViewedChange>,
     /// Every review note and summary change, in the order made.
@@ -39,6 +41,7 @@ impl PendingUiState {
             && self.review_layout.is_none()
             && self.sidebar_width.is_none()
             && self.side_panel_width.is_none()
+            && self.folded_groups.is_none()
             && self.viewed_changes.is_empty()
             && self.review_changes.is_empty()
     }
@@ -149,6 +152,23 @@ impl UiStateRecorder {
         self.lock_store()
             .panel_widths()
             .unwrap_or_else(|error| report_unreadable("panel widths", &error))
+    }
+
+    /// The sidebar groups folded before the last relaunch; none when there
+    /// are none or they no longer read. Reads on the main thread at startup only.
+    pub fn saved_folded_groups(&self) -> FoldedGroups {
+        self.lock_store().folded_groups().unwrap_or_else(|error| {
+            report_unreadable::<()>("folded groups", &error);
+            FoldedGroups::default()
+        })
+    }
+
+    /// Records the folded sidebar groups and schedules a write.
+    pub fn record_folded_groups(cx: &mut App, groups: FoldedGroups) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.folded_groups = Some(groups);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
     }
 
     /// Records the queue sidebar's width and schedules a write; a drag
@@ -317,6 +337,11 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
         && let Err(error) = store.put_side_panel_width(width)
     {
         eprintln!("ui state: cannot save the side panel width: {error:#}");
+    }
+    if let Some(groups) = &pending.folded_groups
+        && let Err(error) = store.put_folded_groups(groups)
+    {
+        eprintln!("ui state: cannot save the folded groups: {error:#}");
     }
     if let Some(ttl) = pending.cache_ttl
         && let Err(error) = store.put_cache_ttl(ttl)

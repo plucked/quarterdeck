@@ -168,7 +168,9 @@ impl ReviewQueue {
             tab: saved.tab,
             sidebar_visibility: saved.sidebar,
             rows: Vec::new(),
-            collapsed: CollapsedGroups::default(),
+            collapsed: CollapsedGroups::from_saved(
+                cx.global::<UiStateRecorder>().saved_folded_groups(),
+            ),
             selected: None,
             selection_origin: SelectionOrigin::Listed,
             refresh_status,
@@ -382,6 +384,7 @@ impl ReviewQueue {
     /// Collapses or expands a repository's group in the sidebar.
     pub(super) fn toggle_repository_group(&mut self, repo: &RepoRef, cx: &mut Context<Self>) {
         self.collapsed.toggle_repository(repo);
+        UiStateRecorder::record_folded_groups(cx, self.collapsed.to_saved());
         self.rebuild_rows();
         cx.notify();
     }
@@ -389,6 +392,7 @@ impl ReviewQueue {
     /// Collapses or expands a stack's group in the sidebar.
     pub(super) fn toggle_stack_group(&mut self, key: &StackKey, cx: &mut Context<Self>) {
         self.collapsed.toggle_stack(key);
+        UiStateRecorder::record_folded_groups(cx, self.collapsed.to_saved());
         self.rebuild_rows();
         cx.notify();
     }
