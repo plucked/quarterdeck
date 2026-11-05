@@ -4,8 +4,8 @@ use std::time::Duration;
 use anyhow::Result;
 use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 use qc_cache::{
-    CacheTtl, DiffViewSettings, ReviewLayoutState, ReviewQueueViewState, UiStateStore, ViewedFile,
-    ViewedScope, WindowPlacement,
+    CacheTtl, DiffViewSettings, PanelWidths, ReviewLayoutState, ReviewQueueViewState, UiStateStore,
+    ViewedFile, ViewedScope, WindowPlacement,
 };
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
@@ -20,6 +20,8 @@ struct PendingUiState {
     diff_view_settings: Option<DiffViewSettings>,
     cache_ttl: Option<CacheTtl>,
     review_layout: Option<ReviewLayoutState>,
+    sidebar_width: Option<f32>,
+    side_panel_width: Option<f32>,
     /// Every viewed mark change, in the order made: unlike settings, each counts.
     viewed_changes: Vec<ViewedChange>,
 }
@@ -31,6 +33,8 @@ impl PendingUiState {
             && self.diff_view_settings.is_none()
             && self.cache_ttl.is_none()
             && self.review_layout.is_none()
+            && self.sidebar_width.is_none()
+            && self.side_panel_width.is_none()
             && self.viewed_changes.is_empty()
     }
 }
@@ -130,6 +134,31 @@ impl UiStateRecorder {
     pub fn record_review_layout(cx: &mut App, layout: ReviewLayoutState) {
         cx.update_global::<Self, _>(|recorder, cx| {
             recorder.pending.review_layout = Some(layout);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// The panel widths saved before the last relaunch; `None` when there
+    /// are none or they no longer read. Reads on the main thread at startup only.
+    pub fn saved_panel_widths(&self) -> Option<PanelWidths> {
+        self.lock_store()
+            .panel_widths()
+            .unwrap_or_else(|error| report_unreadable("panel widths", &error))
+    }
+
+    /// Records the queue sidebar's width and schedules a write; a drag
+    /// records many, and only the last of a burst is written.
+    pub fn record_sidebar_width(cx: &mut App, width: f32) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.sidebar_width = Some(width);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// Records the review pane's side panel width and schedules a write.
+    pub fn record_side_panel_width(cx: &mut App, width: f32) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.side_panel_width = Some(width);
             recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
@@ -265,6 +294,16 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
         && let Err(error) = store.put_review_layout(layout)
     {
         eprintln!("ui state: cannot save the review layout: {error:#}");
+    }
+    if let Some(width) = pending.sidebar_width
+        && let Err(error) = store.put_sidebar_width(width)
+    {
+        eprintln!("ui state: cannot save the sidebar width: {error:#}");
+    }
+    if let Some(width) = pending.side_panel_width
+        && let Err(error) = store.put_side_panel_width(width)
+    {
+        eprintln!("ui state: cannot save the side panel width: {error:#}");
     }
     if let Some(ttl) = pending.cache_ttl
         && let Err(error) = store.put_cache_ttl(ttl)

@@ -269,6 +269,15 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     ALTER TABLE review_layout ADD COLUMN hide_code INTEGER NOT NULL DEFAULT 0
         CHECK (hide_code IN (0, 1));
 ",
+    r"
+    -- The widths the user dragged the queue sidebar and the review pane's
+    -- side panel to, in pixels. One row (id = 1).
+    CREATE TABLE panel_widths (
+        id                INTEGER PRIMARY KEY CHECK (id = 1),
+        sidebar_width     REAL    NOT NULL CHECK (sidebar_width > 0),
+        side_panel_width  REAL    NOT NULL CHECK (side_panel_width > 0)
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

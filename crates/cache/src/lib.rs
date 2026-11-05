@@ -22,6 +22,8 @@
 //! - `display_uuid.rs`: `DisplayUuid`, the display a window was on.
 //! - `review_layout_state.rs`: `ReviewLayoutState`, the review pane's layout and filter toggles.
 //! - `panel_visibility.rs`: `PanelVisibility`, shown or hidden.
+//! - `panel_widths.rs`: `PanelWidths`, the dragged widths of the sidebar and side panel.
+//! - `panel_widths_storage.rs`: reads and writes of the panel widths.
 //! - `review_layout_storage.rs`: reads and writes of the review layout.
 //! - `review_queue_view_state.rs`: `ReviewQueueViewState`, the review queue's saved selection and scroll.
 //! - `detail_scroll_position.rs`: `DetailScrollPosition`, the detail pane's scroll as row and offset.
@@ -59,6 +61,8 @@ mod file_set_storage;
 mod github_cache;
 mod line_wrapping;
 mod panel_visibility;
+mod panel_widths;
+mod panel_widths_storage;
 mod patch_fingerprint;
 mod pull_request_list_key;
 mod queue_tab;
@@ -89,6 +93,7 @@ pub use file_set_revision::FileSetRevision;
 pub use github_cache::GitHubCache;
 pub use line_wrapping::LineWrapping;
 pub use panel_visibility::PanelVisibility;
+pub use panel_widths::PanelWidths;
 pub use patch_fingerprint::PatchFingerprint;
 pub use pull_request_list_key::PullRequestListKey;
 pub use queue_tab::QueueTab;

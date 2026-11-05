@@ -15,6 +15,7 @@
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset |
 | `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qc-diff` enums |
 | `viewed_file` / `patch_fingerprint` / `viewed_files_storage` / `viewed_scope` | viewed marks per `ViewedScope` (a PR, or a combined range of stack layers) and file, with an FNV-1a patch fingerprint (stable across Rust versions) |
+| `panel_widths` / `panel_widths_storage` | `PanelWidths` (sidebar, side panel; defaults 380 / 300): one row, each width saved on its own |
 | `queue_tab` / `stack_review_mode` | `QueueTab` (authored, review requested) in the queue state; `StackReviewMode` (layer, combined) in the review layout |
 | `review_layout_state` / `panel_visibility` / `review_layout_storage` | `ReviewLayoutState` (one row): file tree `PanelVisibility`, `hide_viewed`, hidden `qc_file_tree::FileKind`s (`hide_code`, `hide_tests`, `hide_generated`, `hide_unchanged_moves`), stack review mode |
 | `stack_storage` / `cached_stack` | `pr_stacks` + `pr_stack_layers`: a stack's layers with the response ETag |

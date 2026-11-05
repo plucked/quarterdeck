@@ -75,7 +75,8 @@ impl Render for PullRequestDetail {
                     .min_h_0()
                     .child(diff_area)
                     .when(shows_tree, |pane| {
-                        pane.child(self.render_file_tree_panel(cx))
+                        pane.child(self.render_side_panel_handle(cx))
+                            .child(self.render_file_tree_panel(cx))
                     }),
             )
     }

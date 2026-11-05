@@ -13,6 +13,7 @@
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
+//! - `resize_handle.rs`: `ResizeHandle`, a divider dragged to resize the panel beside it.
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
 //! - `review_queue/`: the main view, the queue of pull requests awaiting review.
 //! - `pull_request_detail/`: `PullRequestDetail`, the selected pull request as a virtualized list.
@@ -26,6 +27,7 @@ mod launch_app;
 mod main_window;
 mod markdown_view;
 mod pull_request_detail;
+mod resize_handle;
 mod review_queue;
 mod scrollbar;
 mod segmented_control;

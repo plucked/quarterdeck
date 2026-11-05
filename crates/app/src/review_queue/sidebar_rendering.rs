@@ -11,11 +11,14 @@ use qc_github::PullRequest;
 use super::ReviewQueue;
 use super::queue_row::{QueueRow, StackGroup};
 use super::refresh_status::RefreshStatus;
+use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
-const SIDEBAR_WIDTH: f32 = 380.;
+/// How narrow and how wide the sidebar can be dragged.
+const MIN_SIDEBAR_WIDTH: f32 = 240.;
+const MAX_SIDEBAR_WIDTH: f32 = 720.;
 /// The breath of the pulsing "Refreshing…" status.
 const PULSE_PERIOD: Duration = Duration::from_millis(1200);
 /// Width of the column holding a stack layer's position and rail.
@@ -27,12 +30,10 @@ impl ReviewQueue {
         div()
             .flex()
             .flex_col()
-            .w(px(SIDEBAR_WIDTH))
+            .w(px(self.sidebar_width()))
             .h_full()
             .flex_shrink_0()
             .bg(theme::panel())
-            .border_r_1()
-            .border_color(theme::border())
             .child(self.render_sidebar_header(cx))
             .child(
                 // The list fills the rest of the column, with a scrollbar over its right edge.
@@ -58,6 +59,23 @@ impl ReviewQueue {
                         ),
                     )),
             )
+    }
+
+    /// The divider right of the sidebar; dragging it resizes the sidebar.
+    pub(super) fn render_sidebar_handle(&self, cx: &mut Context<Self>) -> ResizeHandle {
+        let queue = cx.entity().downgrade();
+        ResizeHandle::new(
+            "sidebar-resize",
+            ResizeEdge::Right,
+            self.sidebar_width(),
+            MIN_SIDEBAR_WIDTH,
+            MAX_SIDEBAR_WIDTH,
+            move |width, _, cx| {
+                queue
+                    .update(cx, |queue, cx| queue.set_sidebar_width(width, cx))
+                    .ok();
+            },
+        )
     }
 
     /// The tabs with their counts, the refresh button, and what is going on.

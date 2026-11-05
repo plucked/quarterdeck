@@ -157,6 +157,8 @@ pub struct PullRequestDetail {
     highlight_progress: Option<(usize, usize)>,
     /// The scroll of the stack map, kept on the shown layer.
     stack_map_scroll: UniformListScrollHandle,
+    /// The side panel's width, as dragged (and saved).
+    side_panel_width: f32,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -215,6 +217,11 @@ impl PullRequestDetail {
             stack_task: None,
             highlight_progress: None,
             stack_map_scroll: UniformListScrollHandle::new(),
+            side_panel_width: cx
+                .global::<UiStateRecorder>()
+                .saved_panel_widths()
+                .unwrap_or_default()
+                .side_panel,
             _settings_subscription: settings_subscription,
         };
         detail.rebuild_rows(ScrollAnchor::Top);
@@ -414,6 +421,17 @@ impl PullRequestDetail {
 
     pub(super) fn stack(&self) -> Option<&PullRequestStack> {
         self.stack.as_ref()
+    }
+
+    pub(super) fn side_panel_width(&self) -> f32 {
+        self.side_panel_width
+    }
+
+    /// Sets the side panel's width while its divider is dragged, and saves it.
+    pub(super) fn set_side_panel_width(&mut self, width: f32, cx: &mut Context<Self>) {
+        self.side_panel_width = width;
+        UiStateRecorder::record_side_panel_width(cx, width);
+        cx.notify();
     }
 
     pub(super) fn stack_map_scroll(&self) -> &UniformListScrollHandle {

@@ -84,6 +84,8 @@ pub struct ReviewQueue {
     opening_layer: Option<OpeningLayer>,
     /// Why the last stack layer could not be opened.
     layer_error: Option<SharedString>,
+    /// The sidebar's width, as dragged (and saved).
+    sidebar_width: f32,
     /// Keep the window activation and detail observers registered.
     _subscriptions: [Subscription; 2],
 }
@@ -109,6 +111,11 @@ impl ReviewQueue {
         };
 
         // Nothing saved, or a row that no longer reads, restores nothing.
+        let sidebar_width = cx
+            .global::<UiStateRecorder>()
+            .saved_panel_widths()
+            .unwrap_or_default()
+            .sidebar;
         let saved = cx
             .global::<UiStateRecorder>()
             .saved_review_queue_view_state()
@@ -148,6 +155,7 @@ impl ReviewQueue {
             auto_refresh_task: None,
             opening_layer: None,
             layer_error: None,
+            sidebar_width,
             _subscriptions: [activation_subscription, detail_subscription],
         };
         queue.rebuild_rows();
@@ -192,6 +200,17 @@ impl ReviewQueue {
 
     pub(super) fn layer_error(&self) -> Option<&SharedString> {
         self.layer_error.as_ref()
+    }
+
+    pub(super) fn sidebar_width(&self) -> f32 {
+        self.sidebar_width
+    }
+
+    /// Sets the sidebar's width while its divider is dragged, and saves it.
+    pub(super) fn set_sidebar_width(&mut self, width: f32, cx: &mut Context<Self>) {
+        self.sidebar_width = width;
+        UiStateRecorder::record_sidebar_width(cx, width);
+        cx.notify();
     }
 
     /// Rebuilds the sidebar rows of the shown tab.
@@ -661,6 +680,7 @@ impl Render for ReviewQueue {
             .text_color(theme::text())
             .text_sm()
             .child(self.render_sidebar(cx))
+            .child(self.render_sidebar_handle(cx))
             .child(self.detail.clone())
     }
 }

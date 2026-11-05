@@ -8,11 +8,13 @@ use qc_file_tree::{TreeNodeKind, TreeRow};
 
 use super::folder_viewed_state::FolderViewedState;
 use super::pull_request_detail::PullRequestDetail;
+use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
 
-/// Width of the file tree panel.
-const PANEL_WIDTH: f32 = 300.;
+/// How narrow and how wide the side panel can be dragged.
+const MIN_PANEL_WIDTH: f32 = 220.;
+const MAX_PANEL_WIDTH: f32 = 640.;
 /// Height of one tree row; the tree is a uniform list.
 const TREE_ROW_HEIGHT: f32 = 24.;
 /// Indent per tree level.
@@ -28,13 +30,11 @@ impl PullRequestDetail {
         let has_files = !self.loaded_files().is_empty();
         div()
             .flex_none()
-            .w(px(PANEL_WIDTH))
+            .w(px(self.side_panel_width()))
             .h_full()
             .flex()
             .flex_col()
             .bg(theme::panel())
-            .border_l_1()
-            .border_color(theme::border())
             .text_sm()
             .children(self.render_stack_map(cx))
             .when(has_files, |panel| {
@@ -42,6 +42,23 @@ impl PullRequestDetail {
                     .child(self.render_tree_header(cx))
                     .child(self.render_tree_body(cx))
             })
+    }
+
+    /// The divider left of the side panel; dragging it resizes the panel.
+    pub(super) fn render_side_panel_handle(&self, cx: &mut Context<Self>) -> ResizeHandle {
+        let detail = cx.entity().downgrade();
+        ResizeHandle::new(
+            "side-panel-resize",
+            ResizeEdge::Left,
+            self.side_panel_width(),
+            MIN_PANEL_WIDTH,
+            MAX_PANEL_WIDTH,
+            move |width, _, cx| {
+                detail
+                    .update(cx, |detail, cx| detail.set_side_panel_width(width, cx))
+                    .ok();
+            },
+        )
     }
 
     /// Title, viewed progress and the filter controls.
