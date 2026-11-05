@@ -8,6 +8,7 @@ use qc_file_tree::{TreeNodeKind, TreeRow};
 
 use super::folder_viewed_state::FolderViewedState;
 use super::pull_request_detail::PullRequestDetail;
+use super::side_panel_tab::SidePanelTab;
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
@@ -38,9 +39,13 @@ impl PullRequestDetail {
             .text_sm()
             .children(self.render_stack_map(cx))
             .when(has_files, |panel| {
-                panel
-                    .child(self.render_tree_header(cx))
-                    .child(self.render_tree_body(cx))
+                let panel = panel.child(self.render_side_panel_tabs(cx));
+                match self.review().tab {
+                    SidePanelTab::Files => panel
+                        .child(self.render_tree_header(cx))
+                        .child(self.render_tree_body(cx)),
+                    SidePanelTab::Review => panel.child(self.render_review_panel(cx)),
+                }
             })
     }
 

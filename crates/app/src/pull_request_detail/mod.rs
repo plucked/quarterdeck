@@ -32,11 +32,24 @@
 //! - `fetch_combined_files.rs`: gets a combined range's files from the cache or one diff download.
 //! - `stack_bar_rendering.rs`: the header's stack line: layer, neighbours, review mode, range.
 //! - `stack_map_rendering.rs`: the stack map above the file tree: every layer, the range.
+//! - `review_pane.rs`: `ReviewPane`, the detail's review state: comments, cards, editor, tab.
+//! - `review_comments.rs`: `ReviewComments`, GitHub's conversations and the user's notes, as cards.
+//! - `comment_placement.rs`: `CommentPlacement`, which line each card and the composer go under.
+//! - `comment_editor.rs`: `CommentEditor`, the comment being written and what it is for.
+//! - `review_status.rs`: `ReviewStatus`, how the last review action went.
+//! - `side_panel_tab.rs`: `SidePanelTab`, files or review.
+//! - `review_actions.rs`: writing, editing, deleting and submitting comments; loading GitHub's.
+//! - `local_review_export.rs`: the local notes as Markdown for an agent.
+//! - `comment_card_rendering.rs`: the comment cards and the composer in the diff.
+//! - `review_panel_rendering.rs`: the side panel's review tab.
 //! - `activity_rendering.rs`: the loading indicators: header pill, progress line, loading card.
 
 mod activity_rendering;
 mod changed_files;
 mod chip_click;
+mod comment_card_rendering;
+mod comment_editor;
+mod comment_placement;
 mod detail_content;
 mod detail_event;
 mod detail_row;
@@ -52,11 +65,18 @@ mod filter_rendering;
 mod folder_viewed_state;
 mod load_progress;
 mod loaded_file;
+mod local_review_export;
 mod parsed_description;
 mod pull_request_detail;
+mod review_actions;
+mod review_comments;
+mod review_pane;
+mod review_panel_rendering;
+mod review_status;
 mod review_target;
 mod row_rendering;
 mod selected_diff_text;
+mod side_panel_tab;
 mod stack_bar_rendering;
 mod stack_map_rendering;
 mod sticky_header_rendering;

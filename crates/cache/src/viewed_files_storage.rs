@@ -2,20 +2,20 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use crate::sql_integers::sql_integer;
-use crate::{PatchFingerprint, UiStateStore, ViewedFile, ViewedScope};
+use crate::{PatchFingerprint, ReviewScope, UiStateStore, ViewedFile};
 
 impl UiStateStore {
     /// The files marked as viewed in `scope`, with the fingerprints they
     /// were marked at, in name order.
-    pub fn viewed_files(&self, scope: &ViewedScope) -> Result<Vec<ViewedFile>> {
+    pub fn viewed_files(&self, scope: &ReviewScope) -> Result<Vec<ViewedFile>> {
         match scope {
-            ViewedScope::PullRequest(pull_request_id) => read_marks(
+            ReviewScope::PullRequest(pull_request_id) => read_marks(
                 self.connection(),
                 "SELECT filename, patch_fingerprint FROM viewed_files WHERE pr_id = ?1
                  ORDER BY filename",
                 &[&sql_integer(*pull_request_id)?],
             ),
-            ViewedScope::CombinedLayers {
+            ReviewScope::CombinedLayers {
                 repo,
                 first_number,
                 last_number,
@@ -36,9 +36,9 @@ impl UiStateStore {
 
     /// Marks a file as viewed in `scope` at its current fingerprint,
     /// replacing an older mark.
-    pub fn mark_file_viewed(&self, scope: &ViewedScope, file: &ViewedFile) -> Result<()> {
+    pub fn mark_file_viewed(&self, scope: &ReviewScope, file: &ViewedFile) -> Result<()> {
         match scope {
-            ViewedScope::PullRequest(pull_request_id) => self.connection().execute(
+            ReviewScope::PullRequest(pull_request_id) => self.connection().execute(
                 "INSERT INTO viewed_files (pr_id, filename, patch_fingerprint) VALUES (?1, ?2, ?3)
                  ON CONFLICT (pr_id, filename) DO UPDATE SET patch_fingerprint = excluded.patch_fingerprint",
                 params![
@@ -47,7 +47,7 @@ impl UiStateStore {
                     file.fingerprint.as_sql_integer()
                 ],
             )?,
-            ViewedScope::CombinedLayers {
+            ReviewScope::CombinedLayers {
                 repo,
                 first_number,
                 last_number,
@@ -71,13 +71,13 @@ impl UiStateStore {
     }
 
     /// Removes a file's viewed mark in `scope`; nothing happens when it has none.
-    pub fn unmark_file_viewed(&self, scope: &ViewedScope, filename: &str) -> Result<()> {
+    pub fn unmark_file_viewed(&self, scope: &ReviewScope, filename: &str) -> Result<()> {
         match scope {
-            ViewedScope::PullRequest(pull_request_id) => self.connection().execute(
+            ReviewScope::PullRequest(pull_request_id) => self.connection().execute(
                 "DELETE FROM viewed_files WHERE pr_id = ?1 AND filename = ?2",
                 params![sql_integer(*pull_request_id)?, filename],
             )?,
-            ViewedScope::CombinedLayers {
+            ReviewScope::CombinedLayers {
                 repo,
                 first_number,
                 last_number,
@@ -131,12 +131,12 @@ mod tests {
     #[test]
     fn viewed_marks_round_trip() {
         let store = UiStateStore::open_in_memory().unwrap();
-        let first = ViewedScope::PullRequest(1);
+        let first = ReviewScope::PullRequest(1);
         store.mark_file_viewed(&first, &viewed("a.rs", 10)).unwrap();
         store.mark_file_viewed(&first, &viewed("a.rs", 11)).unwrap();
         store.mark_file_viewed(&first, &viewed("b.rs", 20)).unwrap();
         store
-            .mark_file_viewed(&ViewedScope::PullRequest(2), &viewed("a.rs", 30))
+            .mark_file_viewed(&ReviewScope::PullRequest(2), &viewed("a.rs", 30))
             .unwrap();
         assert_eq!(
             store.viewed_files(&first).unwrap(),
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn combined_marks_are_per_range() {
         let store = UiStateStore::open_in_memory().unwrap();
-        let range = |last_number| ViewedScope::CombinedLayers {
+        let range = |last_number| ReviewScope::CombinedLayers {
             repo: RepoRef {
                 owner: "a".into(),
                 name: "b".into(),

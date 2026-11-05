@@ -5,12 +5,13 @@ use ureq::Agent;
 use ureq::http::{HeaderMap, Response, StatusCode};
 use ureq::{Body, RequestBuilder};
 
+use crate::graphql_response::GraphQlResponse;
 use crate::next_page_url::next_page_url;
 use crate::pull_request_revision::PullRequestRefs;
 use crate::pull_request_stack::StackResponse;
 use crate::search_issue::SearchIssue;
 use crate::search_response::SearchResponse;
-use crate::stack_membership_query::{STACK_MEMBERSHIP_QUERY, StackMembershipResponse};
+use crate::stack_membership_query::{STACK_MEMBERSHIP_QUERY, StackMembershipData};
 use crate::unified_diff::files_of_unified_diff;
 use crate::{
     ApiUsage, ConditionalResponse, DownloadProgress, ETag, GitHubError, ListedStackMembership,
@@ -92,26 +93,32 @@ impl GitHubClient {
     /// Where the pull requests of both lists sit in their stacks; standalone
     /// ones are left out. One GraphQL request (the search API lacks stacks).
     pub fn stack_memberships(&self) -> Result<Vec<ListedStackMembership>, GitHubError> {
-        let request = serde_json::json!({
-            "query": STACK_MEMBERSHIP_QUERY,
-            "variables": {
+        let data: StackMembershipData = self.graphql(
+            STACK_MEMBERSHIP_QUERY,
+            &serde_json::json!({
                 "authored": AUTHORED_QUERY,
                 "reviewRequested": REVIEW_REQUESTED_QUERY,
-            },
-        });
+            }),
+        )?;
+        Ok(data.into_memberships())
+    }
+
+    /// Sends a GraphQL query or mutation and decodes its data; GraphQL
+    /// errors (reported with status 200) become [`GitHubError::Api`].
+    pub(crate) fn graphql<T: DeserializeOwned>(
+        &self,
+        query: &str,
+        variables: &serde_json::Value,
+    ) -> Result<T, GitHubError> {
+        let request = serde_json::json!({ "query": query, "variables": variables });
         let builder = self.with_headers(
             self.agent.post(format!("{API_BASE}/graphql")),
             JSON_MEDIA_TYPE,
             None,
         );
         let response = self.read_response(builder.send_json(&request)?, &mut |_| {})?;
-        let answer: StackMembershipResponse = serde_json::from_str(&response.body)?;
-        answer
-            .into_memberships()
-            .map_err(|message| GitHubError::Api {
-                status: response.status.as_u16(),
-                body: message,
-            })
+        let answer: GraphQlResponse<T> = serde_json::from_str(&response.body)?;
+        answer.into_data().map_err(graphql_error)
     }
 
     /// A pull request by number, shaped like the search results (same id),
@@ -349,6 +356,14 @@ impl GitHubClient {
         })
     }
 }
+/// A GraphQL failure (reported with status 200) as an API error.
+pub(crate) fn graphql_error(message: String) -> GitHubError {
+    GitHubError::Api {
+        status: StatusCode::OK.as_u16(),
+        body: message,
+    }
+}
+
 /// The budget a response reports in its `x-ratelimit-*` headers.
 fn rate_limit_of(headers: &HeaderMap) -> Option<(RateLimitResource, RateLimit)> {
     let number = |name: &str| header_text(headers, name)?.parse::<u64>().ok();

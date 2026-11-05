@@ -14,7 +14,8 @@
 | `sql_integers` / `unix_now` | checked integer conversions; current time |
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset |
 | `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qc-diff` enums |
-| `viewed_file` / `patch_fingerprint` / `viewed_files_storage` / `viewed_scope` | viewed marks per `ViewedScope` (a PR, or a combined range of stack layers) and file, with an FNV-1a patch fingerprint (stable across Rust versions) |
+| `viewed_file` / `patch_fingerprint` / `viewed_files_storage` / `review_scope` | viewed marks per `ReviewScope` (a PR, or a combined range of stack layers) and file, with an FNV-1a patch fingerprint (stable across Rust versions) |
+| `review_note` / `note_id` / `note_destination` / `note_anchor` / `review_summary` / `review_notes_storage` | the user's review comments: `ReviewNote` (local note or GitHub draft) per `ReviewScope`, on lines (`NoteAnchor::Line`) or replying to a GitHub thread (`NoteAnchor::Reply`); `NoteId` made by the app (time-based, unique per process) so writes can be batched; `ReviewSummary` (verdict + body) per PR |
 | `panel_widths` / `panel_widths_storage` | `PanelWidths` (sidebar, side panel; defaults 380 / 300): one row, each width saved on its own |
 | `queue_tab` / `stack_review_mode` | `QueueTab` (authored, review requested) in the queue state; `StackReviewMode` (layer, combined) in the review layout |
 | `review_layout_state` / `panel_visibility` / `review_layout_storage` | `ReviewLayoutState` (one row): file tree `PanelVisibility`, `hide_viewed`, hidden `qc_file_tree::FileKind`s (`hide_code`, `hide_tests`, `hide_generated`, `hide_unchanged_moves`), stack review mode |
@@ -27,6 +28,7 @@
 - Adding a field to a `qc-github` type means a migration adding its column and updating the row mapping in `github_cache.rs`.
 - UI state tables hold one row (`id = 1`); `review_queue_view.selected_pr_id`, `viewed_files.pr_id` and `combined_viewed_files` have no foreign key (the PR may be gone or refetched; the user's state stays). Combined marks are keyed by repo + first and last layer number.
 - `pull_requests` carries the stack membership (`stack_*` columns, all NULL for a standalone PR). `put_pull_request`/`pull_request(id)` hold a stack layer opened outside any list.
+- `review_notes`: one table for both destinations; scope is `pr_id` or (repo, first, last layer numbers), enforced by CHECKs; anchor is (side, line, start_line) or `reply_to_thread`. GitHub drafts are deleted by the app as GitHub takes them.
 - Comparisons never go stale (commits are immutable); comparisons and stacks expire by `last_used_at` like file sets.
 - A file set is current for the `updated_at` in its `pr_file_sets` row; an older one is still valid when the PR's head/base commits match (`confirm_files`). `last_used_at` moves on every read and write and drives expiry.
 - Every write is one statement or one transaction (the app relies on this for its poisoned-lock handling).

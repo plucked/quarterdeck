@@ -48,7 +48,7 @@ pub use diff_row_style::DiffRowStyle;
 pub use diff_side::DiffSide;
 pub use diff_summary::DiffSummary;
 pub use diff_summary_bar::DiffSummaryBar;
-pub use file_card_rendering::render_file_end;
+pub use file_card_rendering::{frame_file_row, render_file_end};
 pub use file_diff_state::FileDiffState;
 pub use file_header_rendering::{FileClickHandler, render_file_header};
 pub use file_note::FileNote;

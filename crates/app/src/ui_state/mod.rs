@@ -7,10 +7,13 @@
 //!
 //! Files:
 //! - `ui_state_recorder.rs`: `UiStateRecorder`, the gpui global that reads saved state and batches writes.
+//! - `review_change.rs`: `ReviewChange`, a change to the review notes waiting to be written.
 //! - `window_placement_conversion.rs`: converts between gpui window bounds and the saved placement.
 
+mod review_change;
 mod ui_state_recorder;
 mod window_placement_conversion;
 
-pub use ui_state_recorder::{UiStateRecorder, read_viewed_files};
+pub use review_change::ReviewChange;
+pub use ui_state_recorder::{UiStateRecorder, read_review_notes, read_viewed_files};
 pub use window_placement_conversion::{placement_from_window, window_bounds_from_placement};

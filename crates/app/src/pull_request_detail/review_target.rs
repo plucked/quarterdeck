@@ -1,4 +1,4 @@
-use qc_cache::{StackReviewMode, ViewedScope};
+use qc_cache::{ReviewScope, StackReviewMode};
 use qc_github::{PullRequest, PullRequestStack, RepoRef};
 
 /// What the detail pane shows the files of: the shown pull request alone,
@@ -86,10 +86,10 @@ impl ReviewTarget {
     }
 
     /// Whose viewed marks the files show: the pull request's, or the range's own.
-    pub fn viewed_scope(&self, pull_request: &PullRequest) -> ViewedScope {
+    pub fn viewed_scope(&self, pull_request: &PullRequest) -> ReviewScope {
         match self {
-            Self::Layer | Self::AwaitingStack => ViewedScope::PullRequest(pull_request.id),
-            Self::Combined(range) => ViewedScope::CombinedLayers {
+            Self::Layer | Self::AwaitingStack => ReviewScope::PullRequest(pull_request.id),
+            Self::Combined(range) => ReviewScope::CombinedLayers {
                 repo: range.repo.clone(),
                 first_number: range.first_number,
                 last_number: range.last_number,

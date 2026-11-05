@@ -40,4 +40,13 @@ pub enum DetailRow {
     FileEnd {
         file: usize,
     },
+    /// A card of review comments in file `file` (an index into the detail's cards).
+    CommentCard {
+        file: usize,
+        card: usize,
+    },
+    /// The editor of a new comment, under its line in file `file`.
+    Composer {
+        file: usize,
+    },
 }

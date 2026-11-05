@@ -1,9 +1,14 @@
 use gpui::{App, KeyBinding, Menu, MenuItem, SystemMenuType, actions};
 
 use crate::settings_window::open_settings_window;
+use crate::text_area::bind_text_area_keys;
 
 /// The key context of the review queue; single-letter keys only act inside it.
 pub const REVIEW_QUEUE_CONTEXT: &str = "ReviewQueue";
+
+/// Where the single-letter keys act: in the review queue, but not while a
+/// text area (key context `TextArea`) takes the typing.
+const SINGLE_KEY_CONTEXT: &str = "ReviewQueue && !TextArea";
 
 actions!(
     quick_check,
@@ -37,15 +42,18 @@ pub fn install_app_commands(cx: &mut App) {
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-c", Copy, None),
         KeyBinding::new("cmd-b", ToggleFileTree, None),
-        KeyBinding::new("]", NextFile, Some(REVIEW_QUEUE_CONTEXT)),
-        KeyBinding::new("[", PreviousFile, Some(REVIEW_QUEUE_CONTEXT)),
-        KeyBinding::new("v", MarkViewedAndNext, Some(REVIEW_QUEUE_CONTEXT)),
-        KeyBinding::new("}", NextLayer, Some(REVIEW_QUEUE_CONTEXT)),
-        KeyBinding::new("{", PreviousLayer, Some(REVIEW_QUEUE_CONTEXT)),
-        KeyBinding::new("c", ToggleStackReview, Some(REVIEW_QUEUE_CONTEXT)),
+        KeyBinding::new("]", NextFile, Some(SINGLE_KEY_CONTEXT)),
+        KeyBinding::new("[", PreviousFile, Some(SINGLE_KEY_CONTEXT)),
+        KeyBinding::new("v", MarkViewedAndNext, Some(SINGLE_KEY_CONTEXT)),
+        KeyBinding::new("}", NextLayer, Some(SINGLE_KEY_CONTEXT)),
+        KeyBinding::new("{", PreviousLayer, Some(SINGLE_KEY_CONTEXT)),
+        KeyBinding::new("c", ToggleStackReview, Some(SINGLE_KEY_CONTEXT)),
         KeyBinding::new("cmd-1", ShowAuthored, None),
         KeyBinding::new("cmd-2", ShowReviewRequested, None),
     ]);
+
+    // Text areas have their own editing keys, and the queue's single keys stay out of them.
+    bind_text_area_keys(cx);
 
     // The menu bar exposes the same actions as the key bindings.
     cx.set_menus(vec![

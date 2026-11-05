@@ -23,23 +23,10 @@ fragment membership on PullRequest {
 }
 ";
 
-/// The response to [`STACK_MEMBERSHIP_QUERY`].
-#[derive(Deserialize)]
-pub(crate) struct StackMembershipResponse {
-    data: Option<StackMembershipData>,
-    /// GraphQL reports failures with status 200 and this list.
-    #[serde(default)]
-    errors: Vec<GraphQlError>,
-}
-
-#[derive(Deserialize)]
-struct GraphQlError {
-    message: String,
-}
-
+/// The data of [`STACK_MEMBERSHIP_QUERY`].
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct StackMembershipData {
+pub(crate) struct StackMembershipData {
     authored: SearchNodes,
     review_requested: SearchNodes,
 }
@@ -84,15 +71,10 @@ struct StackEntry {
     position: u64,
 }
 
-impl StackMembershipResponse {
-    /// The memberships of stacked pull requests in both lists, each once;
-    /// the error messages when GraphQL reported failures and no data.
-    pub fn into_memberships(self) -> Result<Vec<ListedStackMembership>, String> {
-        let Some(data) = self.data else {
-            let messages: Vec<String> =
-                self.errors.into_iter().map(|error| error.message).collect();
-            return Err(messages.join("; "));
-        };
+impl StackMembershipData {
+    /// The memberships of stacked pull requests in both lists, each once.
+    pub fn into_memberships(self) -> Vec<ListedStackMembership> {
+        let data = self;
         let mut memberships: Vec<ListedStackMembership> = Vec::new();
         for node in data
             .authored
@@ -107,7 +89,7 @@ impl StackMembershipResponse {
                 memberships.push(listed);
             }
         }
-        Ok(memberships)
+        memberships
     }
 }
 
@@ -135,6 +117,7 @@ impl SearchNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graphql_response::GraphQlResponse;
 
     /// Stacked pull requests are kept once each; standalone ones and non-pull-request results are skipped.
     #[test]
@@ -151,8 +134,8 @@ mod tests {
                  "stack": {"number": 99, "size": 3, "baseRefName": "main"}, "stackEntry": {"position": 2}}
             ]}
         }}"#;
-        let response: StackMembershipResponse = serde_json::from_str(json).unwrap();
-        let memberships = response.into_memberships().unwrap();
+        let response: GraphQlResponse<StackMembershipData> = serde_json::from_str(json).unwrap();
+        let memberships = response.into_data().unwrap().into_memberships();
         assert_eq!(memberships.len(), 1);
         assert_eq!(memberships[0].number, 7);
         assert_eq!(memberships[0].membership.position, 2);
@@ -163,10 +146,10 @@ mod tests {
     #[test]
     fn reports_graphql_errors() {
         let json = r#"{"data": null, "errors": [{"message": "Something went wrong"}]}"#;
-        let response: StackMembershipResponse = serde_json::from_str(json).unwrap();
+        let response: GraphQlResponse<StackMembershipData> = serde_json::from_str(json).unwrap();
         assert_eq!(
-            response.into_memberships().unwrap_err(),
-            "Something went wrong"
+            response.into_data().err().as_deref(),
+            Some("Something went wrong")
         );
     }
 }

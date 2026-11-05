@@ -1,6 +1,6 @@
 # quick-check
 
-macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: the viewer's own and review-requested ones, including GitHub stacks (layer by layer or combined). Personal tool; macOS only for now.
+macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: the viewer's own and review-requested ones, including GitHub stacks (layer by layer or combined), with line comments that either form a GitHub review (approve / request changes / comment) or stay local to copy for an AI agent. Personal tool; macOS only for now.
 
 ## Workflow
 - Local only: no remote, work directly on `main`. Small atomic commits, prefixed `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`/`style:`/`test:`.
@@ -11,7 +11,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: 
 | Crate | Path | Holds |
 |---|---|---|
 | `quick-check` | `crates/app` | gpui binary: window, views, background tasks, UI state restore |
-| `qc-github` | `crates/github` | blocking GitHub REST client (`ureq`, plus one GraphQL query for stacks) and its data shapes |
+| `qc-github` | `crates/github` | blocking GitHub client (`ureq`): REST, plus GraphQL for stacks and reviews (threads, submit, edit, resolve); its data shapes |
 | `qc-cache` | `crates/cache` | the local SQLite database: cached GitHub data + UI state, with migrations |
 | `qc-markdown` | `crates/markdown` | GitHub-flavored Markdown → typed document (`pulldown-cmark`) |
 | `qc-syntax` | `crates/syntax` | syntax colors for diff hunks (`syntect` + bat's grammars via `two-face`, `TwoDark` theme) |

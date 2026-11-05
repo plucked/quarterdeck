@@ -9,8 +9,8 @@ use gpui::{
     Task, UniformListScrollHandle, Window, px,
 };
 use qc_cache::{
-    DetailScrollPosition, DiffViewSettings, LineWrapping, ReviewLayoutState, StackReviewMode,
-    ViewedFile, ViewedScope,
+    DetailScrollPosition, DiffViewSettings, LineWrapping, ReviewLayoutState, ReviewScope,
+    StackReviewMode, ViewedFile,
 };
 use qc_diff::FileDiff;
 use qc_file_tree::{FileKind, FileTree, NodeId};
@@ -32,15 +32,17 @@ use super::folder_viewed_state::FolderViewedState;
 use super::load_progress::LoadProgress;
 use super::loaded_file::LoadedFile;
 use super::parsed_description::ParsedDescription;
+use super::review_pane::ReviewPane;
 use super::review_target::ReviewTarget;
 use super::selected_diff_text::{row_code_text, selected_diff_text};
+use super::side_panel_tab::SidePanelTab;
 use super::viewed_toggle::ViewedToggle;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::diff_view::{CodeCells, CodeSegments, DiffPosition, SideSelection};
 use crate::fetch_stack::{cached_stack, refresh_stack};
 use crate::shared_cache::SharedCache;
-use crate::ui_state::{UiStateRecorder, read_viewed_files};
+use crate::ui_state::{UiStateRecorder, read_review_notes, read_viewed_files};
 use crate::word_range_at::word_range_at;
 
 /// How far beyond the visible area rows are laid out, so fast scrolling
@@ -83,7 +85,10 @@ struct FetchedChanges {
     tree: FileTree,
     viewed_marks: Vec<ViewedFile>,
     /// Whose marks those are, for marks set from now on.
-    scope: ViewedScope,
+    scope: ReviewScope,
+    /// The user's review notes of that scope, and the GitHub review's summary.
+    notes: Vec<qc_cache::ReviewNote>,
+    summary: Option<qc_cache::ReviewSummary>,
 }
 
 /// The syntax colors computed for one diff, matched back by the diff's `Arc`.
@@ -141,7 +146,7 @@ pub struct PullRequestDetail {
     /// What the shown (or loading) files are of.
     target: ReviewTarget,
     /// Whose viewed marks the shown files use.
-    viewed_scope: Option<ViewedScope>,
+    viewed_scope: Option<ReviewScope>,
     /// The shown pull request's stack with its layers, once loaded.
     stack: Option<PullRequestStack>,
     /// Whether the stack is being read or checked with GitHub.
@@ -159,6 +164,8 @@ pub struct PullRequestDetail {
     stack_map_scroll: UniformListScrollHandle,
     /// The side panel's width, as dragged (and saved).
     side_panel_width: f32,
+    /// Review comments, the comment being written, and the review tab.
+    review: ReviewPane,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -217,6 +224,7 @@ impl PullRequestDetail {
             stack_task: None,
             highlight_progress: None,
             stack_map_scroll: UniformListScrollHandle::new(),
+            review: ReviewPane::default(),
             side_panel_width: cx
                 .global::<UiStateRecorder>()
                 .saved_panel_widths()
@@ -462,6 +470,41 @@ impl PullRequestDetail {
             .layers
             .iter()
             .position(|layer| layer.number == number)
+    }
+
+    pub(super) fn review(&self) -> &ReviewPane {
+        &self.review
+    }
+
+    pub(super) fn review_mut(&mut self) -> &mut ReviewPane {
+        &mut self.review
+    }
+
+    pub(super) fn services(&self) -> &AppServices {
+        &self.services
+    }
+
+    /// Whose viewed marks and notes the shown files use, once loaded.
+    pub(super) fn review_scope(&self) -> Option<&ReviewScope> {
+        self.viewed_scope.as_ref()
+    }
+
+    /// Rebuilds every row, keeping the file at the top in view.
+    pub(super) fn rebuild_rows_in_place(&mut self) {
+        self.rebuild_rows(self.anchor_at_top());
+    }
+
+    /// Scrolls the diff so row `row` is at the top.
+    pub(super) fn scroll_to_row(&mut self, row: usize) {
+        self.list.scroll_to(ListOffset {
+            item_ix: row,
+            offset_in_item: px(0.),
+        });
+    }
+
+    /// Measures row `row` again (a growing comment editor).
+    pub(super) fn remeasure_row(&mut self, row: usize) {
+        self.list.splice(row..row + 1, 1);
     }
 
     /// The layout to save: the file tree's part and the review mode.
@@ -792,6 +835,7 @@ impl PullRequestDetail {
     fn rebuild_rows(&mut self, anchor: ScrollAnchor) {
         // Row numbers change, so a selection would point at other text.
         self.diff_selection = None;
+        self.refresh_comment_layout();
         let shown_files = self
             .file_tree
             .shown_files(self.loaded_files(), &self.file_review);
@@ -801,6 +845,7 @@ impl PullRequestDetail {
             shown_files: &shown_files,
             file_review: &self.file_review,
             settings: self.diff_settings,
+            comments: &self.review.placement,
         });
         self.list.reset(self.rows.len());
         self.refresh_tree_rows();
@@ -839,7 +884,7 @@ impl PullRequestDetail {
     /// Rebuilds the rows of file `file` alone (none when the filter now hides
     /// it), keeping the scroll position and the measured heights of every
     /// other row.
-    fn rebuild_file_rows(&mut self, file: usize) {
+    pub(super) fn rebuild_file_rows(&mut self, file: usize) {
         let Some(loaded) = self.loaded_files().get(file) else {
             return;
         };
@@ -850,6 +895,7 @@ impl PullRequestDetail {
                 loaded,
                 self.file_review.state_of(loaded),
                 self.diff_settings,
+                &self.review.placement,
             )
         } else {
             Vec::new()
@@ -1192,6 +1238,7 @@ impl PullRequestDetail {
         self.changed_files = Some(ChangedFiles::Loading(first_step));
         self.file_review = FileReviewState::default();
         self.viewed_scope = None;
+        self.reset_review();
         self.syntax_task = None;
         self.highlight_progress = None;
         self.rebuild_rows(ScrollAnchor::Top);
@@ -1226,10 +1273,13 @@ impl PullRequestDetail {
                     .collect();
                 let ordered_paths: Vec<&str> = ordered.iter().map(LoadedFile::filename).collect();
                 let tree = FileTree::build(&ordered_paths);
+                let notes_and_summary = read_review_notes(&ui_state, &scope);
                 anyhow::Ok(FetchedChanges {
                     files: ordered,
                     tree,
                     viewed_marks: read_viewed_files(&ui_state, &scope),
+                    notes: notes_and_summary.0,
+                    summary: notes_and_summary.1,
                     scope,
                 })
             });
@@ -1256,6 +1306,11 @@ impl PullRequestDetail {
                             detail.file_review =
                                 FileReviewState::for_loaded(&fetched.files, &fetched.viewed_marks);
                             detail.viewed_scope = Some(fetched.scope);
+                            detail.review.comments.notes = fetched.notes;
+                            detail.review.comments.summary = fetched.summary.unwrap_or_default();
+                            if detail.review.tab == SidePanelTab::Review {
+                                detail.show_side_panel_tab(SidePanelTab::Review, cx);
+                            }
                             detail.file_tree.reset_for(fetched.tree);
                             ChangedFiles::Loaded(fetched.files)
                         }
@@ -1263,6 +1318,7 @@ impl PullRequestDetail {
                     });
                     detail.rebuild_rows(ScrollAnchor::Top);
                     detail.highlight_syntax(cx);
+                    detail.load_github_review(cx);
                     cx.notify();
                 })
                 .ok();

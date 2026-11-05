@@ -1,9 +1,12 @@
+use std::collections::HashSet;
 use std::ops::Range;
 
 use qc_cache::{DiffLayout, DiffViewSettings};
 use qc_diff::WhitespaceMode;
+use qc_github::LineSide;
 
 use super::changed_files::ChangedFiles;
+use super::comment_placement::CommentPlacement;
 use super::detail_content::DetailContent;
 use super::detail_row::DetailRow;
 use super::loaded_file::LoadedFile;
@@ -37,8 +40,13 @@ impl DetailRowList {
                     let start = list.rows.len();
                     if content.shown_files.get(index).copied().unwrap_or(true) {
                         let state = content.file_review.state_of(loaded);
-                        list.rows
-                            .extend(Self::file_rows(index, loaded, state, content.settings));
+                        list.rows.extend(Self::file_rows(
+                            index,
+                            loaded,
+                            state,
+                            content.settings,
+                            content.comments,
+                        ));
                     }
                     list.file_ranges.push(start..list.rows.len());
                 }
@@ -57,11 +65,13 @@ impl DetailRowList {
         loaded: &LoadedFile,
         state: FileDiffState,
         settings: DiffViewSettings,
+        comments: &CommentPlacement,
     ) -> Vec<DetailRow> {
         let mut rows = vec![DetailRow::FileHeader { file }];
         if let Some(note) = file_note(loaded, state, settings) {
             rows.push(DetailRow::FileNote { file, note });
         } else if !state.is_collapsed {
+            let mut placed: HashSet<usize> = HashSet::new();
             for (hunk_index, hunk) in loaded.diff.hunks().iter().enumerate() {
                 rows.push(DetailRow::HunkHeader {
                     file,
@@ -69,23 +79,52 @@ impl DetailRowList {
                 });
                 match settings.layout {
                     DiffLayout::Unified => {
-                        rows.extend((0..hunk.lines.len()).map(|line| DetailRow::UnifiedLine {
-                            file,
-                            hunk: hunk_index,
-                            line,
-                        }));
+                        for (line_index, line) in hunk.lines.iter().enumerate() {
+                            rows.push(DetailRow::UnifiedLine {
+                                file,
+                                hunk: hunk_index,
+                                line: line_index,
+                            });
+                            let anchors = [
+                                line.new_number.map(|number| (LineSide::New, number)),
+                                line.old_number.map(|number| (LineSide::Old, number)),
+                            ];
+                            push_comment_rows(&mut rows, file, &anchors, comments, &mut placed);
+                        }
                     }
                     DiffLayout::Split => {
-                        rows.extend(hunk.split_rows().into_iter().map(|row| {
-                            DetailRow::SplitLine {
+                        for row in hunk.split_rows() {
+                            rows.push(DetailRow::SplitLine {
                                 file,
                                 hunk: hunk_index,
                                 row,
-                            }
-                        }));
+                            });
+                            let line_number = |index: Option<usize>, side: LineSide| {
+                                let line = hunk.lines.get(index?)?;
+                                let number = match side {
+                                    LineSide::Old => line.old_number,
+                                    LineSide::New => line.new_number,
+                                }?;
+                                Some((side, number))
+                            };
+                            let anchors = [
+                                line_number(row.new, LineSide::New),
+                                line_number(row.old, LineSide::Old),
+                            ];
+                            push_comment_rows(&mut rows, file, &anchors, comments, &mut placed);
+                        }
                     }
                 }
             }
+
+            // Cards no line took (outdated conversations, lines not in the diff) go under the header.
+            let unplaced: Vec<DetailRow> = comments
+                .cards_of(file)
+                .iter()
+                .filter(|card| !placed.contains(card))
+                .map(|card| DetailRow::CommentCard { file, card: *card })
+                .collect();
+            rows.splice(1..1, unplaced);
         }
         rows.push(DetailRow::FileEnd { file });
         rows
@@ -129,6 +168,31 @@ impl DetailRowList {
             range.end = range.end.saturating_add_signed(shift);
         }
         Some(old_range)
+    }
+}
+
+/// Pushes the comment cards under a diff row's lines (`anchors`), then the
+/// composer when it is open on one of them, recording the cards placed.
+fn push_comment_rows(
+    rows: &mut Vec<DetailRow>,
+    file: usize,
+    anchors: &[Option<(LineSide, u32)>],
+    comments: &CommentPlacement,
+    placed: &mut HashSet<usize>,
+) {
+    for (side, line) in anchors.iter().flatten() {
+        for card in comments.cards_on(file, *side, *line) {
+            if placed.insert(*card) {
+                rows.push(DetailRow::CommentCard { file, card: *card });
+            }
+        }
+    }
+    let has_composer = anchors
+        .iter()
+        .flatten()
+        .any(|(side, line)| comments.has_composer_on(file, *side, *line));
+    if has_composer {
+        rows.push(DetailRow::Composer { file });
     }
 }
 
@@ -202,6 +266,7 @@ mod tests {
             shown_files: &shown,
             file_review: review,
             settings,
+            comments: &CommentPlacement::default(),
         })
     }
 
@@ -272,6 +337,7 @@ mod tests {
             &files[0],
             review.state_of(&files[0]),
             DiffViewSettings::default(),
+            &CommentPlacement::default(),
         );
         let replaced = list.replace_file(0, rows).unwrap();
 
@@ -296,6 +362,7 @@ mod tests {
                 shown_files: shown,
                 file_review: &review,
                 settings: DiffViewSettings::default(),
+                comments: &CommentPlacement::default(),
             })
         };
         let first_hidden = build(&[false, true]);

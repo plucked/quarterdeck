@@ -1,9 +1,10 @@
 use qc_github::RepoRef;
 
-/// What a set of viewed marks belongs to: one pull request, or a combined
-/// review of a range of stack layers (a different diff, so its own marks).
+/// What viewed marks and review notes belong to: one pull request, or a
+/// combined review of a range of stack layers (a different diff, so its own
+/// marks and notes).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ViewedScope {
+pub enum ReviewScope {
     /// A pull request by its id (`PullRequest::id`).
     PullRequest(u64),
     /// Layers `first_number` up to `last_number` of a stack in `repo`.

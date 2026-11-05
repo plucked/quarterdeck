@@ -47,6 +47,7 @@ mod tests {
     use super::*;
     use crate::diff_view::DiffPosition;
     use crate::pull_request_detail::changed_files::ChangedFiles;
+    use crate::pull_request_detail::comment_placement::CommentPlacement;
     use crate::pull_request_detail::detail_content::DetailContent;
     use crate::pull_request_detail::file_review_state::FileReviewState;
 
@@ -76,6 +77,7 @@ mod tests {
                 layout,
                 ..DiffViewSettings::default()
             },
+            comments: &CommentPlacement::default(),
         });
         (rows, files)
     }

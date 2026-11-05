@@ -278,6 +278,43 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         side_panel_width  REAL    NOT NULL CHECK (side_panel_width > 0)
     );
 ",
+    r"
+    -- The user's review comments: local notes (for an agent) and drafts of
+    -- GitHub comments, kept until submitted. A note belongs to a pull
+    -- request (pr_id) or to a combined range of stack layers (repo and the
+    -- first and last layer's numbers). It sits on a line (side, line, and
+    -- start_line for several lines) or replies to a GitHub thread
+    -- (reply_to_thread, its node id). No foreign keys: the cached pull
+    -- request may be gone; the user's notes stay.
+    CREATE TABLE review_notes (
+        id               INTEGER PRIMARY KEY,
+        destination      TEXT    NOT NULL CHECK (destination IN ('local', 'github')),
+        pr_id            INTEGER,
+        repo_owner       TEXT,
+        repo_name        TEXT,
+        first_number     INTEGER,
+        last_number      INTEGER,
+        path             TEXT    NOT NULL,
+        side             TEXT    CHECK (side IN ('old', 'new')),
+        line             INTEGER CHECK (line > 0),
+        start_line       INTEGER CHECK (start_line > 0),
+        reply_to_thread  TEXT,
+        body             TEXT    NOT NULL,
+        created_at       INTEGER NOT NULL,
+        updated_at       INTEGER NOT NULL,
+        CHECK ((pr_id IS NULL) <> (repo_owner IS NULL)),
+        CHECK ((line IS NULL) = (reply_to_thread IS NOT NULL)),
+        CHECK ((line IS NULL) = (side IS NULL))
+    );
+    CREATE INDEX review_notes_pull_request ON review_notes (pr_id);
+
+    -- The verdict and summary of a GitHub review being written, per pull request.
+    CREATE TABLE review_summaries (
+        pr_id  INTEGER PRIMARY KEY,
+        event  TEXT    NOT NULL CHECK (event IN ('comment', 'approve', 'request_changes')),
+        body   TEXT    NOT NULL
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

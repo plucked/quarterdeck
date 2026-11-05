@@ -3,9 +3,11 @@ use std::time::Duration;
 
 use anyhow::Result;
 use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
+
+use super::review_change::ReviewChange;
 use qc_cache::{
-    CacheTtl, DiffViewSettings, PanelWidths, ReviewLayoutState, ReviewQueueViewState, UiStateStore,
-    ViewedFile, ViewedScope, WindowPlacement,
+    CacheTtl, DiffViewSettings, NoteDestination, PanelWidths, ReviewLayoutState, ReviewNote,
+    ReviewQueueViewState, ReviewScope, ReviewSummary, UiStateStore, ViewedFile, WindowPlacement,
 };
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
@@ -24,6 +26,8 @@ struct PendingUiState {
     side_panel_width: Option<f32>,
     /// Every viewed mark change, in the order made: unlike settings, each counts.
     viewed_changes: Vec<ViewedChange>,
+    /// Every review note and summary change, in the order made.
+    review_changes: Vec<ReviewChange>,
 }
 
 impl PendingUiState {
@@ -36,17 +40,18 @@ impl PendingUiState {
             && self.sidebar_width.is_none()
             && self.side_panel_width.is_none()
             && self.viewed_changes.is_empty()
+            && self.review_changes.is_empty()
     }
 }
 
 /// A change to a file's viewed mark, waiting to be written.
 enum ViewedChange {
     Mark {
-        scope: ViewedScope,
+        scope: ReviewScope,
         file: ViewedFile,
     },
     Unmark {
-        scope: ViewedScope,
+        scope: ReviewScope,
         filename: String,
     },
 }
@@ -178,7 +183,7 @@ impl UiStateRecorder {
     }
 
     /// Records that a file is viewed at its current patch and schedules a write.
-    pub fn record_file_viewed(cx: &mut App, scope: ViewedScope, file: ViewedFile) {
+    pub fn record_file_viewed(cx: &mut App, scope: ReviewScope, file: ViewedFile) {
         cx.update_global::<Self, _>(|recorder, cx| {
             recorder
                 .pending
@@ -189,12 +194,20 @@ impl UiStateRecorder {
     }
 
     /// Records that a file is no longer viewed and schedules a write.
-    pub fn record_file_unviewed(cx: &mut App, scope: ViewedScope, filename: String) {
+    pub fn record_file_unviewed(cx: &mut App, scope: ReviewScope, filename: String) {
         cx.update_global::<Self, _>(|recorder, cx| {
             recorder
                 .pending
                 .viewed_changes
                 .push(ViewedChange::Unmark { scope, filename });
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// Records a change to the review notes and schedules a write.
+    pub fn record_review_change(cx: &mut App, change: ReviewChange) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.review_changes.push(change);
             recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
@@ -319,11 +332,53 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
             eprintln!("ui state: cannot save a viewed mark: {error:#}");
         }
     }
+    for change in &pending.review_changes {
+        let written = match change {
+            ReviewChange::PutNote(note) => store.put_review_note(note),
+            ReviewChange::DeleteNote(id) => store.delete_review_note(*id),
+            ReviewChange::PutSummary(pull_request_id, summary) => {
+                store.put_review_summary(*pull_request_id, summary)
+            }
+            ReviewChange::DeleteSummary(pull_request_id) => {
+                store.delete_review_summary(*pull_request_id)
+            }
+        };
+        if let Err(error) = written {
+            eprintln!("ui state: cannot save a review note: {error:#}");
+        }
+    }
+}
+
+/// The review notes of `scope` (both destinations) and, for a pull request,
+/// the GitHub review's summary, read through the shared store on the
+/// background executor; unreadable rows count as none.
+pub fn read_review_notes(
+    store: &Mutex<UiStateStore>,
+    scope: &ReviewScope,
+) -> (Vec<ReviewNote>, Option<ReviewSummary>) {
+    let store = lock_store(store);
+    let mut notes = Vec::new();
+    for destination in [NoteDestination::Local, NoteDestination::GitHub] {
+        match store.review_notes(scope, destination) {
+            Ok(read) => notes.extend(read),
+            Err(error) => eprintln!("ui state: ignoring review notes: {error:#}"),
+        }
+    }
+    let summary = match scope {
+        ReviewScope::PullRequest(pull_request_id) => store
+            .review_summary(*pull_request_id)
+            .unwrap_or_else(|error| {
+                eprintln!("ui state: ignoring the review summary: {error:#}");
+                None
+            }),
+        ReviewScope::CombinedLayers { .. } => None,
+    };
+    (notes, summary)
 }
 
 /// The viewed marks of a pull request, read through the shared store on the
 /// background executor; an unreadable table counts as no marks.
-pub fn read_viewed_files(store: &Mutex<UiStateStore>, scope: &ViewedScope) -> Vec<ViewedFile> {
+pub fn read_viewed_files(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Vec<ViewedFile> {
     lock_store(store)
         .viewed_files(scope)
         .unwrap_or_else(|error| {

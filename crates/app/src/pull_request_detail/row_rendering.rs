@@ -3,9 +3,10 @@ use std::rc::Rc;
 use gpui::{
     AnyElement, Canvas, ClickEvent, Context, DispatchPhase, Div, IntoElement, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, WeakEntity, Window, canvas, div,
-    list, prelude::*,
+    list, prelude::*, px,
 };
 use qc_cache::{DiffLayout, LineWrapping, PanelVisibility};
+use qc_github::LineSide;
 
 use super::changed_files::ChangedFiles;
 use super::detail_row::DetailRow;
@@ -19,6 +20,9 @@ use crate::diff_view::{
 };
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
+
+/// Size of the `+` that comments on a line.
+const COMMENT_BUTTON_WIDTH: f32 = 14.;
 
 impl Render for PullRequestDetail {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -141,18 +145,38 @@ impl PullRequestDetail {
             DetailRow::HunkHeader { file, hunk } => self.render_hunk_header_row(file, hunk),
             DetailRow::UnifiedLine { file, hunk, line } => {
                 let cells = self.code_cells(index);
-                self.with_horizontal_scroll(file, cx, |loaded, style| {
+                let anchor = self.loaded_files().get(file).and_then(|loaded| {
+                    let diff_line = loaded.diff.hunks().get(hunk)?.lines.get(line)?;
+                    diff_line
+                        .new_number
+                        .map(|number| (LineSide::New, number))
+                        .or(diff_line.old_number.map(|number| (LineSide::Old, number)))
+                });
+                let content = self.with_horizontal_scroll(file, cx, |loaded, style| {
                     let diff_line = &loaded.diff.hunks()[hunk].lines[line];
                     let spans = loaded
                         .syntax
                         .as_deref()
                         .map_or(&[][..], |syntax| syntax.spans(hunk, line));
                     render_unified_line(diff_line, spans, style, &cells)
-                })
+                });
+                Self::with_comment_button(index, file, anchor, content, cx)
             }
             DetailRow::SplitLine { file, hunk, row } => {
                 let cells = self.code_cells(index);
-                self.with_horizontal_scroll(file, cx, |loaded, style| {
+                let anchor = self.loaded_files().get(file).and_then(|loaded| {
+                    let lines = &loaded.diff.hunks().get(hunk)?.lines;
+                    let new = row
+                        .new
+                        .and_then(|index| lines.get(index)?.new_number)
+                        .map(|number| (LineSide::New, number));
+                    let old = row
+                        .old
+                        .and_then(|index| lines.get(index)?.old_number)
+                        .map(|number| (LineSide::Old, number));
+                    new.or(old)
+                });
+                let content = self.with_horizontal_scroll(file, cx, |loaded, style| {
                     render_split_row(
                         &loaded.diff.hunks()[hunk],
                         hunk,
@@ -161,9 +185,12 @@ impl PullRequestDetail {
                         style,
                         &cells,
                     )
-                })
+                });
+                Self::with_comment_button(index, file, anchor, content, cx)
             }
             DetailRow::FileEnd { .. } => render_file_end().into_any_element(),
+            DetailRow::CommentCard { card, .. } => self.render_comment_card_row(card, cx),
+            DetailRow::Composer { .. } => self.render_composer_row(cx),
         };
         div()
             .px_4()
@@ -288,6 +315,51 @@ impl PullRequestDetail {
 }
 
 /// A one-line status (loading, failure) below the description.
+impl PullRequestDetail {
+    /// A diff line with the `+` that comments on it (`anchor`), shown left of
+    /// the line on hover; shift-clicking it stretches the open comment.
+    fn with_comment_button(
+        index: usize,
+        file: usize,
+        anchor: Option<(LineSide, u32)>,
+        content: AnyElement,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some((side, line)) = anchor else {
+            return content;
+        };
+        div()
+            .relative()
+            .group("diff-line")
+            .child(content)
+            .child(
+                div()
+                    .id(("comment-line", index))
+                    .absolute()
+                    .top_0()
+                    .left(px(-COMMENT_BUTTON_WIDTH))
+                    .w(px(COMMENT_BUTTON_WIDTH))
+                    .h(px(COMMENT_BUTTON_WIDTH))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_sm()
+                    .text_xs()
+                    .text_color(theme::background())
+                    .bg(theme::accent())
+                    .cursor_pointer()
+                    .opacity(0.)
+                    .group_hover("diff-line", |style| style.opacity(1.))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(cx.listener(move |detail, event: &ClickEvent, window, cx| {
+                        detail.open_composer(file, side, line, event.modifiers().shift, window, cx);
+                    }))
+                    .child("+"),
+            )
+            .into_any_element()
+    }
+}
+
 fn render_status_line(message: impl Into<gpui::SharedString>, color: gpui::Rgba) -> AnyElement {
     div()
         .pb_3()
