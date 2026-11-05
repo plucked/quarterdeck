@@ -1,5 +1,5 @@
 use gpui::{ClickEvent, Context, FontWeight, IntoElement, div, prelude::*, px};
-use qc_cache::PanelVisibility;
+use qd_cache::PanelVisibility;
 
 use super::ReviewQueue;
 use crate::button::Button;
@@ -13,7 +13,7 @@ pub const TOP_BAR_HEIGHT: f32 = 40.;
 /// Room left of the bar's content for the traffic lights.
 const TRAFFIC_LIGHTS_WIDTH: f32 = 84.;
 /// The name in the middle of the bar.
-const APP_TITLE: &str = "Quick Check";
+const APP_TITLE: &str = "Quarterdeck";
 
 impl ReviewQueue {
     /// The bar across the top of the window, in place of the system title

@@ -1,5 +1,5 @@
 [package]
-name = "qc-github"
+name = "qd-github"
 description = "Minimal blocking GitHub REST client"
 version.workspace = true
 edition.workspace = true

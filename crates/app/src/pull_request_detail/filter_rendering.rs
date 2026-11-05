@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, ClickEvent, Context, Div, FontWeight, IntoElement, SharedString, Stateful, div,
     prelude::*,
 };
-use qc_file_tree::{FacetChoice, FacetCount};
+use qd_file_tree::{FacetChoice, FacetCount};
 
 use super::chip_click::ChipClick;
 use super::pull_request_detail::PullRequestDetail;

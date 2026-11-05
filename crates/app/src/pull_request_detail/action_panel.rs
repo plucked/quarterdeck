@@ -1,5 +1,5 @@
 use gpui::{SharedString, Task};
-use qc_github::{MergeMethod, MergeOptions};
+use qd_github::{MergeMethod, MergeOptions};
 
 /// Which action the panel under the header prepares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

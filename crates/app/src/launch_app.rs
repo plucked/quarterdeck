@@ -9,7 +9,7 @@ use crate::app_settings::AppSettings;
 use crate::main_window::MainWindow;
 use crate::ui_state::{UiStateRecorder, window_bounds_from_placement};
 
-const WINDOW_TITLE: &str = "Quick Check";
+const WINDOW_TITLE: &str = "Quarterdeck";
 const WINDOW_WIDTH: f32 = 1200.;
 const WINDOW_HEIGHT: f32 = 800.;
 const WINDOW_MIN_WIDTH: f32 = 720.;

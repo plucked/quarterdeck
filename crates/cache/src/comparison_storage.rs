@@ -1,5 +1,5 @@
 use anyhow::Result;
-use qc_github::{PullRequestFile, RepoRef};
+use qd_github::{PullRequestFile, RepoRef};
 use rusqlite::params;
 
 use crate::GitHubCache;

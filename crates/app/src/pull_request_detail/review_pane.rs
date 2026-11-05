@@ -1,5 +1,5 @@
 use gpui::{Entity, Subscription, Task};
-use qc_cache::NoteDestination;
+use qd_cache::NoteDestination;
 
 use super::comment_editor::CommentEditor;
 use super::comment_placement::CommentPlacement;

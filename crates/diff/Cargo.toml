@@ -1,5 +1,5 @@
 [package]
-name = "qc-diff"
+name = "qd-diff"
 description = "Unified patches parsed into hunks, side-by-side rows and inline change highlights"
 version.workspace = true
 edition.workspace = true

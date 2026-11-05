@@ -1,4 +1,4 @@
-use qc_github::{RepoRef, StackMembership};
+use qd_github::{RepoRef, StackMembership};
 
 /// What the detail view tells the view that owns it.
 #[derive(Debug, Clone, PartialEq, Eq)]

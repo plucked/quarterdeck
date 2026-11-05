@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use qc_cache::GitHubCache;
+use qd_cache::GitHubCache;
 
 /// The cache, shared by the views and the background tasks they spawn, which
 /// end independently of each other. Clones share one connection.

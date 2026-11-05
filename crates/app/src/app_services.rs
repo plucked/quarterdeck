@@ -1,7 +1,7 @@
 use anyhow::Result;
 use gpui::Global;
-use qc_cache::GitHubCache;
-use qc_github::GitHubClient;
+use qd_cache::GitHubCache;
+use qd_github::GitHubClient;
 
 use crate::shared_cache::SharedCache;
 

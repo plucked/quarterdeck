@@ -1,4 +1,4 @@
-use qc_github::{PullRequest, PullRequestFile};
+use qd_github::{PullRequest, PullRequestFile};
 
 use crate::FileSetRevision;
 

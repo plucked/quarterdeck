@@ -1,5 +1,5 @@
-use qc_cache::{CachedFileSet, FileSetRevision};
-use qc_github::{ConditionalResponse, PullRequestFile, RevisionCheck};
+use qd_cache::{CachedFileSet, FileSetRevision};
+use qd_github::{ConditionalResponse, PullRequestFile, RevisionCheck};
 
 /// What to do with a pull request's cached files after asking GitHub for
 /// its current commits.
@@ -60,7 +60,7 @@ impl FileSetUpdate {
 
 #[cfg(test)]
 mod tests {
-    use qc_github::{ETag, PullRequestRevision};
+    use qd_github::{ETag, PullRequestRevision};
 
     use super::*;
 

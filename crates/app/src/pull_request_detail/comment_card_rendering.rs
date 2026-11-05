@@ -1,6 +1,6 @@
 use gpui::{AnyElement, Context, Div, FontWeight, IntoElement, SharedString, div, prelude::*, px};
-use qc_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote};
-use qc_github::{LineSide, ReviewThread, ThreadComment};
+use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote};
+use qd_github::{LineSide, ReviewThread, ThreadComment};
 
 use super::comment_editor::EditorTarget;
 use super::pull_request_detail::PullRequestDetail;

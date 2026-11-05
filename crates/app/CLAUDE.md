@@ -1,4 +1,4 @@
-# quick-check (app)
+# Quarterdeck (app)
 
 | Module | Holds |
 |---|---|
@@ -21,7 +21,7 @@
 | `display_date` | `short_date`: a GitHub timestamp as `21 Oct 2026` |
 | `display_size` | `byte_size`: a byte count as `151.7 MB` |
 | `resize_handle` | `ResizeHandle`: reusable divider strip between two panels in a flex row; dragging it reports a clamped width (`ResizeEdge` says which side the panel is on) |
-| `markdown_view` | `MarkdownView`: reusable component rendering a `qc_markdown::MarkdownDocument`, with mouse text selection and copy |
+| `markdown_view` | `MarkdownView`: reusable component rendering a `qd_markdown::MarkdownDocument`, with mouse text selection and copy |
 | `theme` | colors and fonts: a dark palette of layered surfaces (sidebar < background < panel < surface), borders (normal, strong), three text levels (text, muted, subtle), one accent; the system UI font, Menlo for code |
 | `review_queue` | main view: the top bar (sidebar toggle, refresh, title, side panel toggle), the sidebar with Mine / Review tabs atop its lists (`QueueLists`), stacks grouped in the sidebar (`QueueRow`), selection by id (`SelectionOrigin`), opening stack layers in no list, refresh schedule, restore; owns the detail view |
 | `pull_request_detail` | `PullRequestDetail` view: sticky header (title, meta, stack bar, collapsible description, activity pill + progress line), files as one virtualized `list` of `DetailRow`s, side panel (Files / Review tabs); `ReviewTarget` (layer / combined range), loads files with `LoadProgress`, builds/colors diffs, settings, viewed/collapsed, filters |

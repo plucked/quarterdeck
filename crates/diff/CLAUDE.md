@@ -1,4 +1,4 @@
-# qc-diff
+# qd-diff
 
 | Module | Holds |
 |---|---|

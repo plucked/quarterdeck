@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use qc_cache::PatchFingerprint;
-use qc_diff::{DiffOptions, FileDiff};
-use qc_file_tree::FileFacets;
-use qc_github::PullRequestFile;
-use qc_syntax::DiffSyntax;
+use qd_cache::PatchFingerprint;
+use qd_diff::{DiffOptions, FileDiff};
+use qd_file_tree::FileFacets;
+use qd_github::PullRequestFile;
+use qd_syntax::DiffSyntax;
 
 use crate::diff_view::{DIFF_CHARACTER_WIDTH, gutter_width};
 

@@ -1,12 +1,12 @@
 ---
-name: knowledge-writing-rust-in-quick-check
-description: Use when writing, changing or reviewing Rust in quick-check (.rs files, Cargo.toml, a new crate): the gpui app in crates/app, the GitHub client in crates/github, the SQLite cache in crates/cache.
+name: knowledge-writing-rust-in-quarterdeck
+description: Use when writing, changing or reviewing Rust in Quarterdeck (.rs files, Cargo.toml, a new crate): the gpui app in crates/app, the GitHub client in crates/github, the SQLite cache in crates/cache.
 user-invocable: false
 ---
 
-# Writing Rust in quick-check
+# Writing Rust in Quarterdeck
 
-quick-check is a macOS desktop app for reviewing GitHub pull requests, built on gpui. All crates live under `crates/` and share the root Cargo workspace, lockfile and toolchain. These rules apply to new files, modules and crates, and to the lines a change writes. Bringing an existing crate's layout or names up to them is its own refactor commit, not something to fold into a feature. A crate's `CLAUDE.md` adds only what is specific to it; where the two disagree, the crate's file wins for that crate.
+Quarterdeck is a macOS desktop app for reviewing GitHub pull requests, built on gpui. All crates live under `crates/` and share the root Cargo workspace, lockfile and toolchain. These rules apply to new files, modules and crates, and to the lines a change writes. Bringing an existing crate's layout or names up to them is its own refactor commit, not something to fold into a feature. A crate's `CLAUDE.md` adds only what is specific to it; where the two disagree, the crate's file wins for that crate.
 
 Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of the folder you work in.
 
@@ -15,7 +15,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 - **A module is named after what it holds**, not after an action or a phase: `review_queue`, `shared_cache`, `schema_migrations`.
 - **Put new code where its concept already lives.** A new concept that fits no module gets its own module, named the same way.
 - **Every crate's `CLAUDE.md` has a module table:** one row per top-level module and what it holds. A new module adds a row.
-- **Crates split by subsystem, not by layer.** `qc-github` talks to GitHub, `qc-cache` persists, `qc-markdown` parses Markdown, `qc-diff` builds file diffs, `qc-syntax` colors them, `quick-check` (the app) owns gpui. Only the app depends on gpui; library crates stay UI-free so they can be tested without a window.
+- **Crates split by subsystem, not by layer.** `qd-github` talks to GitHub, `qd-cache` persists, `qd-markdown` parses Markdown, `qd-diff` builds file diffs, `qd-syntax` colors them, `quarterdeck` (the app) owns gpui. Only the app depends on gpui; library crates stay UI-free so they can be tested without a window.
 
 ## Files
 
@@ -70,10 +70,10 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 
 ## Persistence
 
-- **Everything stored lives in typed SQLite columns, never in JSON** (or any other self-described format), cached GitHub data included: the schema is our local contract, and SQLite checks it on every write. One table per concept, one column per field (`pull_requests`, `pr_files`); a list is a child table with a `position` column; an enum is a `TEXT` column with a `CHECK` listing its values, mapped by `as_sql_text`/`from_sql_text` beside the enum (`WindowMode`), or beside its store when another crate owns the enum (`diff_option_sql_text.rs` for `qc-diff`'s); one-row state uses `id INTEGER PRIMARY KEY CHECK (id = 1)` (`window_placement`). A value GitHub owns and may extend (a file's `status`) stays unchecked `TEXT`. JSON is only for talking to GitHub: `qc-github` types derive `Deserialize` where they are decoded from a response, and nothing derives `Serialize`.
+- **Everything stored lives in typed SQLite columns, never in JSON** (or any other self-described format), cached GitHub data included: the schema is our local contract, and SQLite checks it on every write. One table per concept, one column per field (`pull_requests`, `pr_files`); a list is a child table with a `position` column; an enum is a `TEXT` column with a `CHECK` listing its values, mapped by `as_sql_text`/`from_sql_text` beside the enum (`WindowMode`), or beside its store when another crate owns the enum (`diff_option_sql_text.rs` for `qd-diff`'s); one-row state uses `id INTEGER PRIMARY KEY CHECK (id = 1)` (`window_placement`). A value GitHub owns and may extend (a file's `status`) stays unchecked `TEXT`. JSON is only for talking to GitHub: `qd-github` types derive `Deserialize` where they are decoded from a response, and nothing derives `Serialize`.
 - **Ask GitHub as little as possible.** Serve from the cache first; when cached data may be stale, check the cheapest marker of change before refetching (a pull request's head and base commits, not its `updated_at`, which moves on every comment), with a conditional request (`If-None-Match` with the stored `ETag`, free when GitHub answers 304); follow every page of a list. Count requests in `ApiUsage` and turn exhausted budgets into `GitHubError::RateLimited` (`fetch_changed_files`).
 - **Cached GitHub data expires; user data does not.** Cache rows carry when they were last used and `delete_expired` removes them after the TTL; viewed marks, settings and UI state are never expired.
-- **All persistence goes through `qc-cache`,** in the one database file. Each store type opens its own connection (`GitHubCache`, `UiStateStore`); WAL lets them share the file without waiting on each other.
+- **All persistence goes through `qd-cache`,** in the one database file. Each store type opens its own connection (`GitHubCache`, `UiStateStore`); WAL lets them share the file without waiting on each other.
 - **A schema change is a new entry in `SCHEMA_MIGRATIONS`,** never an edit of an existing one. Cached GitHub data may be dropped and refetched by a migration; UI state is migrated, not dropped.
 - **Restoring never fails the app.** Nothing saved, a row that no longer reads, or a value that no longer fits (a window off every display, a pull request that left the queue) restores nothing for that part and is reported on stderr at most (`window_bounds_from_placement`, `SelectionRestore`).
 - **UI state writes are batched** through `UiStateRecorder`: a change starts a short timer, later changes overwrite the pending value, and one task writes in order; the window losing focus writes at once.
@@ -101,7 +101,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 
 ## A new crate
 
-- Add it under `crates/<name>/`, named `qc-<name>` (the binary crate is `quick-check`). The workspace glob picks it up.
+- Add it under `crates/<name>/`, named `qd-<name>` (the binary crate is `quarterdeck`). The workspace glob picks it up.
 - Inherit `version`, `edition`, `license` and `publish` from `[workspace.package]`, and `[lints] workspace = true`.
 - Add a crate `CLAUDE.md` with its module table and anything specific to it, and a `README.md` in `src/` and every folder under it. Add its row to the root `CLAUDE.md` crate table.
 
@@ -121,7 +121,7 @@ Upstream future-incompatibility notes from gpui's dependencies (`block`, `proc-m
 
 ## Evolving these conventions
 
-This skill is the single source of quick-check's Rust conventions. It grows from review: when a review shows a clear, general signal, turn it into a rule here in the same commit that applies it.
+This skill is the single source of Quarterdeck's Rust conventions. It grows from review: when a review shows a clear, general signal, turn it into a rule here in the same commit that applies it.
 
 A clear signal is one of:
 

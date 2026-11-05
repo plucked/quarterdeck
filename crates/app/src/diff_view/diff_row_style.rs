@@ -1,4 +1,4 @@
-use qc_cache::LineWrapping;
+use qd_cache::LineWrapping;
 
 /// What every diff row of one file shares: the line-number gutter's width,
 /// whether long lines wrap, and, when they scroll instead, how far the

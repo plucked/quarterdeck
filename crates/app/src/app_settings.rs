@@ -1,7 +1,7 @@
 //! `AppSettings`: the user's preferences, shared by every window.
 
 use gpui::{App, BorrowAppContext, Global};
-use qc_cache::{CacheTtl, DiffViewSettings};
+use qd_cache::{CacheTtl, DiffViewSettings};
 
 use crate::ui_state::UiStateRecorder;
 

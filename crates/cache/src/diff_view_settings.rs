@@ -1,4 +1,4 @@
-use qc_diff::{ChangeHighlight, DiffOptions, WhitespaceMode};
+use qd_diff::{ChangeHighlight, DiffOptions, WhitespaceMode};
 
 use crate::{DiffLayout, LineWrapping};
 

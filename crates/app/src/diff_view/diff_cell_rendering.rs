@@ -1,7 +1,7 @@
 use gpui::{CursorStyle, Div, Rgba, StyledText, canvas, div, prelude::*, px};
-use qc_cache::LineWrapping;
-use qc_diff::{DiffLine, DiffLineKind};
-use qc_syntax::SyntaxSpan;
+use qd_cache::LineWrapping;
+use qd_diff::{DiffLine, DiffLineKind};
+use qd_syntax::SyntaxSpan;
 
 use super::code_highlights::code_highlights;
 use super::file_card_rendering::frame_file_row;

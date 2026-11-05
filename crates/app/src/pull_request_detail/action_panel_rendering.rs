@@ -1,5 +1,5 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, Rgba, SharedString, div, prelude::*};
-use qc_github::{MergeOptions, MergeQueueState, PullRequestState};
+use qd_github::{MergeOptions, MergeQueueState, PullRequestState};
 
 use super::action_panel::{ActionPanel, ActionProgress, ArmedAction, PanelAction};
 use super::pull_request_detail::PullRequestDetail;

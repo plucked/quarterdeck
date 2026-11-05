@@ -1,4 +1,4 @@
-use qc_github::ReviewEvent;
+use qd_github::ReviewEvent;
 
 /// The verdict and summary of a GitHub review being written.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

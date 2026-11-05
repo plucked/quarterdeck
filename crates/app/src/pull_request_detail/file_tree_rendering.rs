@@ -4,7 +4,7 @@ use gpui::{
     AnyElement, Context, Div, IntoElement, Rgba, Stateful, Styled, div, prelude::*, px, relative,
     uniform_list,
 };
-use qc_file_tree::{TreeNodeKind, TreeRow};
+use qd_file_tree::{TreeNodeKind, TreeRow};
 
 use super::folder_viewed_state::FolderViewedState;
 use super::line_counts::LineCounts;

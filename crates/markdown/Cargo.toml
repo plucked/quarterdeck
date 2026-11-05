@@ -1,5 +1,5 @@
 [package]
-name = "qc-markdown"
+name = "qd-markdown"
 description = "GitHub-flavored Markdown parsed into a typed document for rendering"
 version.workspace = true
 edition.workspace = true

@@ -1,4 +1,4 @@
-use qc_cache::DiffViewSettings;
+use qd_cache::DiffViewSettings;
 
 use super::changed_files::ChangedFiles;
 use super::comment_placement::CommentPlacement;

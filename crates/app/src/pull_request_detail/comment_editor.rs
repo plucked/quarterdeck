@@ -1,6 +1,6 @@
 use gpui::{Entity, Subscription};
-use qc_cache::NoteId;
-use qc_github::LineSide;
+use qd_cache::NoteId;
+use qd_github::LineSide;
 
 use crate::text_area::TextArea;
 

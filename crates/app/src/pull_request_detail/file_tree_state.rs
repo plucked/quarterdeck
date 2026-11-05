@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use gpui::UniformListScrollHandle;
-use qc_cache::{PanelVisibility, ReviewLayoutState};
-use qc_file_tree::{
+use qd_cache::{PanelVisibility, ReviewLayoutState};
+use qd_file_tree::{
     FacetCount, FacetFilter, FileFilter, FileKind, FileTree, FilteredFile, NodeId, TreeNodeKind,
     TreeRow,
 };

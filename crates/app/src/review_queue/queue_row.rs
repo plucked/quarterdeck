@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use qc_github::{PullRequest, PullRequestStack};
+use qd_github::{PullRequest, PullRequestStack};
 
 use super::stack_key::StackKey;
 
@@ -146,7 +146,7 @@ fn stack_layer_rows(
 
 #[cfg(test)]
 mod tests {
-    use qc_github::{RepoRef, StackLayer, StackMembership, User};
+    use qd_github::{RepoRef, StackLayer, StackMembership, User};
 
     use super::*;
 

@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use qc_markdown::{InlineStyle, StyledRun};
+use qd_markdown::{InlineStyle, StyledRun};
 
 /// A byte range of a text with one Markdown style and one selection state:
 /// the pieces a text's styled runs and the selection cut it into.

@@ -1,5 +1,5 @@
 [package]
-name = "qc-cache"
+name = "qd-cache"
 description = "Local SQLite cache"
 version.workspace = true
 edition.workspace = true
@@ -9,9 +9,9 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 dirs.workspace = true
-qc-diff.workspace = true
-qc-file-tree.workspace = true
-qc-github.workspace = true
+qd-diff.workspace = true
+qd-file-tree.workspace = true
+qd-github.workspace = true
 rusqlite.workspace = true
 
 [lints]

@@ -5,7 +5,7 @@ use anyhow::Result;
 use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 
 use super::review_change::ReviewChange;
-use qc_cache::{
+use qd_cache::{
     CacheTtl, DiffViewSettings, NoteDestination, PanelWidths, ReviewLayoutState, ReviewNote,
     ReviewQueueViewState, ReviewScope, ReviewSummary, UiStateStore, ViewedFile, WindowPlacement,
 };

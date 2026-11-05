@@ -57,7 +57,7 @@ impl GitHubCache {
 
 #[cfg(test)]
 mod tests {
-    use qc_github::{ETag, PullRequest, PullRequestFile, PullRequestRevision, RepoRef, User};
+    use qd_github::{ETag, PullRequest, PullRequestFile, PullRequestRevision, RepoRef, User};
     use rusqlite::params;
 
     use super::*;

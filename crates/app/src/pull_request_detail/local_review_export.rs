@@ -1,8 +1,8 @@
 use std::fmt::Write as _;
 
-use qc_cache::{NoteAnchor, ReviewNote};
-use qc_diff::DiffLineKind;
-use qc_github::LineSide;
+use qd_cache::{NoteAnchor, ReviewNote};
+use qd_diff::DiffLineKind;
+use qd_github::LineSide;
 
 use super::loaded_file::LoadedFile;
 

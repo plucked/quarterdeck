@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use qc_file_tree::{FileTree, TreeNodeKind};
+use qd_file_tree::{FileTree, TreeNodeKind};
 
 const PATHS: [&str; 6] = [
     "README.md",

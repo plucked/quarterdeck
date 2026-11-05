@@ -1,4 +1,4 @@
-//! quick-check: a macOS desktop app for reviewing GitHub pull requests.
+//! Quarterdeck: a macOS desktop app for reviewing GitHub pull requests.
 //!
 //! Files:
 //! - `launch_app.rs`: starts gpui and opens the main window where it was last placed.

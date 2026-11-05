@@ -1,6 +1,6 @@
 //! Building file diffs from GitHub-style patches, through the public API.
 
-use qc_diff::{ChangeHighlight, DiffLineKind, DiffOptions, FileDiff, SplitRow, WhitespaceMode};
+use qd_diff::{ChangeHighlight, DiffLineKind, DiffOptions, FileDiff, SplitRow, WhitespaceMode};
 
 const PATCH: &str = "@@ -1,4 +1,4 @@ fn main() {\n let a = 1;\n-let b = 2;\n-let c = 3;\n+let b = 20;\n+let c = 3;\n+let d = 4;\n }\n";
 

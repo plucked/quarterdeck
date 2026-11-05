@@ -1,5 +1,5 @@
 use anyhow::Result;
-use qc_github::{ConditionalResponse, GitHubClient, PullRequestStack, RepoRef};
+use qd_github::{ConditionalResponse, GitHubClient, PullRequestStack, RepoRef};
 
 use crate::shared_cache::SharedCache;
 

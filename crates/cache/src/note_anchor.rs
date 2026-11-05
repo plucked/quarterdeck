@@ -1,4 +1,4 @@
-use qc_github::LineSide;
+use qd_github::LineSide;
 
 /// Where a review note sits.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

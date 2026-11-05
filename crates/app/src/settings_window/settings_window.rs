@@ -2,7 +2,7 @@ use gpui::{
     App, Context, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window, div,
     prelude::*, px,
 };
-use qc_cache::CacheUsage;
+use qd_cache::CacheUsage;
 
 use super::file_diff_page::render_file_diff_page;
 use super::github_page::render_github_page;

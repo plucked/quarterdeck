@@ -5,10 +5,10 @@ use gpui::{
     App, Context, Entity, FocusHandle, ListAlignment, ListOffset, ListState, SharedString,
     Subscription, Task, Window, div, prelude::*, px,
 };
-use qc_cache::{
+use qd_cache::{
     DetailScrollPosition, PanelVisibility, PullRequestListKey, QueueTab, ReviewQueueViewState,
 };
-use qc_github::{GitHubClient, PullRequest, PullRequestStack, RepoRef, StackMembership};
+use qd_github::{GitHubClient, PullRequest, PullRequestStack, RepoRef, StackMembership};
 
 use super::activation_refresh::ActivationRefresh;
 use super::queue_lists::QueueLists;

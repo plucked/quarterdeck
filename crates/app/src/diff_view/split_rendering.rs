@@ -1,6 +1,6 @@
 use gpui::{Div, IntoElement, div, prelude::*, px};
-use qc_diff::{DiffHunk, SplitRow};
-use qc_syntax::DiffSyntax;
+use qd_diff::{DiffHunk, SplitRow};
+use qd_syntax::DiffSyntax;
 
 use super::diff_cell_rendering::{render_code, render_gutter, render_marker, render_row};
 use super::file_card_rendering::frame_file_row;

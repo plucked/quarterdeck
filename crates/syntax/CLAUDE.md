@@ -1,4 +1,4 @@
-# qc-syntax
+# qd-syntax
 
 | Module | Holds |
 |---|---|

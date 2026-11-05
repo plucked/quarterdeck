@@ -1,5 +1,5 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*};
-use qc_cache::StackReviewMode;
+use qd_cache::StackReviewMode;
 
 use super::pull_request_detail::PullRequestDetail;
 use super::review_target::ReviewTarget;

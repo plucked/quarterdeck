@@ -1,4 +1,4 @@
-# qc-markdown
+# qd-markdown
 
 | Module | Holds |
 |---|---|

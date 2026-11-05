@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{FontStyle, FontWeight, HighlightStyle, Rgba, rgb};
-use qc_syntax::SyntaxSpan;
+use qd_syntax::SyntaxSpan;
 
 use crate::theme;
 
@@ -66,7 +66,7 @@ pub fn code_highlights(
 
 #[cfg(test)]
 mod tests {
-    use qc_syntax::SyntaxColor;
+    use qd_syntax::SyntaxColor;
 
     use super::*;
 

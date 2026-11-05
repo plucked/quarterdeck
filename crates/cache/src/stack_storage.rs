@@ -1,5 +1,5 @@
 use anyhow::Result;
-use qc_github::{ETag, PullRequestStack, RepoRef, StackLayer};
+use qd_github::{ETag, PullRequestStack, RepoRef, StackLayer};
 use rusqlite::{OptionalExtension, Row, params};
 
 use crate::sql_integers::{read_u64, sql_integer};

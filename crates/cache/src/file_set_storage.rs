@@ -1,5 +1,5 @@
 use anyhow::Result;
-use qc_github::{ETag, PullRequest, PullRequestFile, PullRequestRevision};
+use qd_github::{ETag, PullRequest, PullRequestFile, PullRequestRevision};
 use rusqlite::{OptionalExtension, Row, params};
 
 use crate::sql_integers::{read_u64, sql_integer};
@@ -154,7 +154,7 @@ pub(crate) fn pull_request_file_from_row(row: &Row<'_>) -> rusqlite::Result<Pull
 
 #[cfg(test)]
 mod tests {
-    use qc_github::{RepoRef, User};
+    use qd_github::{RepoRef, User};
 
     use super::*;
     use crate::PullRequestListKey;

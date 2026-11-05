@@ -1,4 +1,4 @@
-//! Renders a parsed `qc_markdown::MarkdownDocument` as gpui elements: a
+//! Renders a parsed `qd_markdown::MarkdownDocument` as gpui elements: a
 //! reusable component for pull request descriptions, comments and anything
 //! else GitHub writes in Markdown. Its text can be selected with the mouse
 //! (drag, double click for a word, triple click for a block) and copied.

@@ -1,5 +1,5 @@
-use qc_cache::{DiffLayout, DiffViewSettings, LineWrapping};
-use qc_diff::DiffHunk;
+use qd_cache::{DiffLayout, DiffViewSettings, LineWrapping};
+use qd_diff::DiffHunk;
 
 use super::detail_row::DetailRow;
 use super::detail_row_list::DetailRowList;

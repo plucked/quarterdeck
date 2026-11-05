@@ -3,7 +3,9 @@ use std::path::Path;
 use anyhow::{Context as _, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::database_connection::{default_database_path, open_database};
+use crate::database_connection::{
+    default_database_path, move_former_data_directory, open_database,
+};
 use crate::{
     DetailScrollPosition, DisplayUuid, PanelVisibility, QueueTab, ReviewQueueViewState, WindowMode,
     WindowPlacement,
@@ -46,6 +48,7 @@ pub struct UiStateStore {
 impl UiStateStore {
     /// Opens (creating if needed) the default database file.
     pub fn open_default() -> Result<Self> {
+        move_former_data_directory()?;
         Self::open(&default_database_path()?)
     }
 

@@ -1,4 +1,4 @@
-use qc_github::PullRequest;
+use qd_github::PullRequest;
 
 use super::restore_phase::RestorePhase;
 
@@ -30,7 +30,7 @@ impl<'found> SelectionRestore<'found> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use qc_github::{RepoRef, User};
+    use qd_github::{RepoRef, User};
 
     fn pull_request(id: u64) -> PullRequest {
         PullRequest {

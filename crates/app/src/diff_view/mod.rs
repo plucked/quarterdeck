@@ -1,4 +1,4 @@
-//! Renders file diffs built by `qc-diff` row by row, for the virtualized
+//! Renders file diffs built by `qd-diff` row by row, for the virtualized
 //! detail list: file headers (status, path, counts, viewed checkbox), hunk
 //! headers, unified lines or side-by-side rows with line numbers, syntax
 //! colors and inline change marks, and notes for files without lines. Each

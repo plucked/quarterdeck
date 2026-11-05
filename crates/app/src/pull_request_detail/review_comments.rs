@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::SharedString;
-use qc_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewSummary};
-use qc_github::{LineSide, PullRequestReviewState};
-use qc_markdown::MarkdownDocument;
+use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewSummary};
+use qd_github::{LineSide, PullRequestReviewState};
+use qd_markdown::MarkdownDocument;
 
 /// One card of comments in the diff.
 #[derive(Debug, Clone, PartialEq, Eq)]

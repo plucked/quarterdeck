@@ -5,8 +5,8 @@ use gpui::{
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, WeakEntity, Window, canvas, div,
     list, prelude::*, px,
 };
-use qc_cache::{DiffLayout, LineWrapping, PanelVisibility};
-use qc_github::LineSide;
+use qd_cache::{DiffLayout, LineWrapping, PanelVisibility};
+use qd_github::LineSide;
 
 use super::changed_files::ChangedFiles;
 use super::detail_row::DetailRow;

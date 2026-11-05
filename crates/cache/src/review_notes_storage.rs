@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use qc_github::{LineSide, RepoRef};
+use qd_github::{LineSide, RepoRef};
 use rusqlite::{OptionalExtension, Row, params};
 
 use crate::review_summary::{event_from_sql_text, event_sql_text};
@@ -234,7 +234,7 @@ fn note_from_row(row: &Row<'_>) -> rusqlite::Result<Result<ReviewNote>> {
 
 #[cfg(test)]
 mod tests {
-    use qc_github::ReviewEvent;
+    use qd_github::ReviewEvent;
 
     use super::*;
 

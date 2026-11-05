@@ -1,4 +1,4 @@
-use qc_github::{ETag, PullRequestStack};
+use qd_github::{ETag, PullRequestStack};
 
 /// A stack as last fetched, with the tag of that response for a free
 /// conditional check.

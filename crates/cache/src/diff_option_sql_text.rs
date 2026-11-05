@@ -1,7 +1,7 @@
-//! SQL text for the `qc-diff` enums stored in `diff_view_settings`. They are
-//! mapped here, beside their store, because `qc-diff` knows nothing of SQLite.
+//! SQL text for the `qd-diff` enums stored in `diff_view_settings`. They are
+//! mapped here, beside their store, because `qd-diff` knows nothing of SQLite.
 
-use qc_diff::{ChangeHighlight, WhitespaceMode};
+use qd_diff::{ChangeHighlight, WhitespaceMode};
 
 const HIGHLIGHTS: [ChangeHighlight; 3] = [
     ChangeHighlight::Lines,

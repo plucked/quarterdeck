@@ -40,9 +40,9 @@ pub fn row_code_text(row: DetailRow, side: DiffSide, files: &[LoadedFile]) -> Op
 
 #[cfg(test)]
 mod tests {
-    use qc_cache::{DiffLayout, DiffViewSettings};
-    use qc_diff::DiffOptions;
-    use qc_github::PullRequestFile;
+    use qd_cache::{DiffLayout, DiffViewSettings};
+    use qd_diff::DiffOptions;
+    use qd_github::PullRequestFile;
 
     use super::*;
     use crate::diff_view::DiffPosition;

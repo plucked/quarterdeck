@@ -1,4 +1,4 @@
-use qc_github::{ETag, PullRequestRevision};
+use qd_github::{ETag, PullRequestRevision};
 
 /// What a cached file set was fetched for: the pull request's head and base
 /// commits, and the tag of the pull request response that reported them,

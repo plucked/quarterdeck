@@ -11,7 +11,7 @@ pub const REVIEW_QUEUE_CONTEXT: &str = "ReviewQueue";
 const SINGLE_KEY_CONTEXT: &str = "ReviewQueue && !TextArea";
 
 actions!(
-    quick_check,
+    quarterdeck,
     [
         Quit,
         OpenSettings,
@@ -60,13 +60,13 @@ pub fn install_app_commands(cx: &mut App) {
     // The menu bar exposes the same actions as the key bindings.
     cx.set_menus(vec![
         Menu {
-            name: "Quick Check".into(),
+            name: "Quarterdeck".into(),
             items: vec![
                 MenuItem::action("Settings…", OpenSettings),
                 MenuItem::separator(),
                 MenuItem::os_submenu("Services", SystemMenuType::Services),
                 MenuItem::separator(),
-                MenuItem::action("Quit Quick Check", Quit),
+                MenuItem::action("Quit Quarterdeck", Quit),
             ],
         },
         Menu {

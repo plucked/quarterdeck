@@ -3,7 +3,7 @@
 //! the app's `diff_view` turns them into text highlights.
 //!
 //! Files:
-//! - `diff_syntax.rs`: `DiffSyntax`, the colors of every line of a `qc_diff::FileDiff`.
+//! - `diff_syntax.rs`: `DiffSyntax`, the colors of every line of a `qd_diff::FileDiff`.
 //! - `syntax_highlighter.rs`: the shared grammars and theme, language detection, line highlighting.
 //! - `syntax_span.rs`: `SyntaxSpan`, a colored byte range of a line.
 //! - `syntax_color.rs`: `SyntaxColor`, an RGB color.

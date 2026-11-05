@@ -1,5 +1,5 @@
-use qc_cache::QueueTab;
-use qc_github::{PullRequest, RepoRef};
+use qd_cache::QueueTab;
+use qd_github::{PullRequest, RepoRef};
 
 /// The queue's two lists: the viewer's own pull requests and those that
 /// request the viewer's review. A pull request can be in both.

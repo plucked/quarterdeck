@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use gpui::Context;
-use qc_github::{MergeMethod, MergeOptions, MergeOutcome};
+use qd_github::{MergeMethod, MergeOptions, MergeOutcome};
 
 use super::action_panel::{ActionPanel, ActionProgress, ArmedAction, PanelAction};
 use super::detail_event::DetailEvent;
@@ -217,7 +217,7 @@ impl PullRequestDetail {
 /// What the panel says after `armed` ended with `outcome`.
 fn action_result(
     armed: ArmedAction,
-    outcome: &Result<MergeOutcome, qc_github::GitHubError>,
+    outcome: &Result<MergeOutcome, qd_github::GitHubError>,
     branch_error: Option<&str>,
 ) -> ActionProgress {
     let branch_note = branch_error

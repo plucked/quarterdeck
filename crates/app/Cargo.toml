@@ -1,5 +1,5 @@
 [package]
-name = "quick-check"
+name = "quarterdeck"
 description = "Desktop app for reviewing GitHub pull requests"
 version.workspace = true
 edition.workspace = true
@@ -10,12 +10,12 @@ publish.workspace = true
 anyhow.workspace = true
 futures.workspace = true
 gpui.workspace = true
-qc-cache.workspace = true
-qc-diff.workspace = true
-qc-file-tree.workspace = true
-qc-github.workspace = true
-qc-markdown.workspace = true
-qc-syntax.workspace = true
+qd-cache.workspace = true
+qd-diff.workspace = true
+qd-file-tree.workspace = true
+qd-github.workspace = true
+qd-markdown.workspace = true
+qd-syntax.workspace = true
 
 [lints]
 workspace = true

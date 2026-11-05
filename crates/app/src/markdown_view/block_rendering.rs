@@ -1,5 +1,5 @@
 use gpui::{AnyElement, Div, FontWeight, IntoElement, div, prelude::*, px};
-use qc_markdown::{
+use qd_markdown::{
     ColumnAlignment, HeadingLevel, InlineText, ListItem, MarkdownBlock, MarkdownList,
     MarkdownTable, TaskState,
 };

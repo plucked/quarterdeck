@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use qc_file_tree::FileKind;
+use qd_file_tree::FileKind;
 
 use crate::{NoteDestination, PanelVisibility, StackReviewMode};
 

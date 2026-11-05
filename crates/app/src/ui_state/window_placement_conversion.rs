@@ -1,5 +1,5 @@
 use gpui::{Bounds, Pixels, Size, WindowBounds, point, px, size};
-use qc_cache::{DisplayUuid, WindowMode, WindowPlacement};
+use qd_cache::{DisplayUuid, WindowMode, WindowPlacement};
 
 /// Captures the window's current mode, display, position and size. gpui
 /// reports the position relative to the display the window is on, and

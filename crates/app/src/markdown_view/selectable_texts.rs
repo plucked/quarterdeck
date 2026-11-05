@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{AnyElement, IntoElement, SharedString, StyledText};
-use qc_markdown::{InlineText, LinkRange, StyledRun};
+use qd_markdown::{InlineText, LinkRange, StyledRun};
 
 use super::highlight_span::HighlightSpan;
 use super::inline_highlight::inline_highlight;

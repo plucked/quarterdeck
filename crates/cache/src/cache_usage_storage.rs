@@ -69,7 +69,7 @@ fn write_ahead_log_bytes(connection: &Connection) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use qc_github::{PullRequest, RepoRef, User};
+    use qd_github::{PullRequest, RepoRef, User};
 
     use crate::{GitHubCache, PullRequestListKey};
 

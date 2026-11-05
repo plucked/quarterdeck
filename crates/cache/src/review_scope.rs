@@ -1,4 +1,4 @@
-use qc_github::RepoRef;
+use qd_github::RepoRef;
 
 /// What viewed marks and review notes belong to: one pull request, or a
 /// combined review of a range of stack layers (a different diff, so its own

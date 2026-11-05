@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::{AppContext as _, ClipboardItem, Context, Window};
-use qc_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewScope, ReviewSummary};
-use qc_github::{
+use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewScope, ReviewSummary};
+use qd_github::{
     LineSide, NewReviewThread, NewThreadReply, ReviewEvent, ReviewSubmission, SubmittedPart,
 };
 
@@ -546,7 +546,7 @@ impl PullRequestDetail {
         &mut self,
         message: &'static str,
         cx: &mut Context<Self>,
-        action: impl FnOnce(&qc_github::GitHubClient) -> Result<(), qc_github::GitHubError>
+        action: impl FnOnce(&qd_github::GitHubClient) -> Result<(), qd_github::GitHubError>
         + Send
         + 'static,
     ) {

@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use qc_cache::{DiffLayout, DiffViewSettings};
-use qc_diff::WhitespaceMode;
-use qc_github::LineSide;
+use qd_cache::{DiffLayout, DiffViewSettings};
+use qd_diff::WhitespaceMode;
+use qd_github::LineSide;
 
 use super::changed_files::ChangedFiles;
 use super::comment_placement::CommentPlacement;
@@ -245,8 +245,8 @@ fn file_note(
 
 #[cfg(test)]
 mod tests {
-    use qc_diff::DiffOptions;
-    use qc_github::PullRequestFile;
+    use qd_diff::DiffOptions;
+    use qd_github::PullRequestFile;
 
     use super::*;
     use crate::pull_request_detail::file_review_state::FileReviewState;

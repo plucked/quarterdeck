@@ -7,17 +7,17 @@ use gpui::{
     ClipboardItem, Context, EventEmitter, FocusHandle, ListAlignment, ListOffset, ListState,
     Pixels, Point, ScrollHandle, ScrollWheelEvent, SharedString, Subscription, Task, Window, px,
 };
-use qc_cache::{
+use qd_cache::{
     DetailScrollPosition, DiffViewSettings, LineWrapping, PanelVisibility, ReviewLayoutState,
     ReviewScope, StackReviewMode, ViewedFile,
 };
-use qc_diff::FileDiff;
-use qc_file_tree::{FileKind, FileTree, NodeId};
-use qc_github::{
+use qd_diff::FileDiff;
+use qd_file_tree::{FileKind, FileTree, NodeId};
+use qd_github::{
     GitHubClient, PullRequest, PullRequestFile, PullRequestStack, RepoRef, StackMembership,
 };
-use qc_markdown::MarkdownDocument;
-use qc_syntax::DiffSyntax;
+use qd_markdown::MarkdownDocument;
+use qd_syntax::DiffSyntax;
 
 use super::action_panel::ActionPanel;
 use super::changed_files::ChangedFiles;
@@ -92,8 +92,8 @@ struct FetchedChanges {
     /// Whose marks those are, for marks set from now on.
     scope: ReviewScope,
     /// The user's review notes of that scope, and the GitHub review's summary.
-    notes: Vec<qc_cache::ReviewNote>,
-    summary: Option<qc_cache::ReviewSummary>,
+    notes: Vec<qd_cache::ReviewNote>,
+    summary: Option<qd_cache::ReviewSummary>,
 }
 
 /// The syntax colors computed for one diff, matched back by the diff's `Arc`.

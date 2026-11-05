@@ -1,5 +1,5 @@
 [package]
-name = "qc-file-tree"
+name = "qd-file-tree"
 description = "A pull request's changed files as a folder tree, with ordering, classification and filters"
 version.workspace = true
 edition.workspace = true

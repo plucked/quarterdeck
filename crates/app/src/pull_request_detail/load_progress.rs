@@ -1,5 +1,5 @@
 use gpui::SharedString;
-use qc_github::DownloadProgress;
+use qd_github::DownloadProgress;
 
 /// Bytes in a megabyte, for download sizes.
 const BYTES_PER_MEGABYTE: f64 = 1_048_576.;

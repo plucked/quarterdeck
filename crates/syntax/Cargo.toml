@@ -1,5 +1,5 @@
 [package]
-name = "qc-syntax"
+name = "qd-syntax"
 description = "Syntax highlighting of file diffs with syntect and bat's grammars"
 version.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-qc-diff.workspace = true
+qd-diff.workspace = true
 syntect.workspace = true
 two-face.workspace = true
 

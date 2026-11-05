@@ -1,6 +1,6 @@
 //! Parsing GitHub-flavored Markdown into blocks, through the public API.
 
-use qc_markdown::{
+use qd_markdown::{
     ColumnAlignment, HeadingLevel, InlineStyle, MarkdownBlock, MarkdownDocument, StyledRun,
     TaskState,
 };

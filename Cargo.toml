@@ -10,12 +10,12 @@ publish = false
 
 [workspace.dependencies]
 # internal
-qc-cache = { path = "crates/cache" }
-qc-diff = { path = "crates/diff" }
-qc-file-tree = { path = "crates/file_tree" }
-qc-github = { path = "crates/github" }
-qc-markdown = { path = "crates/markdown" }
-qc-syntax = { path = "crates/syntax" }
+qd-cache = { path = "crates/cache" }
+qd-diff = { path = "crates/diff" }
+qd-file-tree = { path = "crates/file_tree" }
+qd-github = { path = "crates/github" }
+qd-markdown = { path = "crates/markdown" }
+qd-syntax = { path = "crates/syntax" }
 
 # external
 anyhow = "1"

@@ -74,7 +74,7 @@ impl UiStateStore {
 
 #[cfg(test)]
 mod tests {
-    use qc_diff::{ChangeHighlight, WhitespaceMode};
+    use qd_diff::{ChangeHighlight, WhitespaceMode};
 
     use super::*;
 

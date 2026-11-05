@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow};
-use qc_file_tree::FileKind;
+use qd_file_tree::FileKind;
 use rusqlite::{OptionalExtension, params};
 
 use crate::ui_state_store::SINGLE_ROW_ID;

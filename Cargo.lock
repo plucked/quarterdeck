@@ -3530,30 +3530,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
-name = "qc-cache"
+name = "qd-cache"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "dirs 7.0.0",
- "qc-diff",
- "qc-file-tree",
- "qc-github",
+ "qd-diff",
+ "qd-file-tree",
+ "qd-github",
  "rusqlite",
 ]
 
 [[package]]
-name = "qc-diff"
+name = "qd-diff"
 version = "0.1.0"
 dependencies = [
  "similar",
 ]
 
 [[package]]
-name = "qc-file-tree"
+name = "qd-file-tree"
 version = "0.1.0"
 
 [[package]]
-name = "qc-github"
+name = "qd-github"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -3563,17 +3563,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "qc-markdown"
+name = "qd-markdown"
 version = "0.1.0"
 dependencies = [
  "pulldown-cmark",
 ]
 
 [[package]]
-name = "qc-syntax"
+name = "qd-syntax"
 version = "0.1.0"
 dependencies = [
- "qc-diff",
+ "qd-diff",
  "syntect",
  "two-face",
 ]
@@ -3588,18 +3588,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "quick-check"
+name = "quarterdeck"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures",
  "gpui",
- "qc-cache",
- "qc-diff",
- "qc-file-tree",
- "qc-github",
- "qc-markdown",
- "qc-syntax",
+ "qd-cache",
+ "qd-diff",
+ "qd-file-tree",
+ "qd-github",
+ "qd-markdown",
+ "qd-syntax",
 ]
 
 [[package]]

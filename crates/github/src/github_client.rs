@@ -21,7 +21,7 @@ use crate::{
 
 pub(crate) const API_BASE: &str = "https://api.github.com";
 pub(crate) const API_VERSION: &str = "2022-11-28";
-const USER_AGENT: &str = concat!("quick-check/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("quarterdeck/", env!("CARGO_PKG_VERSION"));
 /// The JSON answers of the REST API.
 const JSON_MEDIA_TYPE: &str = "application/vnd.github+json";
 /// A comparison as one `git diff` text: every file, unlike the JSON

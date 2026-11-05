@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{App, ClickEvent, Div, FontWeight, Stateful, Window, div, prelude::*};
-use qc_github::PullRequestFile;
+use qd_github::PullRequestFile;
 
 use super::FileDiffState;
 use super::file_status_badge::render_file_status_badge;

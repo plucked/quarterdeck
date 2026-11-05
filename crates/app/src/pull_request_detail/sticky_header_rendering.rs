@@ -1,5 +1,5 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, Styled, div, prelude::*, px};
-use qc_github::PullRequest;
+use qd_github::PullRequest;
 
 use super::pull_request_detail::PullRequestDetail;
 use crate::button::Button;

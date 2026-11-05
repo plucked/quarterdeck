@@ -1,4 +1,4 @@
-use qc_cache::{NoteId, ReviewNote, ReviewSummary};
+use qd_cache::{NoteId, ReviewNote, ReviewSummary};
 
 /// A change to the user's review notes, waiting to be written.
 pub enum ReviewChange {

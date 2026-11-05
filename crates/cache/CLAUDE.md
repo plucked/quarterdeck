@@ -1,4 +1,4 @@
-# qc-cache
+# qd-cache
 
 | Module | Holds |
 |---|---|
@@ -14,19 +14,19 @@
 | `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
 | `sql_integers` / `unix_now` | checked integer conversions; current time |
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset, tab, sidebar visibility |
-| `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qc-diff` enums |
+| `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qd-diff` enums |
 | `viewed_file` / `patch_fingerprint` / `viewed_files_storage` / `review_scope` | viewed marks per `ReviewScope` (a PR, or a combined range of stack layers) and file, with an FNV-1a patch fingerprint (stable across Rust versions) |
 | `review_note` / `note_id` / `note_destination` / `note_anchor` / `review_summary` / `review_notes_storage` | the user's review comments: `ReviewNote` (local note or GitHub draft) per `ReviewScope`, on lines (`NoteAnchor::Line`) or replying to a GitHub thread (`NoteAnchor::Reply`); `NoteId` made by the app (time-based, unique per process) so writes can be batched; `ReviewSummary` (verdict + body) per PR |
 | `panel_widths` / `panel_widths_storage` | `PanelWidths` (sidebar, side panel; defaults 380 / 300): one row, each width saved on its own |
 | `queue_tab` / `stack_review_mode` | `QueueTab` (authored, review requested) in the queue state; `StackReviewMode` (layer, combined) in the review layout |
-| `review_layout_state` / `panel_visibility` / `review_layout_storage` | `ReviewLayoutState` (one row): file tree `PanelVisibility`, `hide_viewed`, hidden `qc_file_tree::FileKind`s (`hide_code`, `hide_tests`, `hide_generated`, `hide_unchanged_moves`), stack review mode, comment destination |
+| `review_layout_state` / `panel_visibility` / `review_layout_storage` | `ReviewLayoutState` (one row): file tree `PanelVisibility`, `hide_viewed`, hidden `qd_file_tree::FileKind`s (`hide_code`, `hide_tests`, `hide_generated`, `hide_unchanged_moves`), stack review mode, comment destination |
 | `stack_storage` / `cached_stack` | `pr_stacks` + `pr_stack_layers`: a stack's layers with the response ETag |
 | `comparison_storage` | `compare_file_sets` + `compare_files`: files between two commits (combined stack diffs) |
 
 - One database file; each store opens its own connection.
 - Schema changes append a new entry to `SCHEMA_MIGRATIONS`; never edit a shipped one.
 - Every field is its own typed column; nothing is stored as JSON. Changed files are `pr_file_sets` (version tag) + `pr_files` (one row per file, `position` keeps GitHub's order).
-- Adding a field to a `qc-github` type means a migration adding its column and updating the row mapping in `github_cache.rs`.
+- Adding a field to a `qd-github` type means a migration adding its column and updating the row mapping in `github_cache.rs`.
 - UI state tables hold one row (`id = 1`); `review_queue_view.selected_pr_id`, `viewed_files.pr_id` and `combined_viewed_files` have no foreign key (the PR may be gone or refetched; the user's state stays). Combined marks are keyed by repo + first and last layer number.
 - `pull_requests` carries the stack membership (`stack_*` columns, all NULL for a standalone PR). `put_pull_request`/`pull_request(id)` hold a stack layer opened outside any list.
 - `review_notes`: one table for both destinations; scope is `pr_id` or (repo, first, last layer numbers), enforced by CHECKs; anchor is (side, line, start_line) or `reply_to_thread`. GitHub drafts are deleted by the app as GitHub takes them.

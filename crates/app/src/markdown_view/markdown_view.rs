@@ -4,7 +4,7 @@ use gpui::{
     App, ClipboardItem, CursorStyle, DispatchPhase, ElementId, Entity, IntoElement, MouseButton,
     MouseMoveEvent, MouseUpEvent, RenderOnce, SharedString, Window, canvas, div, prelude::*,
 };
-use qc_markdown::MarkdownDocument;
+use qd_markdown::MarkdownDocument;
 
 use super::block_rendering::render_blocks;
 use super::markdown_selection::MarkdownSelection;

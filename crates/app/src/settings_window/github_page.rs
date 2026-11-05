@@ -1,6 +1,6 @@
 use gpui::{App, IntoElement, SharedString, div, prelude::*};
-use qc_cache::{CacheTtl, CacheUsage, CachedData};
-use qc_github::{ApiUsageSnapshot, RateLimit};
+use qd_cache::{CacheTtl, CacheUsage, CachedData};
+use qd_github::{ApiUsageSnapshot, RateLimit};
 
 use super::setting_row::SettingRow;
 use crate::app_services::AppServices;

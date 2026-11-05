@@ -1,5 +1,5 @@
-use qc_cache::{ReviewScope, StackReviewMode};
-use qc_github::{PullRequest, PullRequestStack, RepoRef};
+use qd_cache::{ReviewScope, StackReviewMode};
+use qd_github::{PullRequest, PullRequestStack, RepoRef};
 
 /// What the detail pane shows the files of: the shown pull request alone,
 /// or several layers of its stack combined into one diff.
@@ -100,7 +100,7 @@ impl ReviewTarget {
 
 #[cfg(test)]
 mod tests {
-    use qc_github::{StackLayer, StackMembership, User};
+    use qd_github::{StackLayer, StackMembership, User};
 
     use super::*;
 

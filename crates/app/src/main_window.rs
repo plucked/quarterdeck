@@ -1,6 +1,6 @@
 use gpui::{Context, Entity, Subscription, Window, div, prelude::*};
 
-use qc_cache::DisplayUuid;
+use qd_cache::DisplayUuid;
 
 use crate::app_services::AppServices;
 use crate::review_queue::ReviewQueue;

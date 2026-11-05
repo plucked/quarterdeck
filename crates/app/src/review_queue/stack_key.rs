@@ -1,4 +1,4 @@
-use qc_github::{PullRequest, RepoRef};
+use qd_github::{PullRequest, RepoRef};
 
 /// Identifies a stack: its repository and its number there.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

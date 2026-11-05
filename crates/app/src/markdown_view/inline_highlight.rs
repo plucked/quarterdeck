@@ -1,5 +1,5 @@
 use gpui::{FontStyle, FontWeight, HighlightStyle, StrikethroughStyle, UnderlineStyle, px};
-use qc_markdown::InlineStyle;
+use qd_markdown::InlineStyle;
 
 use crate::theme;
 

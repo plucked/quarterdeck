@@ -1,6 +1,6 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*, px};
-use qc_cache::{NoteAnchor, NoteDestination, ReviewNote};
-use qc_github::ReviewEvent;
+use qd_cache::{NoteAnchor, NoteDestination, ReviewNote};
+use qd_github::ReviewEvent;
 
 use super::comment_card_rendering::{element_id, lines_label};
 use super::pull_request_detail::PullRequestDetail;

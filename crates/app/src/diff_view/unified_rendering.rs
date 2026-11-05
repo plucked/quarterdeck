@@ -1,6 +1,6 @@
 use gpui::{Div, prelude::*};
-use qc_diff::DiffLine;
-use qc_syntax::SyntaxSpan;
+use qd_diff::DiffLine;
+use qd_syntax::SyntaxSpan;
 
 use super::diff_cell_rendering::{render_code, render_gutter, render_marker, render_row};
 use super::file_card_rendering::frame_file_row;

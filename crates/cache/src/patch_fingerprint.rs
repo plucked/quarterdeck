@@ -1,4 +1,4 @@
-use qc_github::PullRequestFile;
+use qd_github::PullRequestFile;
 
 /// FNV-1a 64-bit parameters: a small hash that stays the same across Rust
 /// versions and platforms, unlike `std`'s hasher, so stored values compare.

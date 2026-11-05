@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use qc_cache::{PatchFingerprint, ViewedFile};
+use qd_cache::{PatchFingerprint, ViewedFile};
 
 use super::loaded_file::LoadedFile;
 use super::viewed_toggle::ViewedToggle;
@@ -96,8 +96,8 @@ impl FileReviewState {
 
 #[cfg(test)]
 mod tests {
-    use qc_diff::DiffOptions;
-    use qc_github::PullRequestFile;
+    use qd_diff::DiffOptions;
+    use qd_github::PullRequestFile;
 
     use super::*;
 

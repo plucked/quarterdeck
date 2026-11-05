@@ -1,6 +1,6 @@
 use gpui::{IntoElement, div, prelude::*};
-use qc_cache::{DiffLayout, DiffViewSettings, LineWrapping};
-use qc_diff::{ChangeHighlight, WhitespaceMode};
+use qd_cache::{DiffLayout, DiffViewSettings, LineWrapping};
+use qd_diff::{ChangeHighlight, WhitespaceMode};
 
 use super::setting_row::SettingRow;
 use crate::app_settings::AppSettings;

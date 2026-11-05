@@ -1,5 +1,5 @@
 use gpui::{Pixels, Point, SharedString, TextLayout};
-use qc_markdown::LinkRange;
+use qd_markdown::LinkRange;
 
 /// What separates two segments in the document's text, and in copied text.
 pub const SEGMENT_SEPARATOR: &str = "\n";

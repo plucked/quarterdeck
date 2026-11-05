@@ -1,4 +1,4 @@
-use qc_diff::SplitRow;
+use qd_diff::SplitRow;
 
 use crate::diff_view::FileNote;
 

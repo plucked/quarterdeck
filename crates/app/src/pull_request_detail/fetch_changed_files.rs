@@ -1,5 +1,5 @@
 use anyhow::Result;
-use qc_github::{GitHubClient, MAX_LISTED_FILES, PullRequest, PullRequestFile};
+use qd_github::{GitHubClient, MAX_LISTED_FILES, PullRequest, PullRequestFile};
 
 use super::file_set_update::FileSetUpdate;
 use super::load_progress::LoadProgress;

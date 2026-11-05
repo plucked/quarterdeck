@@ -1,4 +1,4 @@
-use qc_diff::{DiffLineKind, FileDiff};
+use qd_diff::{DiffLineKind, FileDiff};
 
 use crate::SyntaxSpan;
 use crate::syntax_highlighter::SyntaxHighlighter;
@@ -77,7 +77,7 @@ impl DiffSyntax {
 
 #[cfg(test)]
 mod tests {
-    use qc_diff::DiffOptions;
+    use qd_diff::DiffOptions;
 
     use super::*;
 

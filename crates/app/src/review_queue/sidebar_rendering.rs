@@ -4,8 +4,8 @@ use gpui::{
     Animation, AnimationExt as _, AnyElement, Context, FontWeight, SharedString, Styled, div, list,
     prelude::*, pulsating_between, px,
 };
-use qc_cache::QueueTab;
-use qc_github::{PullRequest, StackLayer};
+use qd_cache::QueueTab;
+use qd_github::{PullRequest, StackLayer};
 
 use super::ReviewQueue;
 use super::queue_row::{QueueRow, StackGroup};

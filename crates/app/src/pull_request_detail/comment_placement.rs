@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use qc_github::LineSide;
+use qd_github::LineSide;
 
 use super::review_comments::PlacedCard;
 

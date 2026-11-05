@@ -32,7 +32,7 @@
 //! - `diff_view_settings.rs`: `DiffViewSettings`, how file diffs are shown.
 //! - `diff_layout.rs`: `DiffLayout`, unified or side by side.
 //! - `line_wrapping.rs`: `LineWrapping`, wrap or scroll long lines.
-//! - `diff_option_sql_text.rs`: SQL text of the `qc-diff` enums in the settings.
+//! - `diff_option_sql_text.rs`: SQL text of the `qd-diff` enums in the settings.
 //! - `diff_view_settings_storage.rs`: reads and writes of the diff view settings.
 //! - `viewed_file.rs`: `ViewedFile`, a file marked as viewed.
 //! - `patch_fingerprint.rs`: `PatchFingerprint`, a stable hash of a file's patch.

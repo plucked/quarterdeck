@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use qc_github::PullRequest;
-use qc_markdown::MarkdownDocument;
+use qd_github::PullRequest;
+use qd_markdown::MarkdownDocument;
 
 /// The parsed description of one version of a pull request. Kept while that
 /// version stays shown, so a refresh does not replace the document and reset

@@ -116,7 +116,7 @@ fn read_marks(
 
 #[cfg(test)]
 mod tests {
-    use qc_github::RepoRef;
+    use qd_github::RepoRef;
 
     use super::*;
 

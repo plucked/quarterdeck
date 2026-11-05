@@ -1,5 +1,5 @@
 use anyhow::Result;
-use qc_github::{DownloadProgress, GitHubClient, PullRequestFile};
+use qd_github::{DownloadProgress, GitHubClient, PullRequestFile};
 
 use super::review_target::CombinedRange;
 use crate::shared_cache::SharedCache;
