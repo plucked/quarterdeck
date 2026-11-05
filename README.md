@@ -46,6 +46,15 @@ cargo run --release
 
 Quarterdeck uses `GITHUB_TOKEN` when it is set, otherwise the GitHub CLI's login. Without either it shows what it has cached.
 
+### As a Mac app
+
+```bash
+packaging/macos/bundle.sh               # builds target/bundle/Quarterdeck.app
+packaging/macos/bundle.sh --universal   # one app for Apple Silicon and Intel Macs
+```
+
+Drag `Quarterdeck.app` into Applications. It is signed for this Mac only (not notarized yet). Started from Finder or the Dock it does not see your terminal's `GITHUB_TOKEN` or `PATH`, so for now start it with `open target/bundle/Quarterdeck.app` from a terminal where `gh` or the token works.
+
 ### With Devbox
 
 With [Devbox](https://www.jetify.com/devbox), the tools come pinned in a shell of their own (Rust through `rustup`, bacon, the GitHub CLI, SQLite); Xcode's command line tools still have to be installed on the Mac:
