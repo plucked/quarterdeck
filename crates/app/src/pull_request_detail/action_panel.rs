@@ -15,6 +15,8 @@ pub enum ArmedAction {
     /// A merge past unmet requirements the viewer may bypass.
     AdminMerge,
     Close,
+    /// Deleting the head branch of a pull request already closed or merged.
+    DeleteBranch,
 }
 
 /// How the action is going.

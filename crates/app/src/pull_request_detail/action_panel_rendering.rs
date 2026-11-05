@@ -50,8 +50,9 @@ impl PullRequestDetail {
             ),
             (None, None) => render_line("Reading the merge options from GitHub…", theme::muted()),
             (Some(options), None) => match options.state {
-                PullRequestState::Merged => render_line("Already merged.", theme::added()),
-                PullRequestState::Closed => render_line("Already closed.", theme::muted()),
+                PullRequestState::Merged | PullRequestState::Closed => {
+                    self.render_finished_body(panel, options, cx)
+                }
                 PullRequestState::Open => match panel.action {
                     PanelAction::Merge => self.render_merge_body(panel, options, cx),
                     PanelAction::Close => self.render_close_body(panel, options, cx),
@@ -174,13 +175,13 @@ impl PullRequestDetail {
                     ArmedAction::AdminMerge => {
                         format!("{what}, bypassing the unmet requirements? This cannot be undone.")
                     }
-                    ArmedAction::Merge | ArmedAction::Close => {
+                    ArmedAction::Merge | ArmedAction::Close | ArmedAction::DeleteBranch => {
                         format!("{what}? This cannot be undone.")
                     }
                 };
                 render_confirmation(question, "Confirm merge", cx)
             }
-            Some(ArmedAction::Close) | None => div()
+            Some(ArmedAction::Close | ArmedAction::DeleteBranch) | None => div()
                 .flex()
                 .gap_2()
                 .justify_end()
@@ -230,7 +231,8 @@ impl PullRequestDetail {
                 "Confirm close",
                 cx,
             ),
-            Some(ArmedAction::Merge | ArmedAction::AdminMerge) | None => div()
+            Some(ArmedAction::Merge | ArmedAction::AdminMerge | ArmedAction::DeleteBranch)
+            | None => div()
                 .flex()
                 .gap_2()
                 .justify_end()
@@ -263,6 +265,53 @@ impl PullRequestDetail {
             .child(self.render_branch_choice(panel, options, cx))
             .child(row)
             .into_any_element()
+    }
+
+    /// A pull request merged or closed already: what it is, and deleting its
+    /// branch when it is still there and may go.
+    fn render_finished_body(
+        &self,
+        panel: &ActionPanel,
+        options: &MergeOptions,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let state = match options.state {
+            PullRequestState::Merged => "Already merged.",
+            PullRequestState::Closed | PullRequestState::Open => "Already closed.",
+        };
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(render_line(state, theme::muted()));
+        let is_deleted = matches!(&panel.progress, ActionProgress::Done(_));
+        if !self.can_delete_head_branch(Some(options)) || is_deleted {
+            return body.into_any_element();
+        }
+        let branch = &options.head_ref;
+        let row = match panel.armed {
+            Some(ArmedAction::DeleteBranch) => {
+                render_confirmation(format!("Delete branch {branch}?"), "Confirm delete", cx)
+            }
+            Some(ArmedAction::Merge | ArmedAction::AdminMerge | ArmedAction::Close) | None => div()
+                .flex()
+                .justify_end()
+                .child(
+                    Button::new("delete-finished-branch", "Delete branch")
+                        .danger()
+                        .disabled(panel.is_working())
+                        .on_click(cx.listener(|detail, _, _, cx| {
+                            detail.arm_action(Some(ArmedAction::DeleteBranch), cx);
+                        })),
+                )
+                .into_any_element(),
+        };
+        body.child(render_line(
+            format!("Its branch {branch} still exists."),
+            theme::muted(),
+        ))
+        .child(row)
+        .into_any_element()
     }
 
     /// Deleting the head branch with the action: a checkbox when allowed,

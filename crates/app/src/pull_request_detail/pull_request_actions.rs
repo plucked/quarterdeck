@@ -42,8 +42,13 @@ impl PullRequestDetail {
                         match options {
                             Ok(options) => {
                                 panel.method = options.allowed_methods.first().copied();
-                                panel.delete_branch =
-                                    can_delete && !options.deletes_branch_on_merge;
+                                // A merge leaves the branch to a repository that deletes it itself; a close never does.
+                                panel.delete_branch = match panel.action {
+                                    PanelAction::Merge => {
+                                        can_delete && !options.deletes_branch_on_merge
+                                    }
+                                    PanelAction::Close => can_delete,
+                                };
                                 panel.options = Some(options);
                             }
                             Err(error) => panel.options_error = Some(format!("{error:#}").into()),
@@ -125,7 +130,9 @@ impl PullRequestDetail {
         let working = match armed {
             ArmedAction::Merge | ArmedAction::AdminMerge => "Merging on GitHub…",
             ArmedAction::Close => "Closing on GitHub…",
+            ArmedAction::DeleteBranch => "Deleting the branch on GitHub…",
         };
+        let delete_branch = delete_branch || armed == ArmedAction::DeleteBranch;
         let task = cx.spawn(async move |detail, cx| {
             let repo = pull_request.repo.clone();
             let number = pull_request.number;
@@ -145,6 +152,8 @@ impl PullRequestDetail {
                         })
                         .await
                 }
+                // The pull request is finished already; only the branch goes.
+                ArmedAction::DeleteBranch => Ok(MergeOutcome::Merged),
                 ArmedAction::Close => {
                     let (close_client, close_repo) = (client.clone(), repo.clone());
                     cx.background_executor()
@@ -215,6 +224,12 @@ fn action_result(
         .map(|error| format!(" The branch could not be deleted: {error}"))
         .unwrap_or_default();
     match (armed, outcome) {
+        (ArmedAction::DeleteBranch, Ok(_)) => match branch_error {
+            Some(error) => {
+                ActionProgress::Failed(format!("The branch could not be deleted: {error}").into())
+            }
+            None => ActionProgress::Done("Branch deleted.".into()),
+        },
         (ArmedAction::Close, Ok(_)) => ActionProgress::Done(format!("Closed.{branch_note}").into()),
         (ArmedAction::Merge | ArmedAction::AdminMerge, Ok(MergeOutcome::Merged)) => {
             ActionProgress::Done(format!("Merged.{branch_note}").into())

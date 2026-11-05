@@ -7,7 +7,8 @@ use super::selection_origin::SelectionOrigin;
 pub enum SelectionAfterRefresh<'lists> {
     /// Nothing was selected, or the listed pull request left every list.
     Cleared,
-    /// The selection stays as it is (a stack layer in no list).
+    /// The selection stays as it is (a stack layer in no list, or a pull
+    /// request just merged or closed).
     Unchanged,
     /// The same pull request, as the refreshed list has it (its stack
     /// membership may be new); the detail reloads it if `updated_at` moved.
@@ -25,7 +26,9 @@ impl<'lists> SelectionAfterRefresh<'lists> {
         match (was_selected, refreshed, origin) {
             (false, _, _) | (true, None, SelectionOrigin::Listed) => Self::Cleared,
             (true, Some(refreshed), _) => Self::Refreshed(refreshed),
-            (true, None, SelectionOrigin::StackLayer) => Self::Unchanged,
+            (true, None, SelectionOrigin::StackLayer | SelectionOrigin::Finished) => {
+                Self::Unchanged
+            }
         }
     }
 }
@@ -80,6 +83,15 @@ mod tests {
     fn unlisted_stack_layer_stays() {
         assert_eq!(
             SelectionAfterRefresh::decide(true, SelectionOrigin::StackLayer, None),
+            SelectionAfterRefresh::Unchanged
+        );
+    }
+
+    /// A pull request just merged or closed stays selected after leaving the lists.
+    #[test]
+    fn finished_pull_request_stays() {
+        assert_eq!(
+            SelectionAfterRefresh::decide(true, SelectionOrigin::Finished, None),
             SelectionAfterRefresh::Unchanged
         );
     }
