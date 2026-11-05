@@ -4,7 +4,8 @@ use rusqlite::Connection;
 /// The schema history, append-only: entry `n` (0-based) moves `PRAGMA
 /// user_version` from `n` to `n + 1`. Entities are JSON blobs beside a few
 /// indexed columns, so model changes rarely need a new entry.
-const SCHEMA_MIGRATIONS: &[&str] = &[r"
+const SCHEMA_MIGRATIONS: &[&str] = &[
+    r"
     CREATE TABLE pull_requests (
         id          INTEGER PRIMARY KEY,
         repo        TEXT    NOT NULL,
@@ -29,7 +30,26 @@ const SCHEMA_MIGRATIONS: &[&str] = &[r"
         updated_at  TEXT    NOT NULL,
         data        TEXT    NOT NULL
     );
-"];
+",
+    r"
+    -- UI state restored after a relaunch. Each table holds at most one row (id = 1).
+    CREATE TABLE window_placement (
+        id      INTEGER PRIMARY KEY CHECK (id = 1),
+        mode    TEXT    NOT NULL CHECK (mode IN ('windowed', 'maximized', 'fullscreen')),
+        x       REAL    NOT NULL,
+        y       REAL    NOT NULL,
+        width   REAL    NOT NULL CHECK (width > 0),
+        height  REAL    NOT NULL CHECK (height > 0)
+    );
+
+    CREATE TABLE review_queue_view (
+        id                    INTEGER PRIMARY KEY CHECK (id = 1),
+        -- No foreign key: the pull request may have left the cache; the app falls back.
+        selected_pr_id        INTEGER,
+        detail_scroll_offset  REAL    NOT NULL
+    );
+",
+];
 
 /// Applies every migration newer than the database's `user_version`, each in
 /// its own transaction, so a failed migration leaves the previous version intact.

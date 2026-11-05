@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context as _, Result};
@@ -6,10 +6,7 @@ use qc_github::{PullRequest, PullRequestFile};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::PullRequestListKey;
-use crate::schema_migrations::apply_schema_migrations;
-
-const APP_DIRECTORY: &str = "quick-check";
-const DATABASE_FILE: &str = "cache.sqlite";
+use crate::database_connection::{default_database_path, open_database};
 
 /// The SQLite connection holding cached GitHub data. Every write runs in one
 /// statement or one transaction, so the database is consistent after any failure.
@@ -18,30 +15,24 @@ pub struct GitHubCache {
 }
 
 impl GitHubCache {
-    /// Opens (creating if needed) `~/Library/Application Support/quick-check/cache.sqlite`.
+    /// Opens (creating if needed) the default database file.
     pub fn open_default() -> Result<Self> {
-        Self::open(&default_path()?)
+        Self::open(&default_database_path()?)
     }
 
     /// Opens (creating if needed) the database at `path` and migrates it.
     pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        Self::initialize(Connection::open(path)?)
+        Ok(Self {
+            connection: open_database(path)?,
+        })
     }
 
     /// A fresh, migrated database that lives only as long as the value.
     #[cfg(test)]
     pub fn open_in_memory() -> Result<Self> {
-        Self::initialize(Connection::open_in_memory()?)
-    }
-
-    /// Turns on WAL and foreign keys, then brings the schema up to date.
-    fn initialize(mut connection: Connection) -> Result<Self> {
-        connection.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
-        apply_schema_migrations(&mut connection)?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection: crate::database_connection::open_in_memory_database()?,
+        })
     }
 
     /// Replaces the members of a list with `pull_requests`, in that order,
@@ -145,12 +136,6 @@ fn unix_now() -> i64 {
         .unwrap_or_default()
 }
 
-/// The default database location inside the user's data directory.
-fn default_path() -> Result<PathBuf> {
-    let data_directory = dirs::data_dir().context("no data directory")?;
-    Ok(data_directory.join(APP_DIRECTORY).join(DATABASE_FILE))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,23 +162,6 @@ mod tests {
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: updated_at.into(),
         }
-    }
-
-    /// Reopening a migrated file applies no migration twice.
-    #[test]
-    fn migrations_are_idempotent() {
-        let directory = std::env::temp_dir().join(format!("qc-cache-test-{}", std::process::id()));
-        let path = directory.join(DATABASE_FILE);
-        GitHubCache::open(&path).unwrap();
-        GitHubCache::open(&path).unwrap();
-        std::fs::remove_dir_all(directory).ok();
-    }
-
-    /// The default database sits in the app's own data directory.
-    #[test]
-    fn default_path_is_app_scoped() {
-        let path = default_path().unwrap();
-        assert!(path.ends_with("quick-check/cache.sqlite"));
     }
 
     /// A list replacement keeps the new order and drops members not in it.
