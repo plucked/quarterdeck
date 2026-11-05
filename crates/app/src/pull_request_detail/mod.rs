@@ -30,7 +30,6 @@
 //! - `load_progress.rs`: `LoadProgress`, how far loading the files has come.
 //! - `review_target.rs`: `ReviewTarget`, one layer or a combined range of stack layers.
 //! - `fetch_combined_files.rs`: gets a combined range's files from the cache or one diff download.
-//! - `fetch_stack.rs`: gets a stack's layers from the cache, then checks them with GitHub.
 //! - `stack_bar_rendering.rs`: the header's stack line: layer, neighbours, review mode, range.
 //! - `stack_map_rendering.rs`: the stack map above the file tree: every layer, the range.
 //! - `activity_rendering.rs`: the loading indicators: header pill, progress line, loading card.
@@ -45,7 +44,6 @@ mod detail_row_list;
 mod diff_selection;
 mod fetch_changed_files;
 mod fetch_combined_files;
-mod fetch_stack;
 mod file_review_state;
 mod file_set_update;
 mod file_tree_rendering;

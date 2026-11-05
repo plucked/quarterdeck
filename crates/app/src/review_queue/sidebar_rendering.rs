@@ -6,7 +6,7 @@ use gpui::{
     prelude::*, pulsating_between, px, uniform_list,
 };
 use qc_cache::QueueTab;
-use qc_github::PullRequest;
+use qc_github::{PullRequest, StackLayer};
 
 use super::ReviewQueue;
 use super::queue_row::{QueueRow, StackGroup};
@@ -168,16 +168,56 @@ impl ReviewQueue {
                     }
                     QueueRow::StackLayer(list_index) => {
                         let pull_request = self.shown_list().get(*list_index)?;
-                        render_stack_layer_row(
-                            pull_request,
-                            *list_index,
-                            selected_id == Some(pull_request.id),
-                            cx,
+                        let list_index = *list_index;
+                        let draft_marker = if pull_request.draft { " · draft" } else { "" };
+                        render_layer_row(
+                            LayerRow {
+                                id: ("stack-layer", list_index).into(),
+                                position: pull_request
+                                    .stack
+                                    .as_ref()
+                                    .map_or(0, |membership| membership.position),
+                                title: pull_request.title.clone().into(),
+                                meta: format!(
+                                    "#{} · {}{draft_marker}",
+                                    pull_request.number, pull_request.author.login
+                                )
+                                .into(),
+                                is_listed: true,
+                                needs_review: self
+                                    .needs_review(&pull_request.repo, pull_request.number),
+                                is_selected: selected_id == Some(pull_request.id),
+                            },
+                            cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)),
+                        )
+                    }
+                    QueueRow::OtherLayer { key, layer } => {
+                        let stack_layer = self.stack(key)?.layers.get(*layer)?;
+                        let (key, layer) = (key.clone(), *layer);
+                        render_layer_row(
+                            LayerRow {
+                                id: ("other-layer", index).into(),
+                                position: u64::try_from(layer + 1).unwrap_or(u64::MAX),
+                                title: stack_layer.title.clone().into(),
+                                meta: format!(
+                                    "#{} · {}{}",
+                                    stack_layer.number,
+                                    stack_layer.author_login,
+                                    layer_state_marker(stack_layer)
+                                )
+                                .into(),
+                                is_listed: false,
+                                needs_review: self.needs_review(&key.repo, stack_layer.number),
+                                is_selected: self.is_selected(&key.repo, stack_layer.number),
+                            },
+                            cx.listener(move |queue, _, _, cx| {
+                                queue.open_other_layer(&key, layer, cx);
+                            }),
                         )
                     }
                     QueueRow::StackHeader(group) => {
                         let is_reviewed = self.is_stack_reviewed(&group.key, cx);
-                        render_stack_header(index, group, is_reviewed, cx)
+                        render_stack_header(index, group, self.tab(), is_reviewed, cx)
                     }
                 };
                 Some(element)
@@ -259,16 +299,19 @@ fn render_pull_request_row(
 fn render_stack_header(
     row_index: usize,
     group: &StackGroup,
+    tab: QueueTab,
     is_reviewed: bool,
     cx: &mut Context<ReviewQueue>,
 ) -> AnyElement {
     let chevron = if group.is_collapsed { "▸" } else { "▾" };
     let open_key = group.key.clone();
     let toggle_key = group.key.clone();
-    let listed = if u64::try_from(group.listed).is_ok_and(|listed| listed == group.size) {
-        "all layers listed".to_owned()
-    } else {
-        format!("{} of {} layers listed", group.listed, group.size)
+    let is_all = u64::try_from(group.listed).is_ok_and(|listed| listed == group.size);
+    let listed = match (tab, is_all) {
+        (QueueTab::Authored, true) => "all layers yours".to_owned(),
+        (QueueTab::Authored, false) => format!("{} yours", group.listed),
+        (QueueTab::ReviewRequested, true) => "all layers to review".to_owned(),
+        (QueueTab::ReviewRequested, false) => format!("{} to review", group.listed),
     };
     div()
         .id(("stack-header", row_index))
@@ -319,24 +362,37 @@ fn render_stack_header(
         .into_any_element()
 }
 
-/// One listed layer of a stack, under its header: the layer's position on
-/// a rail, then title and `#number · author`; clicking selects it.
-fn render_stack_layer_row(
-    pull_request: &PullRequest,
-    list_index: usize,
+/// What one layer row under a stack's header shows.
+struct LayerRow {
+    id: gpui::ElementId,
+    /// 1 for the layer on the trunk.
+    position: u64,
+    title: SharedString,
+    meta: SharedString,
+    /// Whether the shown list has it; other layers show muted.
+    is_listed: bool,
+    /// Whether it asks for the viewer's review (a badge says so).
+    needs_review: bool,
     is_selected: bool,
-    cx: &mut Context<ReviewQueue>,
+}
+
+/// One layer of a stack, under its header: its position on a rail, then
+/// title (with a Review badge when it asks for the viewer's review) and
+/// `#number · author`. Layers the list lacks are muted; clicking any opens it.
+fn render_layer_row(
+    row: LayerRow,
+    on_click: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
-    let draft_marker = if pull_request.draft { " · draft" } else { "" };
-    let position = pull_request
-        .stack
-        .as_ref()
-        .map_or(String::new(), |membership| membership.position.to_string());
-    row_frame(("stack-layer", list_index), is_selected)
+    let rail_color = if row.is_listed {
+        theme::accent()
+    } else {
+        theme::border()
+    };
+    row_frame(row.id, row.is_selected)
         .pl_2()
         .flex()
         .gap_2()
-        .on_click(cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)))
+        .on_click(on_click)
         .child(
             div()
                 .flex_none()
@@ -347,24 +403,58 @@ fn render_stack_layer_row(
                 .gap_1()
                 .text_xs()
                 .text_color(theme::muted())
-                .child(position)
-                .child(div().w(px(2.)).h_full().bg(theme::accent())),
+                .child(row.position.to_string())
+                .child(div().w(px(2.)).h_full().bg(rail_color)),
         )
         .child(
             div()
                 .flex_1()
                 .min_w_0()
-                .child(div().truncate().child(pull_request.title.clone()))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1p5()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .when(!row.is_listed, |title| title.text_color(theme::muted()))
+                                .child(row.title),
+                        )
+                        .when(row.needs_review, |line| line.child(render_review_badge())),
+                )
                 .child(
                     div()
                         .text_xs()
                         .text_color(theme::muted())
                         .truncate()
-                        .child(format!(
-                            "#{} · {}{draft_marker}",
-                            pull_request.number, pull_request.author.login,
-                        )),
+                        .child(row.meta),
                 ),
         )
         .into_any_element()
+}
+
+/// The badge on a layer that asks for the viewer's review.
+fn render_review_badge() -> impl IntoElement {
+    div()
+        .flex_none()
+        .px_1()
+        .rounded_sm()
+        .border_1()
+        .border_color(theme::accent())
+        .text_xs()
+        .text_color(theme::accent())
+        .child("Review")
+}
+
+/// ` · merged`, ` · closed` or ` · draft` for a layer not simply open.
+fn layer_state_marker(layer: &StackLayer) -> &'static str {
+    match (layer.is_merged, layer.is_open, layer.is_draft) {
+        (true, _, _) => " · merged",
+        (false, false, _) => " · closed",
+        (false, true, true) => " · draft",
+        (false, true, false) => "",
+    }
 }

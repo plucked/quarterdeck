@@ -6,7 +6,7 @@ use gpui::{
     UniformListScrollHandle, Window, div, prelude::*,
 };
 use qc_cache::{DetailScrollPosition, PullRequestListKey, QueueTab, ReviewQueueViewState};
-use qc_github::{GitHubClient, PullRequest, RepoRef, StackMembership};
+use qc_github::{GitHubClient, PullRequest, PullRequestStack, RepoRef, StackMembership};
 
 use super::activation_refresh::ActivationRefresh;
 use super::queue_lists::QueueLists;
@@ -24,6 +24,7 @@ use crate::app_commands::{
 };
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
+use crate::fetch_stack::{cached_stack, refresh_stack};
 use crate::pull_request_detail::{DetailEvent, LayerRequest, PullRequestDetail};
 use crate::shared_cache::SharedCache;
 use crate::theme;
@@ -86,6 +87,11 @@ pub struct ReviewQueue {
     layer_error: Option<SharedString>,
     /// The sidebar's width, as dragged (and saved).
     sidebar_width: f32,
+    /// The layers of the listed pull requests' stacks, so the sidebar shows
+    /// whole stacks; from the cache at launch, checked after each refresh.
+    stacks: HashMap<StackKey, PullRequestStack>,
+    /// The check of those stacks with GitHub; replacing it cancels the previous one.
+    stacks_task: Option<Task<()>>,
     /// Keep the window activation and detail observers registered.
     _subscriptions: [Subscription; 2],
 }
@@ -109,6 +115,9 @@ impl ReviewQueue {
                 RefreshStatus::Failed(format!("cache: {error:#}").into()),
             ),
         };
+
+        // The cached layers of the listed stacks; local and small, read at startup.
+        let stacks = read_cached_stacks(&services.cache, &lists);
 
         // Nothing saved, or a row that no longer reads, restores nothing.
         let sidebar_width = cx
@@ -156,6 +165,8 @@ impl ReviewQueue {
             opening_layer: None,
             layer_error: None,
             sidebar_width,
+            stacks,
+            stacks_task: None,
             _subscriptions: [activation_subscription, detail_subscription],
         };
         queue.rebuild_rows();
@@ -215,7 +226,99 @@ impl ReviewQueue {
 
     /// Rebuilds the sidebar rows of the shown tab.
     fn rebuild_rows(&mut self) {
-        self.rows = QueueRow::build_all(self.lists.get(self.tab), &self.collapsed_stacks);
+        self.rows = QueueRow::build_all(
+            self.lists.get(self.tab),
+            &self.collapsed_stacks,
+            &self.stacks,
+        );
+    }
+
+    /// The known layers of stack `key`.
+    pub(super) fn stack(&self, key: &StackKey) -> Option<&PullRequestStack> {
+        self.stacks.get(key)
+    }
+
+    /// Whether pull request `number` of `repo` asks for the viewer's review.
+    pub(super) fn needs_review(&self, repo: &RepoRef, number: u64) -> bool {
+        self.lists
+            .review_requested
+            .iter()
+            .any(|pull_request| pull_request.number == number && &pull_request.repo == repo)
+    }
+
+    /// Whether the selected pull request is pull request `number` of `repo`.
+    pub(super) fn is_selected(&self, repo: &RepoRef, number: u64) -> bool {
+        self.selected
+            .as_ref()
+            .is_some_and(|selected| selected.number == number && &selected.repo == repo)
+    }
+
+    /// Shows a layer of stack `key` that the shown list lacks (a click on its row).
+    pub(super) fn open_other_layer(
+        &mut self,
+        key: &StackKey,
+        layer: usize,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(stack) = self.stacks.get(key) else {
+            return;
+        };
+        let Some(number) = stack.layers.get(layer).map(|layer| layer.number) else {
+            return;
+        };
+        let request = LayerRequest {
+            repo: stack.repo.clone(),
+            number,
+            membership: StackMembership {
+                number: stack.number,
+                position: u64::try_from(layer + 1).unwrap_or(u64::MAX),
+                size: u64::try_from(stack.layers.len()).unwrap_or(u64::MAX),
+                base_ref: stack.base_ref.clone(),
+            },
+        };
+        self.open_layer(&request, cx);
+    }
+
+    /// Checks the layers of every listed stack with GitHub (each request
+    /// free when unchanged), then shows the stacks whole.
+    fn refresh_stacks(&mut self, cx: &mut Context<Self>) {
+        let keys = listed_stack_keys(&self.lists);
+        let Ok(client) = self.services.github.clone() else {
+            return;
+        };
+        let cache = self.services.cache.clone();
+        self.stacks_task = Some(cx.spawn(async move |queue, cx| {
+            let refreshed = cx
+                .background_executor()
+                .spawn(async move {
+                    keys.into_iter()
+                        .filter_map(|key| {
+                            match refresh_stack(Ok(client.clone()), &cache, &key.repo, key.number) {
+                                Ok(stack) => Some((key, stack)),
+                                Err(error) => {
+                                    eprintln!(
+                                        "stack {}#{}: {error:#}",
+                                        key.repo.full_name(),
+                                        key.number
+                                    );
+                                    None
+                                }
+                            }
+                        })
+                        .collect::<HashMap<_, _>>()
+                })
+                .await;
+            queue
+                .update(cx, |queue, cx| {
+                    // Keep the last known layers of a stack whose check failed.
+                    let listed = listed_stack_keys(&queue.lists);
+                    queue.stacks.retain(|key, _| listed.contains(key));
+                    queue.stacks.extend(refreshed);
+                    queue.rebuild_rows();
+                    cx.notify();
+                })
+                .ok();
+        }));
     }
 
     /// Shows the list of `tab` and records it.
@@ -440,6 +543,7 @@ impl ReviewQueue {
 
         // A selection saved before the relaunch gets its last chance here.
         self.restore_selection(RestorePhase::RefreshedQueue, cx);
+        self.refresh_stacks(cx);
         cx.notify();
     }
 
@@ -692,6 +796,26 @@ fn read_cached_lists(cache: &SharedCache) -> anyhow::Result<QueueLists> {
         authored: cache.list(PullRequestListKey::AUTHORED)?,
         review_requested: cache.list(PullRequestListKey::REVIEW_REQUESTED)?,
     })
+}
+
+/// The stacks the listed pull requests belong to, each once.
+fn listed_stack_keys(lists: &QueueLists) -> HashSet<StackKey> {
+    lists.iter().filter_map(StackKey::of).collect()
+}
+
+/// The cached layers of the listed stacks; a stack not cached (or not
+/// readable) is left out, and its listed layers show alone until checked.
+fn read_cached_stacks(
+    cache: &SharedCache,
+    lists: &QueueLists,
+) -> HashMap<StackKey, PullRequestStack> {
+    listed_stack_keys(lists)
+        .into_iter()
+        .filter_map(|key| {
+            let stack = cached_stack(cache, &key.repo, key.number).ok()??;
+            Some((key, stack))
+        })
+        .collect()
 }
 
 /// The stack memberships the lists know now, kept when GraphQL fails.

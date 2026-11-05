@@ -8,6 +8,7 @@
 //! - `app_services.rs`: `AppServices`, the GitHub client and cache handed to views.
 //! - `scrollbar/`: `VerticalScrollbar`, a draggable scrollbar for any scroll container.
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
+//! - `fetch_stack.rs`: gets a stack's layers from the cache, and checks them with GitHub.
 //! - `word_range_at.rs`: the word around an offset, for double-click selection.
 //! - `theme.rs`: the color palette and fonts.
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
@@ -23,6 +24,7 @@ mod app_commands;
 mod app_services;
 mod app_settings;
 mod diff_view;
+mod fetch_stack;
 mod launch_app;
 mod main_window;
 mod markdown_view;

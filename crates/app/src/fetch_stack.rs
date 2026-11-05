@@ -6,7 +6,8 @@ use crate::shared_cache::SharedCache;
 /// The cached layers of stack `number` in `repo`, read quickly before
 /// GitHub is asked; `None` when not cached.
 ///
-/// Blocking: runs on the background executor.
+/// Blocking: a local read, run on the background executor, or on the main
+/// thread at startup (the queue's listed stacks).
 pub fn cached_stack(
     cache: &SharedCache,
     repo: &RepoRef,
