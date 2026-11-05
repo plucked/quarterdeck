@@ -6,6 +6,8 @@
 //! - `github_cache.rs`: `GitHubCache`, cached pull requests and lists.
 //! - `file_set_storage.rs`: a pull request's cached changed files, and confirming them.
 //! - `cache_cleanup.rs`: removing expired cache entries, and clearing the cache.
+//! - `cache_usage.rs`: `CacheUsage` and `CachedData`, how much the cache holds and takes on disk.
+//! - `cache_usage_storage.rs`: reading the cache's usage.
 //! - `cached_file_set.rs`: `CachedFileSet`, cached files with what they were fetched for.
 //! - `file_set_revision.rs`: `FileSetRevision`, the commits and response tag of a file set.
 //! - `cleanup_counts.rs`: `CleanupCounts`, what a cleanup removed.
@@ -51,6 +53,8 @@
 mod cache_cleanup;
 mod cache_settings_storage;
 mod cache_ttl;
+mod cache_usage;
+mod cache_usage_storage;
 mod cached_file_set;
 mod cached_stack;
 mod cleanup_counts;
@@ -94,6 +98,7 @@ mod window_mode;
 mod window_placement;
 
 pub use cache_ttl::CacheTtl;
+pub use cache_usage::{CacheUsage, CachedData};
 pub use cached_file_set::CachedFileSet;
 pub use cached_stack::CachedStack;
 pub use cleanup_counts::CleanupCounts;

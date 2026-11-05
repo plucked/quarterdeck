@@ -9,7 +9,8 @@
 | `pull_request_list_key` | `PullRequestListKey` newtype (`REVIEW_REQUESTED`) |
 | `window_placement` / `window_mode` / `display_uuid` | `WindowPlacement` (bounds relative to its display), `WindowMode` (SQL text mapping), `DisplayUuid` |
 | `file_set_storage` / `cached_file_set` / `file_set_revision` | changed files with the commits + PR ETag they were fetched for; `file_set` (marks used), `put_files`, `confirm_files` |
-| `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` |
+| `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` (then `VACUUM` and a WAL checkpoint, so the file shrinks) |
+| `cache_usage` / `cache_usage_storage` | `CacheUsage` (+ `CachedData`: entries, files, bytes) per kind (pull requests, PR files, comparisons), size on disk (pages + WAL) and free pages; `GitHubCache::usage` sums text bytes with `LENGTH(CAST(… AS BLOB))` |
 | `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
 | `sql_integers` / `unix_now` | checked integer conversions; current time |
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset, tab, sidebar visibility |

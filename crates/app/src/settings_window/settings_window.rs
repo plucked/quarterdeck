@@ -1,7 +1,8 @@
 use gpui::{
-    App, Context, FocusHandle, FontWeight, IntoElement, Render, Subscription, Window, div,
+    App, Context, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window, div,
     prelude::*, px,
 };
+use qc_cache::CacheUsage;
 
 use super::file_diff_page::render_file_diff_page;
 use super::github_page::render_github_page;
@@ -22,6 +23,11 @@ pub struct SettingsWindow {
     category: SettingsCategory,
     /// Whether the cache was cleared since the window opened, so the button says so.
     has_cleared_cache: bool,
+    /// What the cache holds, read when the window opens and after clearing;
+    /// `None` until read (or when it cannot be).
+    cache_usage: Option<CacheUsage>,
+    /// The read of `cache_usage` in flight.
+    usage_task: Option<Task<()>>,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -31,12 +37,36 @@ impl SettingsWindow {
         // Focus the view so cmd-w reaches it.
         let focus = cx.focus_handle();
         window.focus(&focus);
-        Self {
+        let mut settings = Self {
             focus,
             category: SettingsCategory::default(),
             has_cleared_cache: false,
+            cache_usage: None,
+            usage_task: None,
             _settings_subscription: cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
-        }
+        };
+        settings.read_cache_usage(cx);
+        settings
+    }
+
+    /// Reads what the cache holds off the main thread (it sums every cached
+    /// patch), then shows it.
+    fn read_cache_usage(&mut self, cx: &mut Context<Self>) {
+        let cache = cx.global::<AppServices>().cache.clone();
+        self.usage_task = Some(cx.spawn(async move |settings, cx| {
+            let usage = cx
+                .background_executor()
+                .spawn(async move { cache.lock().usage() })
+                .await;
+            settings
+                .update(cx, |settings, cx| {
+                    settings.cache_usage = usage
+                        .inspect_err(|error| eprintln!("cannot read the cache's size: {error:#}"))
+                        .ok();
+                    cx.notify();
+                })
+                .ok();
+        }));
     }
 
     fn select_category(&mut self, category: SettingsCategory, cx: &mut Context<Self>) {
@@ -58,6 +88,7 @@ impl SettingsWindow {
             settings
                 .update(cx, |settings, cx| {
                     settings.has_cleared_cache = cleared.is_ok();
+                    settings.read_cache_usage(cx);
                     cx.notify();
                 })
                 .ok();
@@ -115,7 +146,8 @@ impl Render for SettingsWindow {
                 let clear_cache = move |_: &mut Window, cx: &mut App| {
                     settings.update(cx, |_, cx| Self::clear_cache(cx)).ok();
                 };
-                render_github_page(self.has_cleared_cache, clear_cache, cx).into_any_element()
+                render_github_page(self.has_cleared_cache, self.cache_usage, clear_cache, cx)
+                    .into_any_element()
             }
         };
         div()

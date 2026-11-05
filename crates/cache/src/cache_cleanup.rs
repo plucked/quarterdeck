@@ -38,14 +38,19 @@ impl GitHubCache {
         })
     }
 
-    /// Removes every cached pull request, list and file; the next refresh
-    /// fetches them again. User state (viewed marks, settings) stays.
+    /// Removes every cached pull request, list and file, and shrinks the
+    /// database file to what is left; the next refresh fetches them again.
+    /// User state (viewed marks, settings) stays.
     pub fn clear(&mut self) -> Result<()> {
         // Lists and file sets go with their pull requests, layers with their stacks and files with their comparisons (ON DELETE CASCADE).
         self.connection().execute("DELETE FROM pull_requests", [])?;
         self.connection().execute("DELETE FROM pr_stacks", [])?;
         self.connection()
             .execute("DELETE FROM compare_file_sets", [])?;
+
+        // SQLite keeps the freed pages in the file; give them back to the disk.
+        self.connection()
+            .execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);")?;
         Ok(())
     }
 }

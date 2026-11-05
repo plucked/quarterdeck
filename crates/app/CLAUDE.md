@@ -6,7 +6,7 @@
 | `main_window` | `MainWindow` root view: owns `ReviewQueue`, records window placement, writes UI state on focus loss |
 | `app_commands` | actions (`Quit`, `OpenSettings`, `CloseWindow`, `Refresh`, `Copy`, `NextFile`, `PreviousFile`, `MarkViewedAndNext`, `ToggleFileTree`, `ToggleSidebar`, `NextLayer`, `PreviousLayer`, `ToggleStackReview`, `ShowAuthored`, `ShowReviewRequested`), key bindings, menu bar, `REVIEW_QUEUE_CONTEXT` |
 | `app_settings` | `AppSettings` global: the preferences (diff view settings, cache TTL), loaded at launch, saved on change, observed by views |
-| `settings_window` | settings window (cmd-,, single instance): category list + page per `SettingsCategory` (File Diff; GitHub: cache TTL, clear cache, API usage), `SettingRow` component |
+| `settings_window` | settings window (cmd-,, single instance): category list + page per `SettingsCategory` (File Diff; GitHub: cache TTL, cache size on disk with a breakdown per kind (read in the background on open and after clearing), clear cache, API usage), `SettingRow` component |
 | `app_services` | `AppServices`: GitHub client (or reason it is missing) + cache; also a gpui global for other windows |
 | `scrollbar` | `VerticalScrollbar`: reusable draggable scrollbar for a `ScrollbarTarget` (`ScrollHandle`, `ListState`, or `ListState` + `ListRowTops` estimates; gpui draws none) |
 | `shared_cache` | `SharedCache`: `Arc<Mutex<GitHubCache>>` with poison-tolerant `lock` |
@@ -19,6 +19,7 @@
 | `button` | `Button`: small text button (plain, ghost, primary, danger; selected, disabled) |
 | `checkbox` | `Checkbox` + `CheckState` (unchecked, checked, mixed): a drawn checkbox, used for viewed marks and options |
 | `display_date` | `short_date`: a GitHub timestamp as `21 Oct 2026` |
+| `display_size` | `byte_size`: a byte count as `151.7 MB` |
 | `resize_handle` | `ResizeHandle`: reusable divider strip between two panels in a flex row; dragging it reports a clamped width (`ResizeEdge` says which side the panel is on) |
 | `markdown_view` | `MarkdownView`: reusable component rendering a `qc_markdown::MarkdownDocument`, with mouse text selection and copy |
 | `theme` | colors and fonts: a dark palette of layered surfaces (sidebar < background < panel < surface), borders (normal, strong), three text levels (text, muted, subtle), one accent; the system UI font, Menlo for code |
