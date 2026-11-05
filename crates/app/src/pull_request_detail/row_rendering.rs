@@ -60,31 +60,32 @@ impl Render for PullRequestDetail {
                     .size_full(),
             );
 
-        // The sticky header above; the file tree beside the diff when shown.
-        // `min_w_0` and `min_h_0` let the pane shrink to the window.
+        // The sticky header over the diff, in one column; the side panel
+        // beside that column at full height when shown. `min_w_0` and
+        // `min_h_0` let the pane shrink to the window.
         // The side panel holds the file tree and the review; it shows once files are loaded.
         let shows_tree = self.file_tree().visibility() == PanelVisibility::Shown
             && !self.loaded_files().is_empty();
-        div()
+        let main_column = div()
             .flex()
             .flex_col()
             .flex_1()
             .min_w_0()
             .h_full()
+            .children(self.render_sticky_header(cx))
+            .child(div().flex().flex_1().min_h_0().child(diff_area));
+        div()
+            .flex()
+            .flex_1()
+            .min_w_0()
+            .h_full()
             .track_focus(self.focus())
             .on_action(cx.listener(|detail, _: &Copy, _, cx| detail.copy_diff_selection(cx)))
-            .children(self.render_sticky_header(cx))
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .child(diff_area)
-                    .when(shows_tree, |pane| {
-                        pane.child(self.render_side_panel_handle(cx))
-                            .child(self.render_file_tree_panel(cx))
-                    }),
-            )
+            .child(main_column)
+            .when(shows_tree, |pane| {
+                pane.child(self.render_side_panel_handle(cx))
+                    .child(self.render_file_tree_panel(cx))
+            })
     }
 }
 
