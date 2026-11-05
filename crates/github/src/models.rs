@@ -98,7 +98,8 @@ mod tests {
 
     #[test]
     fn parses_repo_from_api_url() {
-        let repo = RepoRef::from_api_url("https://api.github.com/repos/zed-industries/zed").unwrap();
+        let repo =
+            RepoRef::from_api_url("https://api.github.com/repos/zed-industries/zed").unwrap();
         assert_eq!(repo.full_name(), "zed-industries/zed");
     }
 
