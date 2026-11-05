@@ -31,6 +31,6 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 - gpui 0.2.2 from crates.io, `default-features = false`, features `font-kit` + `runtime_shaders` (no Metal Toolchain needed to build).
 - Token: `GITHUB_TOKEN`, else `gh auth token`. Without one the app shows cached data only.
 - Database: `~/Library/Application Support/quick-check/cache.sqlite` (delete to reset cache and UI state).
-- Our own state is typed SQLite columns, never JSON (see the skill's Persistence section).
+- Everything stored is typed SQLite columns, cached GitHub data included; never JSON (see the skill's Persistence section).
 - Queue refresh: at launch, `cmd-r`, every 5 min after the last refresh, and on window activation when older than 1 min.
 - Lints: clippy `pedantic` (warn, `-D warnings` in checks), `module_inception`/`missing_errors_doc`/`must_use_candidate` allowed, `unsafe_code = "deny"`.

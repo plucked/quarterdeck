@@ -12,6 +12,6 @@
 | `search_issue` | raw search-API issue shape → `PullRequest` (crate-private) |
 | `search_response` | search envelope (crate-private) |
 
-- Public data types are `Serialize + Deserialize`: `qc-cache` stores them as JSON. Renaming a field breaks existing cache rows; add a schema migration or `#[serde(alias)]`.
+- Types derive `Deserialize` only where they are decoded from a GitHub response (`User`, `PullRequestFile`, `SearchIssue`); none derive `Serialize`. `qc-cache` stores every field in its own column, so a new field also needs a cache migration.
 - Only the first page (100) of any list is read; pagination is not implemented.
 - Tests parse recorded JSON; none touch the network.
