@@ -7,11 +7,14 @@
 //! - `thumb_geometry.rs`: `ThumbGeometry`, where the thumb sits for a scroll position, and back.
 //! - `thumb_drag.rs`: `ThumbDrag`, the drag state kept across frames.
 //! - `scrollbar_target.rs`: `ScrollbarTarget`, a scroll handle or a virtualized list.
+//! - `list_row_tops.rs`: `ListRowTops`, a list owner's estimate of where its rows start.
 
+mod list_row_tops;
 mod scrollbar_target;
 mod thumb_drag;
 mod thumb_geometry;
 mod vertical_scrollbar;
 
+pub use list_row_tops::ListRowTops;
 pub use scrollbar_target::ScrollbarTarget;
 pub use vertical_scrollbar::VerticalScrollbar;

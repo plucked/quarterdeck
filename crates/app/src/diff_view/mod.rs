@@ -44,7 +44,9 @@ mod unified_rendering;
 
 pub use code_cells::{CodeCells, SideSelection};
 pub use code_segments::{CodeSegment, CodeSegments};
-pub use diff_cell_rendering::{DIFF_CHARACTER_WIDTH, gutter_width, render_hunk_header};
+pub use diff_cell_rendering::{
+    DIFF_CHARACTER_WIDTH, DIFF_ROW_HEIGHT, gutter_width, render_hunk_header,
+};
 pub use diff_position::DiffPosition;
 pub use diff_row_style::DiffRowStyle;
 pub use diff_side::DiffSide;

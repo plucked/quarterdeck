@@ -1,14 +1,17 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use gpui::UniformListScrollHandle;
 use qc_cache::{PanelVisibility, ReviewLayoutState};
 use qc_file_tree::{
-    FacetCount, FacetFilter, FileFilter, FileKind, FileTree, FilteredFile, NodeId, TreeRow,
+    FacetCount, FacetFilter, FileFilter, FileKind, FileTree, FilteredFile, NodeId, TreeNodeKind,
+    TreeRow,
 };
 
 use super::chip_click::ChipClick;
 use super::file_review_state::FileReviewState;
+use super::folder_summary::FolderSummary;
 use super::folder_viewed_state::FolderViewedState;
+use super::line_counts::LineCounts;
 use super::loaded_file::LoadedFile;
 
 /// The file tree panel's state: the loaded files as a tree (file indexes
@@ -30,6 +33,11 @@ pub struct FileTreeState {
     file_count: usize,
     /// Whether the type row shows every type, not only the most common.
     are_types_expanded: bool,
+    /// Each folder's changed lines and viewed state, as of the last row refresh.
+    folder_summaries: HashMap<NodeId, FolderSummary>,
+    /// The largest added and removed counts a top-level row shows, which
+    /// no deeper row exceeds; the tree's count columns are sized for it.
+    widest_line_counts: LineCounts,
     scroll: UniformListScrollHandle,
     visibility: PanelVisibility,
 }
@@ -54,6 +62,8 @@ impl FileTreeState {
             shown_count: 0,
             file_count: 0,
             are_types_expanded: false,
+            folder_summaries: HashMap::new(),
+            widest_line_counts: LineCounts::default(),
             scroll: UniformListScrollHandle::new(),
             visibility: layout.file_tree,
         }
@@ -94,6 +104,15 @@ impl FileTreeState {
     /// Files shown and files loaded.
     pub fn shown_of_total(&self) -> (usize, usize) {
         (self.shown_count, self.file_count)
+    }
+
+    /// Folder `folder`'s changed lines and viewed state.
+    pub fn folder_summary(&self, folder: NodeId) -> Option<FolderSummary> {
+        self.folder_summaries.get(&folder).copied()
+    }
+
+    pub fn widest_line_counts(&self) -> LineCounts {
+        self.widest_line_counts
     }
 
     pub fn are_types_expanded(&self) -> bool {
@@ -148,6 +167,61 @@ impl FileTreeState {
         self.type_counts = self.filter.file_type_counts(&filtered);
         self.shown_count = shown.iter().filter(|is_shown| **is_shown).count();
         self.file_count = files.len();
+
+        // Every folder's totals in one walk, so drawing a row looks them up.
+        let mut summaries = HashMap::new();
+        let mut widest = LineCounts::default();
+        for root in self.tree.roots().to_vec() {
+            let totals = self.summarize(root, files, review, &mut summaries);
+            widest = widest.widest(totals.lines);
+        }
+        self.folder_summaries = summaries;
+        self.widest_line_counts = widest;
+    }
+
+    /// The totals of node `node` (a file's own, or a folder's files
+    /// together), recording every folder's summary in `summaries` on the way.
+    fn summarize(
+        &self,
+        node: NodeId,
+        files: &[LoadedFile],
+        review: &FileReviewState,
+        summaries: &mut HashMap<NodeId, FolderSummary>,
+    ) -> NodeTotals {
+        match &self.tree.node(node).kind {
+            TreeNodeKind::File { file } => {
+                let Some(loaded) = files.get(*file) else {
+                    return NodeTotals::default();
+                };
+                // The folder checkbox covers files the chips let through, viewed or not.
+                let is_covered = self
+                    .filter
+                    .shows_ignoring_viewed(&filtered_file(loaded, &FileReviewState::default()));
+                let is_viewed = review.is_viewed(loaded.filename());
+                NodeTotals {
+                    lines: LineCounts {
+                        additions: loaded.file.additions,
+                        deletions: loaded.file.deletions,
+                    },
+                    covered: usize::from(is_covered),
+                    viewed: usize::from(is_covered && is_viewed),
+                }
+            }
+            TreeNodeKind::Folder { children } => {
+                let totals = children
+                    .iter()
+                    .map(|child| self.summarize(*child, files, review, summaries))
+                    .fold(NodeTotals::default(), NodeTotals::plus);
+                summaries.insert(
+                    node,
+                    FolderSummary {
+                        lines: totals.lines,
+                        viewed: FolderViewedState::of(totals.viewed, totals.covered),
+                    },
+                );
+                totals
+            }
+        }
     }
 
     pub fn toggle_visibility(&mut self) {
@@ -231,6 +305,26 @@ impl FileTreeState {
             })
             .count();
         FolderViewedState::of(viewed, covered.len())
+    }
+}
+
+/// Totals of the files under a tree node, gathered for its folders' summaries.
+#[derive(Clone, Copy, Default)]
+struct NodeTotals {
+    lines: LineCounts,
+    /// Files the chips let through (a folder checkbox covers these).
+    covered: usize,
+    /// Of those, the viewed ones.
+    viewed: usize,
+}
+
+impl NodeTotals {
+    fn plus(self, other: Self) -> Self {
+        Self {
+            lines: self.lines.plus(other.lines),
+            covered: self.covered + other.covered,
+            viewed: self.viewed + other.viewed,
+        }
     }
 }
 

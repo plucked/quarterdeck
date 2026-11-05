@@ -8,6 +8,7 @@
 //! Files:
 //! - `pull_request_detail.rs`: `PullRequestDetail`, the view's state, loading and actions.
 //! - `row_rendering.rs`: renders the pane's layout and each diff row.
+//! - `row_height_estimate.rs`: where each row starts, estimated without layout, for the scrollbar.
 //! - `sticky_header_rendering.rs`: the header above the diff: title, metadata, description.
 //! - `file_tree_rendering.rs`: the file tree panel: progress, folders and files.
 //! - `filter_rendering.rs`: the filter: viewed switch, kind and type chip rows, summary.
@@ -25,6 +26,8 @@
 //! - `loaded_file.rs`: `LoadedFile`, a changed file with its built diff, colors and sizes.
 //! - `file_tree_state.rs`: `FileTreeState`, the file tree panel's tree, filter, folders and rows.
 //! - `folder_viewed_state.rs`: `FolderViewedState`, none, some or all of a folder viewed.
+//! - `folder_summary.rs`: `FolderSummary`, a folder's changed lines and viewed state for its tree row.
+//! - `line_counts.rs`: `LineCounts`, lines added and removed.
 //! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
 //! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.
 //! - `chip_click.rs`: `ChipClick`, a filter chip clicked to pick or (option) to hide.
@@ -68,7 +71,9 @@ mod file_set_update;
 mod file_tree_rendering;
 mod file_tree_state;
 mod filter_rendering;
+mod folder_summary;
 mod folder_viewed_state;
+mod line_counts;
 mod load_progress;
 mod loaded_file;
 mod local_review_export;
@@ -81,6 +86,7 @@ mod review_pane;
 mod review_panel_rendering;
 mod review_status;
 mod review_target;
+mod row_height_estimate;
 mod row_rendering;
 mod selected_diff_text;
 mod side_panel_tab;

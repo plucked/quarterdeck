@@ -52,7 +52,7 @@ impl Render for PullRequestDetail {
             )
             .child(VerticalScrollbar::new(
                 "detail-scrollbar",
-                ScrollbarTarget::List(self.list().clone()),
+                ScrollbarTarget::EstimatedList(self.list().clone(), self.current_row_tops()),
             ))
             .child(
                 drag_listener(cx.entity().downgrade())

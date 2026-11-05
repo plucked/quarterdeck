@@ -7,6 +7,7 @@ use gpui::{
 use qc_file_tree::{TreeNodeKind, TreeRow};
 
 use super::folder_viewed_state::FolderViewedState;
+use super::line_counts::LineCounts;
 use super::pull_request_detail::PullRequestDetail;
 use super::side_panel_tab::SidePanelTab;
 use crate::checkbox::{CheckState, Checkbox};
@@ -27,13 +28,6 @@ const COUNT_FONT_SIZE: f32 = 10.;
 const COUNT_CHARACTER_WIDTH: f32 = 6.1;
 /// Height of the viewed progress bar.
 const PROGRESS_BAR_HEIGHT: f32 = 4.;
-
-/// Lines a file (or the files under a folder) adds and removes.
-#[derive(Clone, Copy, Default)]
-struct LineCounts {
-    additions: u64,
-    deletions: u64,
-}
 
 /// Widths of the added and removed columns, wide enough for the largest
 /// count a row shows.
@@ -164,38 +158,15 @@ impl PullRequestDetail {
     }
 
     /// The visible tree rows in `range`, their count columns sized for the
-    /// largest counts any row shows (a top-level folder's sums, since no
-    /// deeper row exceeds them) so every row's numbers line up.
+    /// largest counts any row shows so every row's numbers line up.
     fn render_tree_rows(&self, range: Range<usize>, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let tree = self.file_tree().tree();
-        let largest = self
-            .file_tree()
-            .rows()
-            .iter()
-            .filter(|row| row.depth == 0)
-            .map(|row| self.line_counts_of(tree.files_under(row.node)))
-            .fold(LineCounts::default(), |largest, counts| LineCounts {
-                additions: largest.additions.max(counts.additions),
-                deletions: largest.deletions.max(counts.deletions),
-            });
-        let columns = CountColumns::fitting(largest);
+        let columns = CountColumns::fitting(self.file_tree().widest_line_counts());
         range
             .filter_map(|index| {
                 let row = *self.file_tree().rows().get(index)?;
                 Some(self.render_tree_row(index, row, columns, cx))
             })
             .collect()
-    }
-
-    /// Added and removed lines of the loaded files at `files`.
-    fn line_counts_of(&self, files: impl IntoIterator<Item = usize>) -> LineCounts {
-        files
-            .into_iter()
-            .filter_map(|file| self.loaded_files().get(file))
-            .fold(LineCounts::default(), |counts, loaded| LineCounts {
-                additions: counts.additions + loaded.file.additions,
-                deletions: counts.deletions + loaded.file.deletions,
-            })
     }
 
     /// A folder row (chevron, name) or a file row (name), indented by
@@ -245,10 +216,10 @@ impl PullRequestDetail {
         let node = tree.node(row.node);
         let path = node.path.clone();
         let is_collapsed = self.file_tree().is_folder_collapsed(&path);
-        let state =
-            self.file_tree()
-                .folder_viewed_state(row.node, self.loaded_files(), self.file_review());
-        let counts = self.line_counts_of(tree.files_under(row.node));
+        // Worked out once per row refresh, not per frame: a top folder covers every file.
+        let summary = self.file_tree().folder_summary(row.node);
+        let state = summary.map_or(FolderViewedState::None, |summary| summary.viewed);
+        let counts = summary.map(|summary| summary.lines).unwrap_or_default();
         let folder = row.node;
         base.on_click(cx.listener(move |detail, _, _, cx| detail.toggle_folder(&path, cx)))
             .child(

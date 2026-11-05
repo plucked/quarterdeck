@@ -37,6 +37,7 @@ use super::loaded_file::LoadedFile;
 use super::parsed_description::ParsedDescription;
 use super::review_pane::ReviewPane;
 use super::review_target::ReviewTarget;
+use super::row_height_estimate::estimate_row_tops;
 use super::selected_diff_text::{row_code_text, selected_diff_text};
 use super::side_panel_tab::SidePanelTab;
 use super::viewed_toggle::ViewedToggle;
@@ -44,6 +45,7 @@ use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::diff_view::{CodeCells, CodeSegments, DiffPosition, SideSelection};
 use crate::fetch_stack::{cached_stack, refresh_stack};
+use crate::scrollbar::ListRowTops;
 use crate::shared_cache::SharedCache;
 use crate::ui_state::{UiStateRecorder, read_review_notes, read_viewed_files};
 use crate::word_range_at::word_range_at;
@@ -165,6 +167,11 @@ pub struct PullRequestDetail {
     highlight_progress: Option<(usize, usize)>,
     /// The side panel's width, as dragged (and saved).
     side_panel_width: f32,
+    /// Where each row starts, estimated for the scrollbar (the list lays
+    /// out only the rows on screen), and the pane width it was estimated
+    /// for; `None` once the rows changed.
+    row_tops: ListRowTops,
+    row_tops_width: Option<f32>,
     /// Review comments, the comment being written, and the review tab.
     review: ReviewPane,
     /// The merge or close panel under the header, while open.
@@ -183,8 +190,10 @@ impl PullRequestDetail {
             detail.apply_diff_settings(AppSettings::diff_view(cx), cx);
         });
 
-        // Measure every row once, so the scrollbar knows the full height.
-        let list = ListState::new(0, ListAlignment::Top, px(LIST_OVERDRAW)).measure_all();
+        // Only the rows on screen are laid out: measuring every line of a
+        // large pull request at once blocks the window for seconds. The
+        // scrollbar works from `row_tops` instead.
+        let list = ListState::new(0, ListAlignment::Top, px(LIST_OVERDRAW));
         let detail = cx.entity().downgrade();
         list.set_scroll_handler(move |_, _, cx| {
             detail
@@ -226,6 +235,8 @@ impl PullRequestDetail {
             combined_start: None,
             stack_task: None,
             highlight_progress: None,
+            row_tops: ListRowTops::from_heights([]),
+            row_tops_width: None,
             action_panel: None,
             review: ReviewPane {
                 destination: layout.comment_destination,
@@ -511,6 +522,21 @@ impl PullRequestDetail {
             item_ix: row,
             offset_in_item: px(0.),
         });
+    }
+
+    /// The rows' estimated tops for the scrollbar, estimated again when the
+    /// rows changed or the pane's width did (wrapped lines depend on it).
+    pub(super) fn current_row_tops(&mut self) -> ListRowTops {
+        let width = f32::from(self.list.viewport_bounds().size.width);
+        let is_current = self
+            .row_tops_width
+            .is_some_and(|estimated| (estimated - width).abs() < 1.);
+        if !is_current {
+            self.row_tops =
+                estimate_row_tops(&self.rows, self.loaded_files(), self.diff_settings, width);
+            self.row_tops_width = Some(width);
+        }
+        self.row_tops.clone()
     }
 
     /// Measures row `row` again (a growing comment editor).
@@ -889,6 +915,7 @@ impl PullRequestDetail {
             comments: &self.review.placement,
         });
         self.list.reset(self.rows.len());
+        self.row_tops_width = None;
         self.refresh_tree_rows();
 
         let files_settled = !matches!(self.changed_files, Some(ChangedFiles::Loading(_)));
@@ -951,6 +978,7 @@ impl PullRequestDetail {
         let top = self.list.logical_scroll_top();
         self.diff_selection = None;
         let new_rows = rows.clone();
+        self.row_tops_width = None;
         if let Some(old_range) = self.rows.replace_file(file, rows) {
             let start = old_range.start + change.start;
             if change.old_len > 0 || change.new_len > 0 {

@@ -1,11 +1,16 @@
 use gpui::{ListState, Pixels, ScrollHandle, point, px};
 
-/// What a scrollbar scrolls: a scroll container's handle, or a virtualized
-/// list's state, which knows its heights only for the rows it has measured.
+use super::list_row_tops::ListRowTops;
+
+/// What a scrollbar scrolls: a scroll container's handle, a virtualized
+/// list's state, which knows its heights only for the rows it has measured,
+/// or a list with its owner's estimate of every row's height (for a list too
+/// long to measure all at once).
 #[derive(Clone)]
 pub enum ScrollbarTarget {
     Handle(ScrollHandle),
     List(ListState),
+    EstimatedList(ListState, ListRowTops),
 }
 
 impl ScrollbarTarget {
@@ -13,7 +18,7 @@ impl ScrollbarTarget {
     pub fn viewport_height(&self) -> Pixels {
         match self {
             Self::Handle(handle) => handle.bounds().size.height,
-            Self::List(list) => list.viewport_bounds().size.height,
+            Self::List(list) | Self::EstimatedList(list, _) => list.viewport_bounds().size.height,
         }
     }
 
@@ -22,6 +27,9 @@ impl ScrollbarTarget {
         match self {
             Self::Handle(handle) => handle.max_offset().height,
             Self::List(list) => list.max_offset_for_scrollbar().height,
+            Self::EstimatedList(list, tops) => {
+                (tops.total() - list.viewport_bounds().size.height).max(px(0.))
+            }
         }
     }
 
@@ -31,6 +39,7 @@ impl ScrollbarTarget {
         match self {
             Self::Handle(handle) => -handle.offset().y,
             Self::List(list) => -list.scroll_px_offset_for_scrollbar().y,
+            Self::EstimatedList(list, tops) => tops.y_of(list.logical_scroll_top()),
         }
     }
 
@@ -42,6 +51,7 @@ impl ScrollbarTarget {
                 handle.set_offset(point(offset.x, -scroll_top));
             }
             Self::List(list) => list.set_offset_from_scrollbar(point(px(0.), -scroll_top)),
+            Self::EstimatedList(list, tops) => list.scroll_to(tops.offset_at(scroll_top)),
         }
     }
 
