@@ -12,6 +12,7 @@ publish = false
 # internal
 qc-cache = { path = "crates/cache" }
 qc-diff = { path = "crates/diff" }
+qc-file-tree = { path = "crates/file_tree" }
 qc-github = { path = "crates/github" }
 qc-markdown = { path = "crates/markdown" }
 qc-syntax = { path = "crates/syntax" }
