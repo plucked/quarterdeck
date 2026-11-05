@@ -145,8 +145,14 @@ fn file_note(
             changed_lines: loaded.diff.changed_line_count(),
         });
     }
+    // No patch: a move or copy without changes, else a binary or too large file.
     if loaded.file.patch.is_none() {
-        return Some(FileNote::NoPatch);
+        let is_unchanged = loaded.file.additions == 0 && loaded.file.deletions == 0;
+        return Some(match (loaded.file.status.as_str(), is_unchanged) {
+            ("renamed", true) => FileNote::RenamedWithoutChanges,
+            ("copied", true) => FileNote::CopiedWithoutChanges,
+            (_, true | false) => FileNote::NoPatch,
+        });
     }
     if !loaded.diff.is_empty() {
         return None;
@@ -300,6 +306,23 @@ mod tests {
             all_hidden.rows,
             [DetailRow::SummaryBar, DetailRow::AllFilesHidden]
         );
+    }
+
+    /// A file moved without changes (GitHub sends no patch) says so, not "binary".
+    #[test]
+    fn moved_file_without_patch_shows_moved_note() {
+        let mut file = (*loaded("new/name.rs", None).file).clone();
+        file.status = "renamed".into();
+        file.previous_filename = Some("old/name.rs".into());
+        file.additions = 0;
+        file.deletions = 0;
+        let files = [LoadedFile::build(file, DiffOptions::default())];
+        let review = FileReviewState::for_loaded(&files, &[]);
+        let list = build(&files, &review, DiffViewSettings::default());
+        assert!(list.rows.contains(&DetailRow::FileNote {
+            file: 0,
+            note: FileNote::RenamedWithoutChanges
+        }));
     }
 
     /// A file without a patch shows a note instead of lines.

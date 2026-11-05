@@ -5,7 +5,10 @@ pub enum FileNote {
     NoPatch,
     /// Hiding whitespace changes left nothing.
     OnlyWhitespace,
+    /// Moved (renamed) with its content unchanged; GitHub sends no patch for it.
     RenamedWithoutChanges,
+    /// Copied with its content unchanged; GitHub sends no patch for it.
+    CopiedWithoutChanges,
     NoChanges,
     /// A large file started collapsed; clicking the note expands it.
     CollapsedLarge {
@@ -19,7 +22,8 @@ impl FileNote {
         match self {
             Self::NoPatch => "Binary file, or a diff too large for GitHub to send.".to_owned(),
             Self::OnlyWhitespace => "Only whitespace changes.".to_owned(),
-            Self::RenamedWithoutChanges => "File renamed without changes.".to_owned(),
+            Self::RenamedWithoutChanges => "Moved without changes.".to_owned(),
+            Self::CopiedWithoutChanges => "Copied without changes.".to_owned(),
             Self::NoChanges => "No changes to show.".to_owned(),
             Self::CollapsedLarge { changed_lines } => {
                 format!("Large diff ({changed_lines} changed lines) — click to show")
