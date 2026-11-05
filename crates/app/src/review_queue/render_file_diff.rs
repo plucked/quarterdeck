@@ -4,8 +4,10 @@ use qc_github::PullRequestFile;
 use crate::theme;
 
 /// One changed file: a header with name and line counts, then its patch with
-/// added and removed lines tinted. Binary or oversized files show no patch.
-pub fn render_file_diff(file: &PullRequestFile) -> impl IntoElement {
+/// added and removed lines tinted; long lines scroll sideways. Binary or
+/// oversized files show no patch. `index` is the file's position, which
+/// keeps each patch's scroll position apart.
+pub fn render_file_diff(index: usize, file: &PullRequestFile) -> impl IntoElement {
     let header = div()
         .flex()
         .gap_2()
@@ -28,6 +30,8 @@ pub fn render_file_diff(file: &PullRequestFile) -> impl IntoElement {
 
     let patch = file.patch.as_deref().map(|patch| {
         div()
+            .id(("patch", index))
+            .overflow_x_scroll()
             .flex()
             .flex_col()
             .font_family(theme::MONO_FONT)

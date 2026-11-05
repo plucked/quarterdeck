@@ -12,11 +12,13 @@ impl ReviewQueue {
     /// changed files, scrolling as one.
     pub(super) fn render_detail(&self, cx: &mut Context<Self>) -> impl IntoElement {
         // Scrolling is recorded so a relaunch returns to the same place.
+        // `min_w_0` lets the pane shrink to the window, so its text wraps.
         let container = div()
             .id("detail")
             .track_scroll(self.detail_scroll())
             .on_scroll_wheel(cx.listener(|queue, _, _, cx| queue.record_view_state(cx)))
             .flex_1()
+            .min_w_0()
             .h_full()
             .overflow_y_scroll()
             .p_4()
@@ -66,7 +68,12 @@ impl ReviewQueue {
                 .flex()
                 .flex_col()
                 .gap_3()
-                .children(files.iter().map(render_file_diff))
+                .children(
+                    files
+                        .iter()
+                        .enumerate()
+                        .map(|(index, file)| render_file_diff(index, file)),
+                )
                 .into_any_element(),
         }
     }
@@ -86,16 +93,17 @@ fn render_detail_header(pull_request: &PullRequest) -> impl IntoElement {
                 .gap_2()
                 .text_sm()
                 .text_color(theme::muted())
-                .child(format!(
+                .child(div().min_w_0().child(format!(
                     "{}#{} by {} · updated {}",
                     pull_request.repo.full_name(),
                     pull_request.number,
                     pull_request.author.login,
                     pull_request.updated_at
-                ))
+                )))
                 .child(
                     div()
                         .id("open-on-github")
+                        .flex_none()
                         .text_color(theme::accent())
                         .cursor_pointer()
                         .on_click(move |_, _, cx| cx.open_url(&url))
