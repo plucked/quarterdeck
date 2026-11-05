@@ -12,6 +12,7 @@
 | `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` (then `VACUUM` and a WAL checkpoint, so the file shrinks) |
 | `cache_usage` / `cache_usage_storage` | `CacheUsage` (+ `CachedData`: entries, files, bytes) per kind (pull requests, PR files, comparisons), size on disk (pages + WAL) and free pages; `GitHubCache::usage` sums text bytes with `LENGTH(CAST(… AS BLOB))` |
 | `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
+| `color_theme` / `appearance_settings_storage` | `ColorTheme` (Ledger, Vellum, Overcast, Signal, Graphite (default), Tide, Lantern, Beacon), stored by name in `appearance_settings` (one row) |
 | `sql_integers` / `unix_now` | checked integer conversions; current time |
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset, tab, sidebar visibility |
 | `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qd-diff` enums |

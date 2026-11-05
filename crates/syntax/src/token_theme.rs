@@ -4,64 +4,56 @@ use syntect::highlighting::{
     Color, ScopeSelectors, StyleModifier, Theme, ThemeItem, ThemeSettings,
 };
 
-/// Plain code: the app's text color.
-const FOREGROUND: u32 = 0xe5_e3_df;
-const BACKGROUND: u32 = 0x1c_1e_21;
-/// Every syntax color clears 4.5:1 on the background (APCA |Lc| 60 or more);
-/// comments stay readable rather than faded, since they are content.
-const COMMENT: u32 = 0xbe_b8_9f;
-const KEYWORD: u32 = 0xde_c3_ff;
-const STRING: u32 = 0x8c_e1_99;
-const CONSTANT: u32 = 0xff_c2_8c;
-const DEFINITION: u32 = 0xae_d1_fe;
-const TYPE: u32 = 0x3d_e3_e3;
-const INVALID: u32 = 0xfe_bf_b7;
+use crate::SyntaxKind;
 
-/// Which scopes get which color: Sublime Text scope selectors as bat's grammars
-/// name them. Variables, operators and punctuation keep the foreground.
-const SCOPE_COLORS: [(&str, u32); 7] = [
-    ("comment, punctuation.definition.comment", COMMENT),
+/// Which scopes are which kind of token: Sublime Text scope selectors as
+/// bat's grammars name them. Variables, operators and punctuation stay plain.
+const SCOPE_KINDS: [(&str, SyntaxKind); 7] = [
+    (
+        "comment, punctuation.definition.comment",
+        SyntaxKind::Comment,
+    ),
     (
         "keyword - keyword.operator, keyword.operator.word, storage",
-        KEYWORD,
+        SyntaxKind::Keyword,
     ),
     (
         "string, string punctuation.definition.string, constant.character.escape",
-        STRING,
+        SyntaxKind::String,
     ),
     (
         "constant.numeric, constant.language, constant.other, constant.character",
-        CONSTANT,
+        SyntaxKind::Constant,
     ),
     (
         "entity.name.function, support.function, meta.function-call entity.name, entity.name.method",
-        DEFINITION,
+        SyntaxKind::Definition,
     ),
     (
         "entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, entity.name.trait, support.type, support.class, storage.type.primitive",
-        TYPE,
+        SyntaxKind::Type,
     ),
-    ("invalid", INVALID),
+    ("invalid", SyntaxKind::Invalid),
 ];
 
-/// The Graphite syntax theme: seven colors on the app's dark grey, from
-/// the Proofreader Palettes' Graphite (dark) palette.
-pub(crate) fn graphite_theme() -> Theme {
+/// A syntect theme that sorts tokens instead of coloring them: each kind
+/// gets a marker color (its position, 1 to 7, in the red channel) that
+/// `kind_of_marker` turns back into the kind; plain text gets black.
+pub(crate) fn token_theme() -> Theme {
     Theme {
-        name: Some("Graphite".to_owned()),
+        name: Some("Token kinds".to_owned()),
         author: None,
         settings: ThemeSettings {
-            foreground: Some(color(FOREGROUND)),
-            background: Some(color(BACKGROUND)),
+            foreground: Some(PLAIN_MARKER),
             ..ThemeSettings::default()
         },
-        scopes: SCOPE_COLORS
+        scopes: SCOPE_KINDS
             .iter()
-            .map(|(selectors, rgb)| ThemeItem {
+            .map(|(selectors, kind)| ThemeItem {
                 scope: ScopeSelectors::from_str(selectors)
                     .expect("the theme's scope selectors are valid"),
                 style: StyleModifier {
-                    foreground: Some(color(*rgb)),
+                    foreground: Some(marker_of(*kind)),
                     background: None,
                     font_style: None,
                 },
@@ -70,48 +62,68 @@ pub(crate) fn graphite_theme() -> Theme {
     }
 }
 
-/// An opaque color from `0xRRGGBB`.
-fn color(rgb: u32) -> Color {
-    let [_, r, g, b] = rgb.to_be_bytes();
-    Color { r, g, b, a: 0xff }
+/// The marker of plain text.
+const PLAIN_MARKER: Color = Color {
+    r: 0,
+    g: 0,
+    b: 0,
+    a: 0xff,
+};
+
+/// The marker color standing for `kind`.
+fn marker_of(kind: SyntaxKind) -> Color {
+    let position = SyntaxKind::ALL
+        .iter()
+        .position(|candidate| *candidate == kind)
+        .expect("every kind is in SyntaxKind::ALL");
+    Color {
+        r: u8::try_from(position + 1).expect("seven kinds fit a byte"),
+        ..PLAIN_MARKER
+    }
+}
+
+/// The kind a highlighted piece's marker color stands for; `None` for plain text.
+pub(crate) fn kind_of_marker(color: Color) -> Option<SyntaxKind> {
+    SyntaxKind::ALL
+        .into_iter()
+        .find(|kind| marker_of(*kind) == color)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Every selector parses, so the theme never panics on first use.
+    /// Every selector parses, and every kind's marker reads back as that kind.
     #[test]
     fn builds_every_scope() {
-        assert_eq!(graphite_theme().scopes.len(), SCOPE_COLORS.len());
+        assert_eq!(token_theme().scopes.len(), SCOPE_KINDS.len());
+        for kind in SyntaxKind::ALL {
+            assert_eq!(kind_of_marker(marker_of(kind)), Some(kind));
+        }
+        assert_eq!(kind_of_marker(PLAIN_MARKER), None);
     }
 
-    /// bat's Rust grammar gets the intended colors: keyword, definition,
-    /// type, string, number and comment; operators keep the foreground.
+    /// bat's Rust grammar sorts tokens as intended; operators stay plain.
     #[test]
-    fn colors_rust_tokens() {
+    fn sorts_rust_tokens() {
         let highlighter = crate::syntax_highlighter::SyntaxHighlighter::shared();
         let syntax = highlighter.find_syntax("main.rs", None).unwrap();
         let line = r#"fn parse(names: Vec<u8>) { let x = "x"; 42 } // done"#;
         let spans = highlighter.highlight_lines(syntax, std::iter::once(line));
-        let color_of = |text: &str| {
+        let kind_at = |text: &str| {
             let start = line.find(text).unwrap();
-            let span = spans[0]
+            spans[0]
                 .iter()
                 .find(|span| span.range.contains(&start))
-                .unwrap_or_else(|| panic!("{text} has no color"));
-            let rgb = span.color;
-            u32::from_be_bytes([0, rgb.red, rgb.green, rgb.blue])
+                .map(|span| span.kind)
         };
-        assert_eq!(color_of("fn"), KEYWORD);
-        assert_eq!(color_of("parse"), DEFINITION);
-        assert_eq!(color_of("Vec"), TYPE);
-        assert_eq!(color_of("let"), KEYWORD);
-        // Operators stay plain: no span at all.
-        let equals = line.find('=').unwrap();
-        assert!(!spans[0].iter().any(|span| span.range.contains(&equals)));
-        assert_eq!(color_of("\"x\""), STRING);
-        assert_eq!(color_of("42"), CONSTANT);
-        assert_eq!(color_of("// done"), COMMENT);
+        assert_eq!(kind_at("fn"), Some(SyntaxKind::Keyword));
+        assert_eq!(kind_at("parse"), Some(SyntaxKind::Definition));
+        assert_eq!(kind_at("Vec"), Some(SyntaxKind::Type));
+        assert_eq!(kind_at("let"), Some(SyntaxKind::Keyword));
+        assert_eq!(kind_at("=",), None);
+        assert_eq!(kind_at("\"x\""), Some(SyntaxKind::String));
+        assert_eq!(kind_at("42"), Some(SyntaxKind::Constant));
+        assert_eq!(kind_at("// done"), Some(SyntaxKind::Comment));
     }
 }

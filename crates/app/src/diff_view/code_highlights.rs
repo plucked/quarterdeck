@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use gpui::{FontStyle, FontWeight, HighlightStyle, Rgba, rgb};
+use gpui::{HighlightStyle, Rgba};
 use qd_syntax::SyntaxSpan;
 
 use crate::theme;
@@ -45,13 +45,7 @@ pub fn code_highlights(
             }
             let mut highlight = HighlightStyle::default();
             if let Some(span) = span {
-                highlight.color = Some(rgb(span.color.to_rgb()).into());
-                if span.is_bold {
-                    highlight.font_weight = Some(FontWeight::BOLD);
-                }
-                if span.is_italic {
-                    highlight.font_style = Some(FontStyle::Italic);
-                }
+                highlight.color = Some(theme::syntax(span.kind).into());
             }
             if is_changed {
                 highlight.background_color = Some(emphasis.into());
@@ -66,22 +60,15 @@ pub fn code_highlights(
 
 #[cfg(test)]
 mod tests {
-    use qd_syntax::SyntaxColor;
+    use gpui::rgb;
+    use qd_syntax::SyntaxKind;
 
     use super::*;
-
-    const KEYWORD: SyntaxColor = SyntaxColor {
-        red: 0xc6,
-        green: 0x78,
-        blue: 0xdd,
-    };
 
     fn span(range: Range<usize>) -> SyntaxSpan {
         SyntaxSpan {
             range,
-            color: KEYWORD,
-            is_bold: false,
-            is_italic: false,
+            kind: SyntaxKind::Keyword,
         }
     }
 

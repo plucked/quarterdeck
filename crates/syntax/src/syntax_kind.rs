@@ -1,14 +1,29 @@
-/// An opaque color from the syntax theme.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SyntaxColor {
-    pub red: u8,
-    pub green: u8,
-    pub blue: u8,
+/// What a highlighted token is. The app picks its color from the active
+/// color theme when it draws, so changing the theme needs no new
+/// highlighting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SyntaxKind {
+    Comment,
+    /// Keywords and storage words (`fn`, `let`, `pub`, `u8`).
+    Keyword,
+    String,
+    /// Numbers and named constants (`true`, `None`).
+    Constant,
+    /// Function and method names, where defined and where called.
+    Definition,
+    Type,
+    /// Code the grammar marks as invalid.
+    Invalid,
 }
 
-impl SyntaxColor {
-    /// The color as `0xRRGGBB`.
-    pub fn to_rgb(self) -> u32 {
-        u32::from(self.red) << 16 | u32::from(self.green) << 8 | u32::from(self.blue)
-    }
+impl SyntaxKind {
+    pub const ALL: [Self; 7] = [
+        Self::Comment,
+        Self::Keyword,
+        Self::String,
+        Self::Constant,
+        Self::Definition,
+        Self::Type,
+        Self::Invalid,
+    ];
 }

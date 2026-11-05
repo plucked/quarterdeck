@@ -2,7 +2,7 @@ use gpui::{
     App, Context, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window, div,
     prelude::*, px,
 };
-use qd_cache::CacheUsage;
+use qd_cache::{CacheUsage, ColorTheme};
 
 use super::file_diff_page::render_file_diff_page;
 use super::github_page::render_github_page;
@@ -28,6 +28,8 @@ pub struct SettingsWindow {
     cache_usage: Option<CacheUsage>,
     /// The read of `cache_usage` in flight.
     usage_task: Option<Task<()>>,
+    /// The theme card under the pointer, previewed instead of the active theme.
+    previewed_theme: Option<ColorTheme>,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -43,6 +45,7 @@ impl SettingsWindow {
             has_cleared_cache: false,
             cache_usage: None,
             usage_task: None,
+            previewed_theme: None,
             _settings_subscription: cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
         };
         settings.read_cache_usage(cx);
@@ -67,6 +70,27 @@ impl SettingsWindow {
                 })
                 .ok();
         }));
+    }
+
+    /// The theme to preview in place of the active one, while its card is hovered.
+    pub(super) fn previewed_theme(&self) -> Option<ColorTheme> {
+        self.previewed_theme
+    }
+
+    /// Previews `color_theme` while its card is hovered. Leaving a card
+    /// clears the preview only if no other card took it over meanwhile.
+    pub(super) fn preview_theme(
+        &mut self,
+        color_theme: ColorTheme,
+        is_hovered: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if is_hovered {
+            self.previewed_theme = Some(color_theme);
+        } else if self.previewed_theme == Some(color_theme) {
+            self.previewed_theme = None;
+        }
+        cx.notify();
     }
 
     fn select_category(&mut self, category: SettingsCategory, cx: &mut Context<Self>) {
@@ -138,6 +162,7 @@ impl SettingsWindow {
 impl Render for SettingsWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let page = match self.category {
+            SettingsCategory::Appearance => self.render_appearance_page(cx).into_any_element(),
             SettingsCategory::FileDiff => {
                 render_file_diff_page(AppSettings::diff_view(cx)).into_any_element()
             }
@@ -160,9 +185,13 @@ impl Render for SettingsWindow {
             .text_sm()
             .child(self.render_category_list(cx))
             .child(
+                // The page scrolls when it is taller than the window.
                 div()
+                    .id("settings-page")
                     .flex_1()
                     .min_w_0()
+                    .h_full()
+                    .overflow_y_scroll()
                     .flex()
                     .flex_col()
                     .p_6()

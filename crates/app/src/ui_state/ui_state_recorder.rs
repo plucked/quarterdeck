@@ -6,9 +6,9 @@ use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 
 use super::review_change::ReviewChange;
 use qd_cache::{
-    CacheTtl, DiffViewSettings, FoldedGroups, NoteDestination, PanelWidths, ReviewLayoutState,
-    ReviewNote, ReviewQueueViewState, ReviewScope, ReviewSummary, UiStateStore, ViewedFile,
-    WindowPlacement,
+    CacheTtl, ColorTheme, DiffViewSettings, FoldedGroups, NoteDestination, PanelWidths,
+    ReviewLayoutState, ReviewNote, ReviewQueueViewState, ReviewScope, ReviewSummary, UiStateStore,
+    ViewedFile, WindowPlacement,
 };
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
@@ -22,6 +22,7 @@ struct PendingUiState {
     review_queue: Option<ReviewQueueViewState>,
     diff_view_settings: Option<DiffViewSettings>,
     cache_ttl: Option<CacheTtl>,
+    color_theme: Option<ColorTheme>,
     review_layout: Option<ReviewLayoutState>,
     sidebar_width: Option<f32>,
     side_panel_width: Option<f32>,
@@ -38,6 +39,7 @@ impl PendingUiState {
             && self.review_queue.is_none()
             && self.diff_view_settings.is_none()
             && self.cache_ttl.is_none()
+            && self.color_theme.is_none()
             && self.review_layout.is_none()
             && self.sidebar_width.is_none()
             && self.side_panel_width.is_none()
@@ -126,6 +128,22 @@ impl UiStateRecorder {
     pub fn record_cache_ttl(cx: &mut App, ttl: CacheTtl) {
         cx.update_global::<Self, _>(|recorder, cx| {
             recorder.pending.cache_ttl = Some(ttl);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// The color theme saved before the last relaunch; `None` when there is
+    /// none or it no longer reads. Reads on the main thread at startup only.
+    pub fn saved_color_theme(&self) -> Option<ColorTheme> {
+        self.lock_store()
+            .color_theme()
+            .unwrap_or_else(|error| report_unreadable("color theme", &error))
+    }
+
+    /// Records the color theme and schedules a write.
+    pub fn record_color_theme(cx: &mut App, theme: ColorTheme) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.color_theme = Some(theme);
             recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
@@ -347,6 +365,11 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
         && let Err(error) = store.put_cache_ttl(ttl)
     {
         eprintln!("ui state: cannot save the cache TTL: {error:#}");
+    }
+    if let Some(theme) = pending.color_theme
+        && let Err(error) = store.put_color_theme(theme)
+    {
+        eprintln!("ui state: cannot save the color theme: {error:#}");
     }
     for change in &pending.viewed_changes {
         let written = match change {

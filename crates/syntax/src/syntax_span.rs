@@ -1,13 +1,11 @@
 use std::ops::Range;
 
-use crate::SyntaxColor;
+use crate::SyntaxKind;
 
-/// A byte range of a line drawn in a token's color and font style. Text
-/// outside every span uses the theme's default foreground.
+/// A byte range of a line holding one kind of token. Text outside every
+/// span is plain (variables, operators, punctuation).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyntaxSpan {
     pub range: Range<usize>,
-    pub color: SyntaxColor,
-    pub is_bold: bool,
-    pub is_italic: bool,
+    pub kind: SyntaxKind,
 }

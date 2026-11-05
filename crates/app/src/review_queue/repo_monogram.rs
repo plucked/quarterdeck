@@ -38,7 +38,7 @@ impl RenderOnce for RepoMonogram {
             .bg(color_of(&self.name))
             .text_size(px(10.))
             .font_weight(FontWeight::BOLD)
-            .text_color(theme::on_accent())
+            .text_color(theme::on_label())
             .child(letter)
     }
 }

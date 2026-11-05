@@ -87,11 +87,11 @@ mod tests {
         let patch = "@@ -1,3 +1,3 @@\n /* start\n-old comment line\n+new_code();\n";
         let diff = FileDiff::build(patch, DiffOptions::default());
         let syntax = DiffSyntax::highlight(&diff, "a.rs").unwrap();
-        let comment = syntax.spans(0, 0)[0].color;
+        let comment = syntax.spans(0, 0)[0].kind;
         // The removed line continues the comment on the old side...
-        assert_eq!(syntax.spans(0, 1)[0].color, comment);
+        assert_eq!(syntax.spans(0, 1)[0].kind, comment);
         // ...and the added line is still inside it on the new side too.
-        assert_eq!(syntax.spans(0, 2)[0].color, comment);
+        assert_eq!(syntax.spans(0, 2)[0].kind, comment);
     }
 
     /// An unknown language has no syntax colors.

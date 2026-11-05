@@ -13,6 +13,8 @@
 //! - `cleanup_counts.rs`: `CleanupCounts`, what a cleanup removed.
 //! - `cache_ttl.rs`: `CacheTtl`, how long unused cached data is kept.
 //! - `cache_settings_storage.rs`: reads and writes of the cache TTL.
+//! - `color_theme.rs`: `ColorTheme`, the app's color theme.
+//! - `appearance_settings_storage.rs`: reads and writes of the color theme.
 //! - `sql_integers.rs`: checked conversions between GitHub numbers and SQLite integers.
 //! - `unix_now.rs`: the current time as stored.
 //! - `ui_state_store.rs`: `UiStateStore`, reads and writes of the UI state.
@@ -52,6 +54,7 @@
 //! - `review_summary.rs`: `ReviewSummary`, the verdict and summary of a GitHub review.
 //! - `review_notes_storage.rs`: reads and writes of notes and summaries.
 
+mod appearance_settings_storage;
 mod cache_cleanup;
 mod cache_settings_storage;
 mod cache_ttl;
@@ -60,6 +63,7 @@ mod cache_usage_storage;
 mod cached_file_set;
 mod cached_stack;
 mod cleanup_counts;
+mod color_theme;
 mod comparison_storage;
 mod database_connection;
 mod detail_scroll_position;
@@ -106,6 +110,7 @@ pub use cache_usage::{CacheUsage, CachedData};
 pub use cached_file_set::CachedFileSet;
 pub use cached_stack::CachedStack;
 pub use cleanup_counts::CleanupCounts;
+pub use color_theme::ColorTheme;
 pub use detail_scroll_position::DetailScrollPosition;
 pub use diff_layout::DiffLayout;
 pub use diff_view_settings::DiffViewSettings;

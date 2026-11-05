@@ -32,21 +32,23 @@ pub fn render_gutter(number: Option<u32>, width: f32) -> Div {
         .w(px(width))
         .pr_2()
         .text_right()
-        .text_color(theme::muted())
+        .text_color(theme::line_number())
         .children(number.map(|number| number.to_string()))
 }
 
 /// The `+`, `-` or blank marker column.
 pub fn render_marker(kind: DiffLineKind) -> Div {
-    let marker = match kind {
-        DiffLineKind::Added => "+",
-        DiffLineKind::Removed => "-",
-        DiffLineKind::Context => "",
+    // The mark carries the change's color too, so added and removed differ
+    // by symbol as well as by hue.
+    let (marker, color) = match kind {
+        DiffLineKind::Added => ("+", theme::added()),
+        DiffLineKind::Removed => ("-", theme::removed()),
+        DiffLineKind::Context => ("", theme::muted()),
     };
     div()
         .flex_none()
         .w(px(MARKER_WIDTH))
-        .text_color(theme::muted())
+        .text_color(color)
         .child(marker)
 }
 

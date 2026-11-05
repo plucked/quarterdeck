@@ -6,8 +6,8 @@ use gpui::{
 use super::settings_window::SettingsWindow;
 
 const WINDOW_TITLE: &str = "Settings";
-const WINDOW_WIDTH: f32 = 720.;
-const WINDOW_HEIGHT: f32 = 480.;
+const WINDOW_WIDTH: f32 = 860.;
+const WINDOW_HEIGHT: f32 = 680.;
 const WINDOW_MIN_WIDTH: f32 = 560.;
 const WINDOW_MIN_HEIGHT: f32 = 360.;
 

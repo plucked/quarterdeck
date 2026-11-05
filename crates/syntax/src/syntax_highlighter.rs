@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::sync::OnceLock;
 
-use crate::graphite_theme::graphite_theme;
-use crate::{SyntaxColor, SyntaxSpan};
+use crate::SyntaxSpan;
+use crate::token_theme::{kind_of_marker, token_theme};
 use syntect::easy::HighlightLines;
-use syntect::highlighting::{Color, FontStyle, Style, Theme};
+use syntect::highlighting::{Style, Theme};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 
 /// Lines longer than this (minified code, data) are left plain: they are
@@ -24,7 +24,7 @@ impl SyntaxHighlighter {
         static SHARED: OnceLock<SyntaxHighlighter> = OnceLock::new();
         SHARED.get_or_init(|| Self {
             syntaxes: two_face::syntax::extra_newlines(),
-            theme: graphite_theme(),
+            theme: token_theme(),
         })
     }
 
@@ -67,44 +67,29 @@ impl SyntaxHighlighter {
                 let with_newline = format!("{line}\n");
                 highlighter
                     .highlight_line(&with_newline, &self.syntaxes)
-                    .map(|pieces| self.spans_for(&pieces, line.len()))
+                    .map(|pieces| Self::spans_for(&pieces, line.len()))
                     .unwrap_or_default()
             })
             .collect()
     }
 
-    /// Turns highlighted pieces into spans within `line_length`, leaving out
-    /// pieces in the default style.
-    fn spans_for(&self, pieces: &[(Style, &str)], line_length: usize) -> Vec<SyntaxSpan> {
-        let default_foreground = self.theme.settings.foreground;
+    /// Turns highlighted pieces into spans of their token kind within
+    /// `line_length`, leaving out plain pieces.
+    fn spans_for(pieces: &[(Style, &str)], line_length: usize) -> Vec<SyntaxSpan> {
         let mut spans = Vec::new();
         let mut position = 0;
         for (style, text) in pieces {
             let start = position;
             position += text.len();
             let range = start..position.min(line_length);
-            let is_bold = style.font_style.contains(FontStyle::BOLD);
-            let is_italic = style.font_style.contains(FontStyle::ITALIC);
-            let is_default = Some(style.foreground) == default_foreground && !is_bold && !is_italic;
-            if range.is_empty() || is_default {
+            if range.is_empty() {
                 continue;
             }
-            spans.push(SyntaxSpan {
-                range,
-                color: syntax_color(style.foreground),
-                is_bold,
-                is_italic,
-            });
+            if let Some(kind) = kind_of_marker(style.foreground) {
+                spans.push(SyntaxSpan { range, kind });
+            }
         }
         spans
-    }
-}
-
-fn syntax_color(color: Color) -> SyntaxColor {
-    SyntaxColor {
-        red: color.r,
-        green: color.g,
-        blue: color.b,
     }
 }
 
@@ -143,7 +128,7 @@ mod tests {
         );
         assert!(spans[0].iter().any(|span| span.range == (0..2)));
         // The second comment line is colored like the first, all of it.
-        let comment_color = spans[1][0].color;
-        assert_eq!(spans[2][0].color, comment_color);
+        let comment_color = spans[1][0].kind;
+        assert_eq!(spans[2][0].kind, comment_color);
     }
 }

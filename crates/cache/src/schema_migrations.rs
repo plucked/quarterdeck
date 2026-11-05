@@ -339,6 +339,15 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         PRIMARY KEY (repo_owner, repo_name, stack_number)
     );
 ",
+    r"
+    -- The color theme picked in Settings → Appearance (one row).
+    CREATE TABLE appearance_settings (
+        id           INTEGER PRIMARY KEY CHECK (id = 1),
+        color_theme  TEXT    NOT NULL CHECK (color_theme IN (
+            'ledger', 'vellum', 'overcast', 'signal', 'graphite', 'tide', 'lantern', 'beacon'
+        ))
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in
