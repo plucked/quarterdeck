@@ -1,8 +1,12 @@
-use gpui::{Context, FocusHandle, Task, Window, div, prelude::*};
+use std::time::Instant;
+
+use gpui::{Context, FocusHandle, Subscription, Task, Window, div, prelude::*};
 use qc_cache::PullRequestListKey;
 use qc_github::PullRequest;
 
+use super::activation_refresh::ActivationRefresh;
 use super::changed_files::ChangedFiles;
+use super::refresh_schedule::RefreshSchedule;
 use super::refresh_status::RefreshStatus;
 use super::selection_after_refresh::SelectionAfterRefresh;
 use crate::app_commands::Refresh;
@@ -15,7 +19,8 @@ const QUEUE_LIST: PullRequestListKey = PullRequestListKey::REVIEW_REQUESTED;
 /// changed files of the selected one.
 ///
 /// The queue is shown from the cache at once and refreshed from GitHub in the
-/// background; changed files are read from the cache when still current for
+/// background: at launch, on cmd-r, on a timer after each refresh and when the
+/// window becomes active with a stale queue. Changed files are read from the cache when still current for
 /// the pull request's `updated_at`, otherwise fetched and cached.
 pub struct ReviewQueue {
     services: AppServices,
@@ -24,8 +29,13 @@ pub struct ReviewQueue {
     selected_index: Option<usize>,
     changed_files: Option<ChangedFiles>,
     refresh_status: RefreshStatus,
+    refresh_schedule: RefreshSchedule,
     /// The in-flight refresh; replacing it cancels the previous one.
     refresh_task: Option<Task<()>>,
+    /// The timer waiting for the next timed refresh; any refresh replaces it.
+    auto_refresh_task: Option<Task<()>>,
+    /// Keeps the window activation observer registered for the view's lifetime.
+    _activation_subscription: Subscription,
     /// The in-flight file load; replacing it cancels the previous one.
     files_task: Option<Task<()>>,
 }
@@ -36,6 +46,10 @@ impl ReviewQueue {
         // Focus the view so its key bindings (cmd-r) reach it.
         let focus = cx.focus_handle();
         window.focus(&focus);
+
+        // Refresh a stale queue when the user comes back to the window.
+        let activation_subscription =
+            cx.observe_window_activation(window, Self::on_window_activation_changed);
 
         // The cache is local and small, so it is read synchronously at startup.
         let cached = services.cache.lock().list(QUEUE_LIST);
@@ -54,8 +68,11 @@ impl ReviewQueue {
             selected_index: None,
             changed_files: None,
             refresh_status,
+            refresh_schedule: RefreshSchedule::default(),
             refresh_task: None,
+            auto_refresh_task: None,
             files_task: None,
+            _activation_subscription: activation_subscription,
         };
         queue.refresh(cx);
         queue
@@ -82,8 +99,12 @@ impl ReviewQueue {
         &self.refresh_status
     }
 
-    /// Fetches the queue from GitHub, caches it and shows it.
+    /// Fetches the queue from GitHub, caches it and shows it, then arms the
+    /// next timed refresh.
     pub(super) fn refresh(&mut self, cx: &mut Context<Self>) {
+        // Any refresh moves the timed one: it is re-armed when this one finishes.
+        self.auto_refresh_task = None;
+
         // Without a client there is nothing to refresh; say why.
         let client = match &self.services.github {
             Ok(client) => client.clone(),
@@ -108,17 +129,50 @@ impl ReviewQueue {
                 })
                 .await;
 
-            // Show the result; a closed view simply drops it.
+            // Show the result and arm the next timed refresh; a closed view simply drops it.
             queue
-                .update(cx, |queue, cx| match fetched {
-                    Ok(pull_requests) => queue.replace_pull_requests(pull_requests, cx),
-                    Err(error) => {
-                        queue.refresh_status = RefreshStatus::Failed(format!("{error:#}").into());
-                        cx.notify();
+                .update(cx, |queue, cx| {
+                    match fetched {
+                        Ok(pull_requests) => queue.replace_pull_requests(pull_requests, cx),
+                        Err(error) => {
+                            queue.refresh_status =
+                                RefreshStatus::Failed(format!("{error:#}").into());
+                            cx.notify();
+                        }
                     }
+                    queue.schedule_next_refresh(cx);
                 })
                 .ok();
         }));
+    }
+
+    /// Records that a refresh finished and starts the timer for the next one.
+    /// A failed refresh is retried on the same timer, not sooner.
+    fn schedule_next_refresh(&mut self, cx: &mut Context<Self>) {
+        let now = Instant::now();
+        self.refresh_schedule.record_finished(now);
+        let delay = self.refresh_schedule.delay_until_next(now);
+
+        self.auto_refresh_task = Some(cx.spawn(async move |queue, cx| {
+            // Sleep until the deadline, then refresh; a closed view simply drops it.
+            cx.background_executor().timer(delay).await;
+            queue.update(cx, Self::refresh).ok();
+        }));
+    }
+
+    /// Refreshes a stale queue when the window becomes active.
+    fn on_window_activation_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Deactivation needs nothing; only coming back to the window counts.
+        if !window.is_window_active() {
+            return;
+        }
+        match self
+            .refresh_schedule
+            .decide_on_activation(&self.refresh_status, Instant::now())
+        {
+            ActivationRefresh::Refresh => self.refresh(cx),
+            ActivationRefresh::NotDue | ActivationRefresh::AlreadyRefreshing => {}
+        }
     }
 
     /// Replaces the queue after a refresh, keeping the selection where the
