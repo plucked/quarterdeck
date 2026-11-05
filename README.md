@@ -57,7 +57,7 @@ devbox run check           # format, lint, test and docs checks
 devbox shell               # a shell with the tools, for anything else
 ```
 
-The first run installs Nix if it is missing (Devbox asks for your password) and fetches the tools; `devbox.lock` pins their versions once created.
+The first run installs Nix if it is missing (Devbox asks for your password) and fetches the tools, at the versions `devbox.lock` pins.
 
 ### Working on it
 
