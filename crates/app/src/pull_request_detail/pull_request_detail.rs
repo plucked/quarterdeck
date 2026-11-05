@@ -524,6 +524,7 @@ impl PullRequestDetail {
         }
         // New commits can move the layers' heads, so the stack is checked again (free when unchanged).
         self.target = self.decide_target();
+        cx.emit(DetailEvent::TargetChanged);
         self.load_changed_files(cx);
         self.reveal_current_layer();
         self.load_stack(cx);
@@ -552,6 +553,7 @@ impl PullRequestDetail {
         }
         self.target = target;
         self.pending_scroll = None;
+        cx.emit(DetailEvent::TargetChanged);
         self.load_changed_files(cx);
     }
 
@@ -646,6 +648,32 @@ impl PullRequestDetail {
         UiStateRecorder::record_review_layout(cx, self.review_layout());
         self.retarget(cx);
         cx.notify();
+    }
+
+    /// Reviews the shown stack combined from its lowest unmerged layer up to
+    /// the shown one (a click on a stack in the sidebar), and saves the mode.
+    pub fn review_combined_stack(&mut self, cx: &mut Context<Self>) {
+        self.prepare_combined_stack_review(cx);
+        self.retarget(cx);
+        cx.notify();
+    }
+
+    /// Sets the combined review from the lowest unmerged layer without
+    /// reloading, for a pull request about to be shown, and saves the mode.
+    pub fn prepare_combined_stack_review(&mut self, cx: &mut Context<Self>) {
+        self.combined_start = None;
+        if self.review_mode != StackReviewMode::Combined {
+            self.review_mode = StackReviewMode::Combined;
+            UiStateRecorder::record_review_layout(cx, self.review_layout());
+        }
+    }
+
+    /// Whether the files shown (or awaited) are a combined stack review.
+    pub fn is_combined_review(&self) -> bool {
+        match self.target {
+            ReviewTarget::Combined(_) | ReviewTarget::AwaitingStack => true,
+            ReviewTarget::Layer => false,
+        }
     }
 
     /// Sets the review mode, from the header's control.

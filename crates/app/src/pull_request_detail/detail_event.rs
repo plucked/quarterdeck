@@ -7,6 +7,9 @@ pub enum DetailEvent {
     Scrolled,
     /// The user asked to show another layer of the shown stack.
     OpenLayer(LayerRequest),
+    /// The files shown are of another target (one layer or combined
+    /// layers); the sidebar marks a stack under combined review.
+    TargetChanged,
 }
 
 /// A stack layer to show: the pull request `number` of `repo`, with its

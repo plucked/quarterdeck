@@ -157,7 +157,10 @@ impl ReviewQueue {
                             cx,
                         )
                     }
-                    QueueRow::StackHeader(group) => render_stack_header(index, group, cx),
+                    QueueRow::StackHeader(group) => {
+                        let is_reviewed = self.is_stack_reviewed(&group.key, cx);
+                        render_stack_header(index, group, is_reviewed, cx)
+                    }
                 };
                 Some(element)
             })
@@ -233,14 +236,17 @@ fn render_pull_request_row(
 }
 
 /// The header of a stack's group: its number, size and trunk, and how many
-/// of its layers this list has; clicking collapses or expands it.
+/// of its layers this list has. Clicking opens the stack's combined review
+/// (highlighted while shown); the chevron collapses or expands the group.
 fn render_stack_header(
     row_index: usize,
     group: &StackGroup,
+    is_reviewed: bool,
     cx: &mut Context<ReviewQueue>,
 ) -> AnyElement {
     let chevron = if group.is_collapsed { "▸" } else { "▾" };
-    let key = group.key.clone();
+    let open_key = group.key.clone();
+    let toggle_key = group.key.clone();
     let listed = if u64::try_from(group.listed).is_ok_and(|listed| listed == group.size) {
         "all layers listed".to_owned()
     } else {
@@ -252,16 +258,32 @@ fn render_stack_header(
         .py_2()
         .border_b_1()
         .border_color(theme::border())
-        .bg(theme::background())
         .cursor_pointer()
-        .hover(|style| style.bg(theme::hover()))
-        .on_click(cx.listener(move |queue, _, _, cx| queue.toggle_stack_group(&key, cx)))
+        .when(is_reviewed, |header| header.bg(theme::selected()))
+        .when(!is_reviewed, |header| {
+            header
+                .bg(theme::background())
+                .hover(|style| style.bg(theme::hover()))
+        })
+        .on_click(cx.listener(move |queue, _, _, cx| queue.open_stack(&open_key, cx)))
         .child(
             div()
                 .flex()
                 .gap_1p5()
                 .font_weight(FontWeight::SEMIBOLD)
-                .child(div().w_3().text_color(theme::muted()).child(chevron))
+                .child(
+                    div()
+                        .id(("stack-chevron", row_index))
+                        .w_3()
+                        .rounded_sm()
+                        .text_color(theme::muted())
+                        .hover(|style| style.text_color(theme::text()).bg(theme::hover()))
+                        .on_click(cx.listener(move |queue, _, _, cx| {
+                            cx.stop_propagation();
+                            queue.toggle_stack_group(&toggle_key, cx);
+                        }))
+                        .child(chevron),
+                )
                 .child(div().text_color(theme::accent()).child("⧉"))
                 .child(div().truncate().child(format!(
                     "Stack #{} · {} layers → {}",

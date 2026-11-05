@@ -127,6 +127,7 @@ impl ReviewQueue {
             cx.subscribe(&detail, |queue, _, event: &DetailEvent, cx| match event {
                 DetailEvent::Scrolled => queue.record_view_state(cx),
                 DetailEvent::OpenLayer(request) => queue.open_layer(request, cx),
+                DetailEvent::TargetChanged => cx.notify(),
             });
 
         let mut queue = Self {
@@ -217,6 +218,47 @@ impl ReviewQueue {
         }
         self.rebuild_rows();
         cx.notify();
+    }
+
+    /// Opens the combined review of a stack (a click on its header in the
+    /// sidebar): its highest listed layer, combined from the lowest unmerged one.
+    pub(super) fn open_stack(&mut self, key: &StackKey, cx: &mut Context<Self>) {
+        let Some(top) = self
+            .shown_list()
+            .iter()
+            .filter(|pull_request| StackKey::of(pull_request).as_ref() == Some(key))
+            .max_by_key(|pull_request| {
+                pull_request
+                    .stack
+                    .as_ref()
+                    .map_or(0, |membership| membership.position)
+            })
+            .cloned()
+        else {
+            return;
+        };
+
+        // Already shown: only the review changes; else it is set before the new layer shows.
+        let is_shown = self.selected.as_ref().map(|selected| selected.id) == Some(top.id);
+        if is_shown {
+            self.detail
+                .update(cx, PullRequestDetail::review_combined_stack);
+            cx.notify();
+            return;
+        }
+        self.detail
+            .update(cx, PullRequestDetail::prepare_combined_stack_review);
+        self.select_pull_request(top, SelectionOrigin::Listed, cx);
+    }
+
+    /// Whether the detail shows the combined review of stack `key`, so its
+    /// header is highlighted.
+    pub(super) fn is_stack_reviewed(&self, key: &StackKey, cx: &App) -> bool {
+        self.selected
+            .as_ref()
+            .and_then(StackKey::of)
+            .is_some_and(|selected| &selected == key)
+            && self.detail.read(cx).is_combined_review()
     }
 
     /// Shows `pull_request` (or nothing) in the detail pane, at `restore`
