@@ -12,7 +12,7 @@ pub struct MarkdownDocument {
 
 impl MarkdownDocument {
     /// Parses GitHub-flavored Markdown: `CommonMark` plus tables,
-    /// strikethrough and task lists. Raw HTML keeps only its text and `<br>`
+    /// strikethrough, task lists and bare web URLs as links. Raw HTML keeps only its text and `<br>`
     /// line breaks; images become links labeled with their alt text.
     pub fn parse(source: &str) -> Self {
         Self {

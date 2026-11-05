@@ -1,5 +1,6 @@
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
+use crate::bare_urls::find_bare_urls;
 use crate::html_text::{is_line_break_tag, strip_html};
 use crate::{
     ColumnAlignment, HeadingLevel, InlineStyle, InlineText, ListItem, MarkdownBlock, MarkdownList,
@@ -253,12 +254,32 @@ impl DocumentBuilder {
         }
     }
 
-    /// Text goes into an open code block as is, otherwise into inline text.
+    /// Text goes into an open code block as is, otherwise into inline text,
+    /// with bare URLs turned into links unless it is already inside one.
     fn text(&mut self, text: &str) {
-        match &mut self.code_block {
-            Some((_, code)) => code.push_str(text),
-            None => self.push_inline(text, InlineStyle::PLAIN),
+        if let Some((_, code)) = &mut self.code_block {
+            code.push_str(text);
+            return;
         }
+        let is_inside_link = self
+            .inline
+            .as_ref()
+            .is_some_and(|inline| !inline.links.is_empty());
+        if is_inside_link {
+            self.push_inline(text, InlineStyle::PLAIN);
+            return;
+        }
+
+        // Alternate plain text and links, in order.
+        let mut plain_start = 0;
+        for url in find_bare_urls(text) {
+            self.push_inline(&text[plain_start..url.start], InlineStyle::PLAIN);
+            self.open_link(text[url.clone()].to_owned(), false);
+            self.push_inline(&text[url.clone()], InlineStyle::PLAIN);
+            self.close_link();
+            plain_start = url.end;
+        }
+        self.push_inline(&text[plain_start..], InlineStyle::PLAIN);
     }
 
     /// Raw HTML of a block is collected whole, since a comment can span

@@ -17,7 +17,9 @@
 //! - `markdown_table.rs`: `MarkdownTable`, header, rows and column alignments.
 //! - `column_alignment.rs`: `ColumnAlignment` of a table column.
 //! - `html_text.rs`: extracts readable text from raw HTML.
+//! - `bare_urls.rs`: finds bare web URLs in text, which GitHub links.
 
+mod bare_urls;
 mod column_alignment;
 mod document_builder;
 mod heading_level;

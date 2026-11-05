@@ -78,6 +78,21 @@ fn records_links() {
     assert!(text.runs()[0].style.contains(InlineStyle::LINK));
 }
 
+/// Bare web URLs become links; a URL inside a written link is not linked twice.
+#[test]
+fn links_bare_urls() {
+    let parsed = blocks("Session: https://example.com/s/1. Or [https://x.dev](https://x.dev)");
+    let MarkdownBlock::Paragraph(text) = &parsed[0] else {
+        panic!("expected a paragraph");
+    };
+    let urls: Vec<_> = text.links().iter().map(|link| link.url.as_str()).collect();
+    assert_eq!(urls, ["https://example.com/s/1", "https://x.dev"]);
+    assert_eq!(
+        &text.text()[text.links()[0].range.clone()],
+        "https://example.com/s/1"
+    );
+}
+
 /// An image becomes a link labeled with its alt text, or a placeholder without one.
 #[test]
 fn images_become_links() {
