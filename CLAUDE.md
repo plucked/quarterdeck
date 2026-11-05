@@ -6,6 +6,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: 
 - Remote `origin`: `git@github.com:plucked/quarterdeck.git` (private). Work directly on `main` and push it. Small atomic commits, prefixed `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`/`style:`/`test:`.
 - Rust conventions: skill `knowledge-writing-rust-in-quarterdeck` (`.claude/skills/`). Load it before touching `.rs` or `Cargo.toml`.
 - Keep this file and each crate's `CLAUDE.md` current in the same commit as the change. Compact: facts only.
+- `README.md` describes the features and how to run the app for people; update it when a user-facing feature or the way to run it changes.
 
 ## Crates
 | Crate | Path | Holds |
