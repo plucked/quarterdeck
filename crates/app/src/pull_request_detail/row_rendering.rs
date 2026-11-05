@@ -317,7 +317,8 @@ impl PullRequestDetail {
 /// A one-line status (loading, failure) below the description.
 impl PullRequestDetail {
     /// A diff line with the `+` that comments on it (`anchor`), shown left of
-    /// the line on hover; shift-clicking it stretches the open comment.
+    /// the line while the line or the `+` is hovered; shift-clicking it
+    /// stretches the open comment.
     fn with_comment_button(
         index: usize,
         file: usize,
@@ -328,16 +329,20 @@ impl PullRequestDetail {
         let Some((side, line)) = anchor else {
             return content;
         };
+        // The hover area reaches into the pane's padding where the `+` sits,
+        // so moving the pointer onto the `+` keeps it shown.
         div()
             .relative()
             .group("diff-line")
+            .ml(px(-COMMENT_BUTTON_WIDTH))
+            .pl(px(COMMENT_BUTTON_WIDTH))
             .child(content)
             .child(
                 div()
                     .id(("comment-line", index))
                     .absolute()
                     .top_0()
-                    .left(px(-COMMENT_BUTTON_WIDTH))
+                    .left_0()
                     .w(px(COMMENT_BUTTON_WIDTH))
                     .h(px(COMMENT_BUTTON_WIDTH))
                     .flex()
