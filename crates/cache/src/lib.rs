@@ -11,6 +11,7 @@
 //! - `window_placement.rs`: `WindowPlacement`, the main window's saved bounds.
 //! - `window_mode.rs`: `WindowMode`, windowed, maximized or fullscreen.
 //! - `review_queue_view_state.rs`: `ReviewQueueViewState`, the review queue's saved selection and scroll.
+//! - `detail_scroll_position.rs`: `DetailScrollPosition`, the detail pane's scroll as row and offset.
 //! - `diff_view_settings.rs`: `DiffViewSettings`, how file diffs are shown.
 //! - `diff_layout.rs`: `DiffLayout`, unified or side by side.
 //! - `line_wrapping.rs`: `LineWrapping`, wrap or scroll long lines.
@@ -21,6 +22,7 @@
 //! - `viewed_files_storage.rs`: reads and writes of viewed marks.
 
 mod database_connection;
+mod detail_scroll_position;
 mod diff_layout;
 mod diff_option_sql_text;
 mod diff_view_settings;
@@ -37,6 +39,7 @@ mod viewed_files_storage;
 mod window_mode;
 mod window_placement;
 
+pub use detail_scroll_position::DetailScrollPosition;
 pub use diff_layout::DiffLayout;
 pub use diff_view_settings::DiffViewSettings;
 pub use github_cache::GitHubCache;

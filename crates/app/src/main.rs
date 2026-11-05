@@ -12,6 +12,7 @@
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
 //! - `review_queue/`: the main view, the queue of pull requests awaiting review.
+//! - `pull_request_detail/`: `PullRequestDetail`, the selected pull request as a virtualized list.
 //! - `ui_state/`: saves and restores what the UI showed across relaunches.
 
 mod app_commands;
@@ -20,6 +21,7 @@ mod diff_view;
 mod launch_app;
 mod main_window;
 mod markdown_view;
+mod pull_request_detail;
 mod review_queue;
 mod scrollbar;
 mod segmented_control;

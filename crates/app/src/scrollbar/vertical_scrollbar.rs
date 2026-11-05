@@ -1,9 +1,10 @@
 use gpui::{
     App, Bounds, Canvas, DispatchPhase, ElementId, Entity, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, RenderOnce, ScrollHandle, Window, canvas,
-    div, fill, point, prelude::*, px, size,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, RenderOnce, Window, canvas, div, fill,
+    point, prelude::*, px, size,
 };
 
+use super::scrollbar_target::ScrollbarTarget;
 use super::thumb_drag::ThumbDrag;
 use super::thumb_geometry::ThumbGeometry;
 use crate::theme;
@@ -13,23 +14,23 @@ const SCROLLBAR_WIDTH: f32 = 10.;
 /// Gap between the thumb and the bar's edges.
 const THUMB_INSET: f32 = 2.;
 
-/// A vertical scrollbar for the scroll container tracked by `handle`. Place
+/// A vertical scrollbar for a scroll container or a virtualized list. Place
 /// it inside a `relative()` wrapper that also holds the container; it
 /// overlays the wrapper's right edge. `id` must be unique among its siblings.
 ///
-/// The thumb is painted from the handle at paint time, after the container
+/// The thumb is painted from the target at paint time, after the container
 /// is laid out, so it never lags a frame behind the content.
 #[derive(IntoElement)]
 pub struct VerticalScrollbar {
     id: ElementId,
-    handle: ScrollHandle,
+    target: ScrollbarTarget,
 }
 
 impl VerticalScrollbar {
-    pub fn new(id: impl Into<ElementId>, handle: ScrollHandle) -> Self {
+    pub fn new(id: impl Into<ElementId>, target: ScrollbarTarget) -> Self {
         Self {
             id: id.into(),
-            handle,
+            target,
         }
     }
 }
@@ -43,17 +44,17 @@ impl RenderOnce for VerticalScrollbar {
             .right_0()
             .h_full()
             .w(px(SCROLLBAR_WIDTH))
-            .child(thumb_canvas(self.handle, drag).size_full())
+            .child(thumb_canvas(self.target, drag).size_full())
     }
 }
 
 /// Paints the thumb into the bar's bounds and listens for presses, drags and
 /// releases on it. Listens window-wide so a drag continues off the bar.
-fn thumb_canvas(handle: ScrollHandle, drag: Entity<ThumbDrag>) -> Canvas<()> {
+fn thumb_canvas(target: ScrollbarTarget, drag: Entity<ThumbDrag>) -> Canvas<()> {
     canvas(
         |_, _, _| {},
         move |track: Bounds<Pixels>, (), window, cx| {
-            let Some(thumb) = current_thumb(&handle, track) else {
+            let Some(thumb) = current_thumb(&target, track) else {
                 return;
             };
 
@@ -74,9 +75,9 @@ fn thumb_canvas(handle: ScrollHandle, drag: Entity<ThumbDrag>) -> Canvas<()> {
             window.paint_quad(fill(thumb_bounds, color).corner_radii(px(SCROLLBAR_WIDTH / 2.)));
 
             // A press on the bar grabs the thumb, or first jumps it to the pointer.
-            let pressing = (handle.clone(), drag.clone());
+            let pressing = (target.clone(), drag.clone());
             window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
-                let (handle, drag) = &pressing;
+                let (target, drag) = &pressing;
                 if phase != DispatchPhase::Bubble
                     || event.button != MouseButton::Left
                     || !track.contains(&event.position)
@@ -88,9 +89,10 @@ fn thumb_canvas(handle: ScrollHandle, drag: Entity<ThumbDrag>) -> Canvas<()> {
                     pointer_y - thumb.top
                 } else {
                     let centered = thumb.height / 2.;
-                    scroll_to(handle, thumb.scroll_top_for(pointer_y - centered));
+                    target.set_scroll_top(px(thumb.scroll_top_for(pointer_y - centered)));
                     centered
                 };
+                target.begin_drag();
                 drag.update(cx, |drag, _| drag.grab_offset = Some(grab_offset));
                 // The press belongs to the bar, not to the text underneath.
                 cx.stop_propagation();
@@ -98,9 +100,9 @@ fn thumb_canvas(handle: ScrollHandle, drag: Entity<ThumbDrag>) -> Canvas<()> {
             });
 
             // While grabbed, the thumb follows the pointer.
-            let moving = (handle.clone(), drag.clone());
+            let moving = (target.clone(), drag.clone());
             window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
-                let (handle, drag) = &moving;
+                let (target, drag) = &moving;
                 let Some(grab_offset) = drag.read(cx).grab_offset else {
                     return;
                 };
@@ -109,18 +111,20 @@ fn thumb_canvas(handle: ScrollHandle, drag: Entity<ThumbDrag>) -> Canvas<()> {
                     return;
                 }
                 let thumb_top = f32::from(event.position.y - track.origin.y) - grab_offset;
-                scroll_to(handle, thumb.scroll_top_for(thumb_top));
+                target.set_scroll_top(px(thumb.scroll_top_for(thumb_top)));
                 window.refresh();
             });
 
             // A release anywhere ends the drag.
-            let releasing = drag.clone();
+            let releasing = (target.clone(), drag.clone());
             window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
+                let (target, drag) = &releasing;
                 if phase == DispatchPhase::Bubble
                     && event.button == MouseButton::Left
-                    && releasing.read(cx).grab_offset.is_some()
+                    && drag.read(cx).grab_offset.is_some()
                 {
-                    releasing.update(cx, |drag, _| drag.grab_offset = None);
+                    target.end_drag();
+                    drag.update(cx, |drag, _| drag.grab_offset = None);
                     window.refresh();
                 }
             });
@@ -128,19 +132,12 @@ fn thumb_canvas(handle: ScrollHandle, drag: Entity<ThumbDrag>) -> Canvas<()> {
     )
 }
 
-/// The thumb for the container's current scroll position in `track`.
-fn current_thumb(handle: &ScrollHandle, track: Bounds<Pixels>) -> Option<ThumbGeometry> {
+/// The thumb for the target's current scroll position in `track`.
+fn current_thumb(target: &ScrollbarTarget, track: Bounds<Pixels>) -> Option<ThumbGeometry> {
     ThumbGeometry::compute(
         track.size.height.into(),
-        handle.bounds().size.height.into(),
-        handle.max_offset().height.into(),
-        // gpui's offset is negative as the content moves up.
-        -f32::from(handle.offset().y),
+        target.viewport_height().into(),
+        target.max_scroll().into(),
+        target.scroll_top().into(),
     )
-}
-
-/// Scrolls the container so its content is `scroll_top` pixels down.
-fn scroll_to(handle: &ScrollHandle, scroll_top: f32) {
-    let offset = handle.offset();
-    handle.set_offset(point(offset.x, px(-scroll_top)));
 }

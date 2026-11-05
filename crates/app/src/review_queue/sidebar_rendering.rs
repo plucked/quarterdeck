@@ -5,7 +5,7 @@ use qc_github::PullRequest;
 
 use super::ReviewQueue;
 use super::refresh_status::RefreshStatus;
-use crate::scrollbar::VerticalScrollbar;
+use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
 
 const SIDEBAR_WIDTH: f32 = 380.;
@@ -42,7 +42,9 @@ impl ReviewQueue {
                     )
                     .child(VerticalScrollbar::new(
                         "pull-requests-scrollbar",
-                        self.queue_list_scroll().0.borrow().base_handle.clone(),
+                        ScrollbarTarget::Handle(
+                            self.queue_list_scroll().0.borrow().base_handle.clone(),
+                        ),
                     )),
             )
     }

@@ -1,14 +1,18 @@
-use gpui::{AnyElement, Div, ElementId, IntoElement, Rgba, StyledText, div, prelude::*, px};
+use gpui::{Div, Rgba, StyledText, div, prelude::*, px};
 use qc_cache::LineWrapping;
 use qc_diff::{DiffLine, DiffLineKind};
 use qc_syntax::SyntaxSpan;
 
+use super::DiffRowStyle;
 use super::code_highlights::code_highlights;
+use super::file_card_rendering::frame_file_row;
 use crate::theme;
 
-/// Height of one diff row; rows of a split view in scroll mode line up because all share it.
+/// Height of one unwrapped diff row.
 pub const DIFF_ROW_HEIGHT: f32 = 18.;
-/// Approximate width of one digit in the diff's monospaced font.
+/// Approximate width of one character in the diff's monospaced font.
+pub const DIFF_CHARACTER_WIDTH: f32 = 7.2;
+/// Approximate width of one digit, with a little room.
 const DIGIT_WIDTH: f32 = 7.5;
 /// Space around the digits of a gutter.
 const GUTTER_PADDING: f32 = 16.;
@@ -47,9 +51,9 @@ pub fn render_marker(kind: DiffLineKind) -> Div {
 }
 
 /// A line's text in its syntax colors, with its changed ranges on a
-/// stronger background. Wraps within the row, or stays on one line for
-/// horizontal scrolling.
-pub fn render_code(line: &DiffLine, syntax: &[SyntaxSpan], wrapping: LineWrapping) -> Div {
+/// stronger background. Wraps within the row, or stays on one line clipped
+/// to the row and shifted left by the file's horizontal offset.
+pub fn render_code(line: &DiffLine, syntax: &[SyntaxSpan], style: DiffRowStyle) -> Div {
     let highlights = code_highlights(
         line.text.len(),
         syntax,
@@ -57,14 +61,19 @@ pub fn render_code(line: &DiffLine, syntax: &[SyntaxSpan], wrapping: LineWrappin
         emphasis_background(line.kind),
     );
     let text = StyledText::new(line.text.clone()).with_highlights(highlights);
-    match wrapping {
+    match style.wrapping {
         LineWrapping::Wrap => div().flex_1().min_w_0().pr_2().child(text),
-        LineWrapping::Scroll => div().flex_none().pr_4().whitespace_nowrap().child(text),
+        LineWrapping::Scroll => div().flex_1().min_w_0().overflow_hidden().child(
+            div()
+                .ml(px(-style.horizontal_offset))
+                .whitespace_nowrap()
+                .child(text),
+        ),
     }
 }
 
 /// The row background for a line of `kind`.
-pub fn row_background(kind: DiffLineKind) -> Option<Rgba> {
+fn row_background(kind: DiffLineKind) -> Option<Rgba> {
     match kind {
         DiffLineKind::Added => Some(theme::added_background()),
         DiffLineKind::Removed => Some(theme::removed_background()),
@@ -81,45 +90,30 @@ fn emphasis_background(kind: DiffLineKind) -> Rgba {
     }
 }
 
-/// A row with a line's background; empty rows keep the row height.
+/// A diff row in the monospaced diff font with a line's background; `None`
+/// is the empty side of a split row. Empty rows keep the row height.
 pub fn render_row(kind: Option<DiffLineKind>) -> Div {
-    let row = div().flex().min_h(px(DIFF_ROW_HEIGHT));
+    let row = div()
+        .flex()
+        .min_h(px(DIFF_ROW_HEIGHT))
+        .font_family(theme::MONO_FONT)
+        .text_xs()
+        .line_height(px(DIFF_ROW_HEIGHT));
     match kind.map(row_background) {
         Some(Some(background)) => row.bg(background),
         Some(None) => row,
-        // No line on this side of a split row.
         None => row.bg(theme::diff_filler()),
     }
 }
 
-/// The `@@ … @@` header that starts a hunk; empty text keeps the row for alignment.
+/// The `@@ … @@` row that starts a hunk, inside the file's card.
 pub fn render_hunk_header(header: &str, indent: f32) -> Div {
-    render_row(None)
-        .pl(px(indent))
-        .text_color(theme::muted())
-        .whitespace_nowrap()
-        .overflow_hidden()
-        .child(header.to_owned())
-}
-
-/// Stacks `rows` as a body: wrapped rows fill the width; scrolling rows sit
-/// in a horizontal scroll area whose content is as wide as its longest row,
-/// so line backgrounds reach the end of every line.
-pub fn render_body(rows: Vec<Div>, wrapping: LineWrapping, id: ElementId) -> AnyElement {
-    match wrapping {
-        LineWrapping::Wrap => div().flex().flex_col().children(rows).into_any_element(),
-        LineWrapping::Scroll => div()
-            .id(id)
-            .overflow_x_scroll()
-            .flex()
-            .child(
-                div()
-                    .flex_none()
-                    .min_w_full()
-                    .flex()
-                    .flex_col()
-                    .children(rows),
-            )
-            .into_any_element(),
-    }
+    frame_file_row(
+        render_row(None)
+            .pl(px(indent))
+            .text_color(theme::muted())
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .child(header.to_owned()),
+    )
 }

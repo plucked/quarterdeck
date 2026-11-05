@@ -9,9 +9,10 @@ use crate::theme;
 /// A click handler shared by several elements of one file.
 pub type FileClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
-/// The file's header row: chevron, status, path (old → new for renames),
-/// line counts and the viewed checkbox. Clicking the row collapses or
-/// expands the file; clicking the checkbox only toggles viewed.
+/// The file's header row, the top of its card: chevron, status, path
+/// (old → new for renames), line counts and the viewed checkbox. Clicking
+/// the row collapses or expands the file; clicking the checkbox only
+/// toggles viewed.
 pub fn render_file_header(
     index: usize,
     file: &PullRequestFile,
@@ -38,6 +39,9 @@ pub fn render_file_header(
         .px_2()
         .py_1()
         .bg(theme::panel())
+        .border_1()
+        .rounded_t_md()
+        .border_color(theme::border())
         .cursor_pointer()
         .on_click(move |event, window, cx| on_toggle_collapsed(event, window, cx))
         .child(

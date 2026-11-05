@@ -125,6 +125,16 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         PRIMARY KEY (pr_id, filename)
     );
 ",
+    r"
+    -- The detail pane's scroll is kept as the row at its top plus the offset
+    -- into it, which restores without knowing row heights. A pixel offset
+    -- cannot be converted, so saved positions start again at the top.
+    ALTER TABLE review_queue_view
+        ADD COLUMN detail_scroll_row INTEGER NOT NULL DEFAULT 0 CHECK (detail_scroll_row >= 0);
+    ALTER TABLE review_queue_view
+        ADD COLUMN detail_scroll_row_offset REAL NOT NULL DEFAULT 0;
+    ALTER TABLE review_queue_view DROP COLUMN detail_scroll_offset;
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

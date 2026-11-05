@@ -4,10 +4,17 @@ use anyhow::{Context as _, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::database_connection::{default_database_path, open_database};
-use crate::{ReviewQueueViewState, WindowMode, WindowPlacement};
+use crate::{DetailScrollPosition, ReviewQueueViewState, WindowMode, WindowPlacement};
 
 /// The single row id of the one-row UI state tables.
 pub(crate) const SINGLE_ROW_ID: i64 = 1;
+
+/// The columns of the `review_queue_view` row, read before decoding.
+struct StoredReviewQueueView {
+    selected_id: Option<i64>,
+    scroll_row: i64,
+    scroll_row_offset: f32,
+}
 
 /// A connection to the database for the UI state the app restores after a
 /// relaunch: window placement and review queue state here, diff view
@@ -103,23 +110,34 @@ impl UiStateStore {
         let row = self
             .connection
             .query_row(
-                "SELECT selected_pr_id, detail_scroll_offset FROM review_queue_view WHERE id = ?1",
+                "SELECT selected_pr_id, detail_scroll_row, detail_scroll_row_offset
+                 FROM review_queue_view WHERE id = ?1",
                 [SINGLE_ROW_ID],
-                |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, f32>(1)?)),
+                |row| {
+                    Ok(StoredReviewQueueView {
+                        selected_id: row.get(0)?,
+                        scroll_row: row.get(1)?,
+                        scroll_row_offset: row.get(2)?,
+                    })
+                },
             )
             .optional()?;
-        let Some((selected_id, detail_scroll_offset)) = row else {
+        let Some(stored) = row else {
             return Ok(None);
         };
 
-        // GitHub ids are positive; a negative value is a damaged row.
-        let selected_pull_request_id = selected_id
+        // GitHub ids and row indexes are never negative; a negative value is a damaged row.
+        let selected_pull_request_id = stored
+            .selected_id
             .map(u64::try_from)
             .transpose()
             .context("negative pull request id")?;
         Ok(Some(ReviewQueueViewState {
             selected_pull_request_id,
-            detail_scroll_offset,
+            detail_scroll: DetailScrollPosition {
+                row: usize::try_from(stored.scroll_row).context("negative scroll row")?,
+                offset_in_row: stored.scroll_row_offset,
+            },
         }))
     }
 
@@ -131,12 +149,18 @@ impl UiStateStore {
             .transpose()
             .context("pull request id exceeds SQLite's integer range")?;
         self.connection.execute(
-            "INSERT INTO review_queue_view (id, selected_pr_id, detail_scroll_offset)
-             VALUES (?1, ?2, ?3)
+            "INSERT INTO review_queue_view (id, selected_pr_id, detail_scroll_row, detail_scroll_row_offset)
+             VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT (id) DO UPDATE SET
                 selected_pr_id = excluded.selected_pr_id,
-                detail_scroll_offset = excluded.detail_scroll_offset",
-            params![SINGLE_ROW_ID, selected_id, state.detail_scroll_offset],
+                detail_scroll_row = excluded.detail_scroll_row,
+                detail_scroll_row_offset = excluded.detail_scroll_row_offset",
+            params![
+                SINGLE_ROW_ID,
+                selected_id,
+                i64::try_from(state.detail_scroll.row)?,
+                state.detail_scroll.offset_in_row
+            ],
         )?;
         Ok(())
     }
@@ -180,7 +204,10 @@ mod tests {
         let store = UiStateStore::open_in_memory().unwrap();
         let selected = ReviewQueueViewState {
             selected_pull_request_id: Some(42),
-            detail_scroll_offset: -350.,
+            detail_scroll: DetailScrollPosition {
+                row: 120,
+                offset_in_row: 6.5,
+            },
         };
         store.put_review_queue_view_state(&selected).unwrap();
         assert_eq!(store.review_queue_view_state().unwrap(), Some(selected));

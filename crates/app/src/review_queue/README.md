@@ -1,3 +1,3 @@
 # review_queue
 
-The main window's view: the list of pull requests that request the viewer's review on the left, and the selected pull request with its changed files on the right. It decides when to read the cache, when to refresh from GitHub and what stays selected; it does not know how either is done, which `qc-cache` and `qc-github` handle.
+The main window's view: the list of pull requests that request the viewer's review, which one is selected, and when the list refreshes from GitHub. It hands the selected pull request to `pull_request_detail`, which shows it; it does not load files or draw diffs. It also decides what stays selected across refreshes and relaunches.

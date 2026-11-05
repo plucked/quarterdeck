@@ -1,30 +1,45 @@
-//! Renders file diffs built by `qc-diff`: a reusable `FileDiffView` per file
-//! (header with status, path, counts, viewed checkbox; unified or
-//! side-by-side body with line numbers, syntax colors and inline change
-//! marks; wrapped or scrolling lines) and the `DiffToolbar` that switches how they show.
+//! Renders file diffs built by `qc-diff` row by row, for the virtualized
+//! detail list: file headers (status, path, counts, viewed checkbox), hunk
+//! headers, unified lines or side-by-side rows with line numbers, syntax
+//! colors and inline change marks, and notes for files without lines. Each
+//! row draws its piece of the file's card. Also the `DiffToolbar` that
+//! switches how diffs show.
 //!
 //! Files:
-//! - `file_diff_view.rs`: `FileDiffView`, one file's header and body.
-//! - `file_diff_state.rs`: `FileDiffState`, whether a file is collapsed, viewed or large.
-//! - `file_header_rendering.rs`: renders a file's header row.
-//! - `unified_rendering.rs`: renders a body as one column.
-//! - `split_rendering.rs`: renders a body as old and new side by side.
-//! - `diff_cell_rendering.rs`: the shared pieces: gutters, markers, code, hunk headers, scroll bodies.
+//! - `file_header_rendering.rs`: a file's header row, the top of its card.
+//! - `unified_rendering.rs`: one unified diff row.
+//! - `split_rendering.rs`: one side-by-side diff row.
+//! - `diff_cell_rendering.rs`: the shared pieces: rows, gutters, markers, code, hunk headers.
 //! - `code_highlights.rs`: merges a line's syntax colors with its changed ranges.
+//! - `file_card_rendering.rs`: the card's side borders and closing strip.
+//! - `file_note_rendering.rs`: a file's note row.
+//! - `file_note.rs`: `FileNote`, why a file shows a note.
+//! - `file_diff_state.rs`: `FileDiffState`, whether a file is collapsed, viewed or large.
+//! - `diff_row_style.rs`: `DiffRowStyle`, what a file's rows share.
 //! - `diff_toolbar.rs`: `DiffToolbar`, the summary and the view options.
 //! - `diff_summary.rs`: `DiffSummary`, file, line and viewed counts.
 
 mod code_highlights;
 mod diff_cell_rendering;
+mod diff_row_style;
 mod diff_summary;
 mod diff_toolbar;
+mod file_card_rendering;
 mod file_diff_state;
-mod file_diff_view;
 mod file_header_rendering;
+mod file_note;
+mod file_note_rendering;
 mod split_rendering;
 mod unified_rendering;
 
+pub use diff_cell_rendering::{DIFF_CHARACTER_WIDTH, gutter_width, render_hunk_header};
+pub use diff_row_style::DiffRowStyle;
 pub use diff_summary::DiffSummary;
 pub use diff_toolbar::DiffToolbar;
+pub use file_card_rendering::render_file_end;
 pub use file_diff_state::FileDiffState;
-pub use file_diff_view::FileDiffView;
+pub use file_header_rendering::{FileClickHandler, render_file_header};
+pub use file_note::FileNote;
+pub use file_note_rendering::render_file_note;
+pub use split_rendering::render_split_row;
+pub use unified_rendering::render_unified_line;
