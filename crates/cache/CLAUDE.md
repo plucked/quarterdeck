@@ -8,6 +8,10 @@
 | `schema_migrations` | append-only `SCHEMA_MIGRATIONS` and their runner (`PRAGMA user_version`) |
 | `pull_request_list_key` | `PullRequestListKey` newtype (`REVIEW_REQUESTED`) |
 | `window_placement` / `window_mode` / `display_uuid` | `WindowPlacement` (bounds relative to its display), `WindowMode` (SQL text mapping), `DisplayUuid` |
+| `file_set_storage` / `cached_file_set` / `file_set_revision` | changed files with the commits + PR ETag they were fetched for; `file_set` (marks used), `put_files`, `confirm_files` |
+| `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` |
+| `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
+| `sql_integers` / `unix_now` | checked integer conversions; current time |
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset |
 | `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qc-diff` enums |
 | `viewed_file` / `patch_fingerprint` / `viewed_files_storage` | viewed marks per (PR, file) with an FNV-1a patch fingerprint (stable across Rust versions) |
@@ -17,6 +21,6 @@
 - Every field is its own typed column; nothing is stored as JSON. Changed files are `pr_file_sets` (version tag) + `pr_files` (one row per file, `position` keeps GitHub's order).
 - Adding a field to a `qc-github` type means a migration adding its column and updating the row mapping in `github_cache.rs`.
 - UI state tables hold one row (`id = 1`); `review_queue_view.selected_pr_id` and `viewed_files.pr_id` have no foreign key (the PR may be gone or refetched; the user's state stays).
-- Changed files are valid only for the `updated_at` in their `pr_file_sets` row.
+- A file set is current for the `updated_at` in its `pr_file_sets` row; an older one is still valid when the PR's head/base commits match (`confirm_files`). `last_used_at` moves on every read and write and drives expiry.
 - Every write is one statement or one transaction (the app relies on this for its poisoned-lock handling).
 - Tests use `open_in_memory` (test-only) or a temp dir, never the user's DB.

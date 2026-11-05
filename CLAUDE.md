@@ -35,5 +35,6 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 - Token: `GITHUB_TOKEN`, else `gh auth token`. Without one the app shows cached data only.
 - Database: `~/Library/Application Support/quick-check/cache.sqlite` (delete to reset cache and UI state).
 - Everything stored is typed SQLite columns, cached GitHub data included; never JSON (see the skill's Persistence section).
-- Queue refresh: at launch, `cmd-r`, every 5 min after the last refresh, and on window activation when older than 1 min.
+- Queue refresh: at launch, `cmd-r`, every 5 min after the last refresh, and on window activation when older than 1 min. One search request each.
+- GitHub requests are minimized: cached files are reused while the PR's commits are unchanged (checked with a conditional request, free on 304); unused cached data expires after the TTL (Settings → GitHub, default 1 day).
 - Lints: clippy `pedantic` (warn, `-D warnings` in checks), `module_inception`/`missing_errors_doc`/`must_use_candidate` allowed, `unsafe_code = "deny"`.

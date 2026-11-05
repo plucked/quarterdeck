@@ -1,11 +1,13 @@
 use gpui::{
-    Context, FocusHandle, FontWeight, IntoElement, Render, Subscription, Window, div, prelude::*,
-    px,
+    App, Context, FocusHandle, FontWeight, IntoElement, Render, Subscription, Window, div,
+    prelude::*, px,
 };
 
 use super::file_diff_page::render_file_diff_page;
+use super::github_page::render_github_page;
 use super::settings_category::SettingsCategory;
 use crate::app_commands::CloseWindow;
+use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::theme;
 
@@ -18,6 +20,8 @@ const CATEGORY_LIST_WIDTH: f32 = 180.;
 pub struct SettingsWindow {
     focus: FocusHandle,
     category: SettingsCategory,
+    /// Whether the cache was cleared since the window opened, so the button says so.
+    has_cleared_cache: bool,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -30,6 +34,7 @@ impl SettingsWindow {
         Self {
             focus,
             category: SettingsCategory::default(),
+            has_cleared_cache: false,
             _settings_subscription: cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
         }
     }
@@ -37,6 +42,28 @@ impl SettingsWindow {
     fn select_category(&mut self, category: SettingsCategory, cx: &mut Context<Self>) {
         self.category = category;
         cx.notify();
+    }
+
+    /// Clears the cache off the main thread, then shows that it did.
+    fn clear_cache(cx: &mut Context<Self>) {
+        let cache = cx.global::<AppServices>().cache.clone();
+        cx.spawn(async move |settings, cx| {
+            let cleared = cx
+                .background_executor()
+                .spawn(async move { cache.lock().clear() })
+                .await;
+            if let Err(error) = &cleared {
+                eprintln!("cannot clear the cache: {error:#}");
+            }
+            settings
+                .update(cx, |settings, cx| {
+                    settings.has_cleared_cache = cleared.is_ok();
+                    cx.notify();
+                })
+                .ok();
+        })
+        // Finishes on its own; the window closing meanwhile only skips the label.
+        .detach();
     }
 
     /// The list of categories, the current one highlighted.
@@ -80,7 +107,16 @@ impl SettingsWindow {
 impl Render for SettingsWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let page = match self.category {
-            SettingsCategory::FileDiff => render_file_diff_page(AppSettings::diff_view(cx)),
+            SettingsCategory::FileDiff => {
+                render_file_diff_page(AppSettings::diff_view(cx)).into_any_element()
+            }
+            SettingsCategory::GitHub => {
+                let settings = cx.entity().downgrade();
+                let clear_cache = move |_: &mut Window, cx: &mut App| {
+                    settings.update(cx, |_, cx| Self::clear_cache(cx)).ok();
+                };
+                render_github_page(self.has_cleared_cache, clear_cache, cx).into_any_element()
+            }
         };
         div()
             .track_focus(&self.focus)

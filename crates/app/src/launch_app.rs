@@ -36,6 +36,7 @@ pub fn launch_app() {
         let min_size = size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT));
         let restored = restore_window(&recorder, min_size, cx);
         cx.set_global(AppSettings::load(&recorder));
+        cx.set_global(services.clone());
         cx.set_global(recorder);
 
         cx.open_window(

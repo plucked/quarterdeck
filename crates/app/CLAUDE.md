@@ -5,9 +5,9 @@
 | `launch_app` | gpui start-up; opens the main window at its saved placement or centered |
 | `main_window` | `MainWindow` root view: owns `ReviewQueue`, records window placement, writes UI state on focus loss |
 | `app_commands` | actions (`Quit`, `OpenSettings`, `CloseWindow`, `Refresh`, `Copy`), key bindings, menu bar |
-| `app_settings` | `AppSettings` global: the preferences (diff view settings), loaded at launch, saved on change, observed by views |
-| `settings_window` | settings window (cmd-,, single instance): category list + page per `SettingsCategory`, `SettingRow` component |
-| `app_services` | `AppServices`: GitHub client (or reason it is missing) + cache |
+| `app_settings` | `AppSettings` global: the preferences (diff view settings, cache TTL), loaded at launch, saved on change, observed by views |
+| `settings_window` | settings window (cmd-,, single instance): category list + page per `SettingsCategory` (File Diff; GitHub: cache TTL, clear cache, API usage), `SettingRow` component |
+| `app_services` | `AppServices`: GitHub client (or reason it is missing) + cache; also a gpui global for other windows |
 | `scrollbar` | `VerticalScrollbar`: reusable draggable scrollbar for a `ScrollbarTarget` (`ScrollHandle` or `ListState`; gpui draws none) |
 | `shared_cache` | `SharedCache`: `Arc<Mutex<GitHubCache>>` with poison-tolerant `lock` |
 | `ui_state` | `UiStateRecorder` global (reads saved UI state, batches writes) and window placement conversion |
@@ -24,7 +24,8 @@
 - Markdown selection: state via `window.use_keyed_state` keyed by (view id, `Arc` pointer of the document), so a new document starts unselected; keep the `Arc` stable while the source is unchanged (`ParsedDescription`). Each frame records every text's `TextLayout` for hit testing; drags are tracked by window-wide mouse listeners registered in a `canvas` paint. Copy joins texts with `\n`. A press released without a drag is a link click.
 - Diffs: built on the background executor when files load and when whitespace/highlight settings change (layout/wrapping only redraw); `LoadedFile` holds `Arc`s of file + diff. `FileReviewState` owns viewed/collapsed per file; viewed marks persist with a `PatchFingerprint` and reset when the patch changes. Files over 400 changed lines and viewed files start collapsed.
 - Syntax colors: after load and after a rebuild, `highlight_syntax` runs one background batch per core and applies each batch as it finishes (matched by the diff's `Arc`, so a rebuilt diff ignores stale colors). Files draw plain until then. A real 99-file / 4.5k-line PR takes ~0.7 s single-threaded; `code_highlights` merges syntax colors with changed-range backgrounds into non-overlapping runs.
-- Flow: show cached queue at launch → refresh from GitHub in background → cache. Selecting a PR loads its files from cache if current, else fetches and caches.
+- GitHub usage (`fetch_changed_files`): files cached for the PR's `updated_at` → no request; otherwise one commit check (`pull_request_revision`, conditional on the stored ETag, free when unchanged) → same commits: confirm the cached files; new commits or nothing cached: fetch all pages and cache. Measured on a real 130-file PR: relaunch 0 core requests, after a comment 1, cold 3. The queue refresh is 1 search request; after it, `delete_expired(AppSettings::cache_ttl)` runs.
+- Flow: show cached queue at launch → refresh from GitHub in background → cache → clean up expired data.
 - Restore: window placement, selected PR (matched against the cached queue, then the first refreshed one, else dropped), detail scroll as `DetailScrollPosition` (row + offset; applied when the files load, so no heights are needed).
 - Performance: the detail pane renders only visible rows (`list` with `measure_all`, overdraw 600 px). Collapse/viewed toggles `splice` one file's rows; settings/load `reset` and re-anchor on the file at the top. Benchmark (100-file PR, split + wrap, 45 px/frame): 273 ms → 8.3 ms per frame. Scroll mode scrolls each file sideways via a per-file offset on horizontal gestures (rows are separate, so no per-file scroll container).
 - Scrollbars: wrap the scroll container in a `relative()` div with the container `size_full()` and a `VerticalScrollbar` beside it: `ScrollbarTarget::Handle` for a div or `uniform_list` (`handle.0.borrow().base_handle.clone()`), `ScrollbarTarget::List` for a `list`. The thumb is painted at paint time.

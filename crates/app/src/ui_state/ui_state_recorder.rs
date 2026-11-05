@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
-use qc_cache::{DiffViewSettings, ReviewQueueViewState, UiStateStore, ViewedFile, WindowPlacement};
+use qc_cache::{
+    CacheTtl, DiffViewSettings, ReviewQueueViewState, UiStateStore, ViewedFile, WindowPlacement,
+};
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
 const WRITE_DELAY: Duration = Duration::from_millis(300);
@@ -15,6 +17,7 @@ struct PendingUiState {
     window_placement: Option<WindowPlacement>,
     review_queue: Option<ReviewQueueViewState>,
     diff_view_settings: Option<DiffViewSettings>,
+    cache_ttl: Option<CacheTtl>,
     /// Every viewed mark change, in the order made: unlike settings, each counts.
     viewed_changes: Vec<ViewedChange>,
 }
@@ -24,6 +27,7 @@ impl PendingUiState {
         self.window_placement.is_none()
             && self.review_queue.is_none()
             && self.diff_view_settings.is_none()
+            && self.cache_ttl.is_none()
             && self.viewed_changes.is_empty()
     }
 }
@@ -93,6 +97,22 @@ impl UiStateRecorder {
         self.lock_store()
             .diff_view_settings()
             .unwrap_or_else(|error| report_unreadable("diff view settings", &error))
+    }
+
+    /// The cache TTL saved before the last relaunch; `None` when there is
+    /// none or it no longer reads. Reads on the main thread at startup only.
+    pub fn saved_cache_ttl(&self) -> Option<CacheTtl> {
+        self.lock_store()
+            .cache_ttl()
+            .unwrap_or_else(|error| report_unreadable("cache TTL", &error))
+    }
+
+    /// Records the cache TTL and schedules a write.
+    pub fn record_cache_ttl(cx: &mut App, ttl: CacheTtl) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.cache_ttl = Some(ttl);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
     }
 
     /// The store, for reads on the background executor (viewed marks when a
@@ -221,6 +241,11 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
         && let Err(error) = store.put_diff_view_settings(settings)
     {
         eprintln!("ui state: cannot save diff view settings: {error:#}");
+    }
+    if let Some(ttl) = pending.cache_ttl
+        && let Err(error) = store.put_cache_ttl(ttl)
+    {
+        eprintln!("ui state: cannot save the cache TTL: {error:#}");
     }
     for change in &pending.viewed_changes {
         let written = match change {

@@ -8,8 +8,10 @@
 //! - `settings_category.rs`: `SettingsCategory`, the categories in order.
 //! - `setting_row.rs`: `SettingRow`, one setting's title, explanation and control.
 //! - `file_diff_page.rs`: the File Diff category's settings.
+//! - `github_page.rs`: the GitHub category: cache TTL, clearing the cache, API usage.
 
 mod file_diff_page;
+mod github_page;
 mod open_settings_window;
 mod setting_row;
 mod settings_category;

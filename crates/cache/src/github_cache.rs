@@ -1,15 +1,17 @@
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context as _, Result};
-use qc_github::{PullRequest, PullRequestFile, RepoRef, User};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use anyhow::Result;
+use qc_github::{PullRequest, RepoRef, User};
+use rusqlite::{Connection, Row, params};
 
 use crate::PullRequestListKey;
 use crate::database_connection::{default_database_path, open_database};
+use crate::sql_integers::{read_u64, sql_integer};
+use crate::unix_now::unix_now;
 
 /// The SQLite connection holding cached GitHub data, one typed column per
-/// field. Every write runs in one statement or one transaction, so the
+/// field: pull requests and lists here, changed files in
+/// `file_set_storage.rs`, expiry in `cache_cleanup.rs`. Every write runs in one statement or one transaction, so the
 /// database is consistent after any failure.
 pub struct GitHubCache {
     connection: Connection,
@@ -112,72 +114,14 @@ impl GitHubCache {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Stores the changed files of `pull_request`, tagged with its
-    /// `updated_at` and replacing any stored before. The pull request must
-    /// already be cached.
-    pub fn put_files(
-        &mut self,
-        pull_request: &PullRequest,
-        files: &[PullRequestFile],
-    ) -> Result<()> {
-        let pr_id = sql_integer(pull_request.id)?;
-        let transaction = self.connection.transaction()?;
-
-        // Tag the set with the version it belongs to, and clear the old files.
-        transaction.execute(
-            "INSERT INTO pr_file_sets (pr_id, updated_at) VALUES (?1, ?2)
-             ON CONFLICT (pr_id) DO UPDATE SET updated_at = excluded.updated_at",
-            params![pr_id, pull_request.updated_at],
-        )?;
-        transaction.execute("DELETE FROM pr_files WHERE pr_id = ?1", [pr_id])?;
-
-        // Insert the files in GitHub's order.
-        for (position, file) in files.iter().enumerate() {
-            transaction.execute(
-                "INSERT INTO pr_files (
-                    pr_id, position, filename, previous_filename, status, additions, deletions, patch)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    pr_id,
-                    i64::try_from(position)?,
-                    file.filename,
-                    file.previous_filename,
-                    file.status,
-                    sql_integer(file.additions)?,
-                    sql_integer(file.deletions)?,
-                    file.patch
-                ],
-            )?;
-        }
-        transaction.commit()?;
-        Ok(())
+    /// The connection, for the storage of other cached topics in sibling files.
+    pub(crate) fn connection(&self) -> &Connection {
+        &self.connection
     }
 
-    /// The cached changed files, or `None` when missing or fetched for an older
-    /// `updated_at` than `pull_request` has.
-    pub fn files(&self, pull_request: &PullRequest) -> Result<Option<Vec<PullRequestFile>>> {
-        let pr_id = sql_integer(pull_request.id)?;
-
-        // Only a set fetched for this exact version counts.
-        let is_current = self
-            .connection
-            .query_row(
-                "SELECT 1 FROM pr_file_sets WHERE pr_id = ?1 AND updated_at = ?2",
-                params![pr_id, pull_request.updated_at],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some();
-        if !is_current {
-            return Ok(None);
-        }
-
-        let mut statement = self.connection.prepare(
-            "SELECT filename, previous_filename, status, additions, deletions, patch
-             FROM pr_files WHERE pr_id = ?1 ORDER BY position",
-        )?;
-        let rows = statement.query_map([pr_id], pull_request_file_from_row)?;
-        Ok(Some(rows.collect::<rusqlite::Result<_>>()?))
+    /// The connection for writes that need a transaction.
+    pub(crate) fn connection_mut(&mut self) -> &mut Connection {
+        &mut self.connection
     }
 }
 
@@ -201,40 +145,6 @@ fn pull_request_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequest> {
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
     })
-}
-
-/// Reads a changed file from a row of the `files` query's columns, in order.
-fn pull_request_file_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequestFile> {
-    Ok(PullRequestFile {
-        filename: row.get(0)?,
-        previous_filename: row.get(1)?,
-        status: row.get(2)?,
-        additions: read_u64(row, 3)?,
-        deletions: read_u64(row, 4)?,
-        patch: row.get(5)?,
-    })
-}
-
-/// Reads a non-negative integer column; a negative value is a damaged row and
-/// an error, never a wrapped number.
-fn read_u64(row: &Row<'_>, index: usize) -> rusqlite::Result<u64> {
-    let value: i64 = row.get(index)?;
-    u64::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(index, value))
-}
-
-/// Converts a GitHub id, number or count to SQLite's signed integer, failing
-/// instead of wrapping when it does not fit.
-fn sql_integer(value: u64) -> Result<i64> {
-    i64::try_from(value).context("value exceeds SQLite's integer range")
-}
-
-/// Seconds since the Unix epoch; 0 if the clock is before it.
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|duration| i64::try_from(duration.as_secs()).ok())
-        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -292,65 +202,5 @@ mod tests {
             .replace_list(LIST, std::slice::from_ref(&stored))
             .unwrap();
         assert_eq!(cache.list(LIST).unwrap(), [stored]);
-    }
-
-    /// Stored files come back in GitHub's order, and a new set replaces the old one.
-    #[test]
-    fn put_files_keeps_order_and_replaces_previous_set() {
-        // Set up: one cached pull request.
-        let mut cache = GitHubCache::open_in_memory().unwrap();
-        let cached = pull_request(1, "t");
-        cache
-            .replace_list(LIST, std::slice::from_ref(&cached))
-            .unwrap();
-        let file = |filename: &str, patch: Option<&str>| PullRequestFile {
-            filename: filename.into(),
-            previous_filename: Some("old/".to_owned() + filename),
-            status: "modified".into(),
-            additions: 3,
-            deletions: 1,
-            patch: patch.map(Into::into),
-        };
-
-        // Act: store two files, then a different single file.
-        cache
-            .put_files(
-                &cached,
-                &[file("b.rs", Some("@@ -1 +1 @@")), file("a.rs", None)],
-            )
-            .unwrap();
-        let first = cache.files(&cached).unwrap().unwrap();
-        cache.put_files(&cached, &[file("c.rs", None)]).unwrap();
-
-        // Expect: the first read kept order and patches; the second set replaced it.
-        assert_eq!(
-            first,
-            [file("b.rs", Some("@@ -1 +1 @@")), file("a.rs", None)]
-        );
-        assert_eq!(cache.files(&cached).unwrap().unwrap(), [file("c.rs", None)]);
-    }
-
-    /// Cached files are ignored once the pull request has a newer `updated_at`.
-    #[test]
-    fn files_invalidate_on_pull_request_update() {
-        // Set up: one cached pull request with one cached file.
-        let mut cache = GitHubCache::open_in_memory().unwrap();
-        let old = pull_request(1, "t1");
-        cache
-            .replace_list(LIST, std::slice::from_ref(&old))
-            .unwrap();
-        let file = PullRequestFile {
-            filename: "a.rs".into(),
-            previous_filename: None,
-            status: "modified".into(),
-            additions: 1,
-            deletions: 0,
-            patch: None,
-        };
-        cache.put_files(&old, &[file]).unwrap();
-
-        // Expect: the same version hits, a newer version misses.
-        assert_eq!(cache.files(&old).unwrap().unwrap().len(), 1);
-        assert!(cache.files(&pull_request(1, "t2")).unwrap().is_none());
     }
 }

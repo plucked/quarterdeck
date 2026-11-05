@@ -13,21 +13,38 @@
 //! - `pull_request_file.rs`: `PullRequestFile`, one changed file with its patch.
 //! - `search_issue.rs`: the issue shape the search API returns for a pull request.
 //! - `search_response.rs`: the envelope around search results.
+//! - `pull_request_revision.rs`: `PullRequestRevision`, the head and base commits of a pull request.
+//! - `etag.rs`: `ETag`, the tag a conditional request sends back.
+//! - `conditional_response.rs`: `ConditionalResponse`, not modified or a new value.
+//! - `next_page_url.rs`: reads the next page from a `Link` header.
+//! - `rate_limit.rs`: `RateLimit` and `RateLimitResource`, a budget GitHub reported.
+//! - `api_usage.rs`: `ApiUsage`, requests sent and budgets left, shared by clones.
 
+mod api_usage;
+mod conditional_response;
+mod etag;
 mod github_client;
 mod github_error;
+mod next_page_url;
 mod pull_request;
 mod pull_request_file;
+mod pull_request_revision;
+mod rate_limit;
 mod repo_ref;
 mod resolve_token;
 mod search_issue;
 mod search_response;
 mod user;
 
+pub use api_usage::{ApiUsage, ApiUsageSnapshot};
+pub use conditional_response::ConditionalResponse;
+pub use etag::ETag;
 pub use github_client::GitHubClient;
 pub use github_error::GitHubError;
 pub use pull_request::PullRequest;
 pub use pull_request_file::PullRequestFile;
+pub use pull_request_revision::PullRequestRevision;
+pub use rate_limit::{RateLimit, RateLimitResource};
 pub use repo_ref::RepoRef;
 pub use resolve_token::resolve_token;
 pub use user::User;

@@ -3,7 +3,16 @@
 //! restores after a relaunch. All state is stored in typed columns.
 //!
 //! Files:
-//! - `github_cache.rs`: `GitHubCache`, reads and writes of cached GitHub data.
+//! - `github_cache.rs`: `GitHubCache`, cached pull requests and lists.
+//! - `file_set_storage.rs`: a pull request's cached changed files, and confirming them.
+//! - `cache_cleanup.rs`: removing expired cache entries, and clearing the cache.
+//! - `cached_file_set.rs`: `CachedFileSet`, cached files with what they were fetched for.
+//! - `file_set_revision.rs`: `FileSetRevision`, the commits and response tag of a file set.
+//! - `cleanup_counts.rs`: `CleanupCounts`, what a cleanup removed.
+//! - `cache_ttl.rs`: `CacheTtl`, how long unused cached data is kept.
+//! - `cache_settings_storage.rs`: reads and writes of the cache TTL.
+//! - `sql_integers.rs`: checked conversions between GitHub numbers and SQLite integers.
+//! - `unix_now.rs`: the current time as stored.
 //! - `ui_state_store.rs`: `UiStateStore`, reads and writes of the UI state.
 //! - `database_connection.rs`: the database location and how a connection is opened.
 //! - `schema_migrations.rs`: the append-only schema history and its runner.
@@ -22,6 +31,11 @@
 //! - `patch_fingerprint.rs`: `PatchFingerprint`, a stable hash of a file's patch.
 //! - `viewed_files_storage.rs`: reads and writes of viewed marks.
 
+mod cache_cleanup;
+mod cache_settings_storage;
+mod cache_ttl;
+mod cached_file_set;
+mod cleanup_counts;
 mod database_connection;
 mod detail_scroll_position;
 mod diff_layout;
@@ -29,22 +43,30 @@ mod diff_option_sql_text;
 mod diff_view_settings;
 mod diff_view_settings_storage;
 mod display_uuid;
+mod file_set_revision;
+mod file_set_storage;
 mod github_cache;
 mod line_wrapping;
 mod patch_fingerprint;
 mod pull_request_list_key;
 mod review_queue_view_state;
 mod schema_migrations;
+mod sql_integers;
 mod ui_state_store;
+mod unix_now;
 mod viewed_file;
 mod viewed_files_storage;
 mod window_mode;
 mod window_placement;
 
+pub use cache_ttl::CacheTtl;
+pub use cached_file_set::CachedFileSet;
+pub use cleanup_counts::CleanupCounts;
 pub use detail_scroll_position::DetailScrollPosition;
 pub use diff_layout::DiffLayout;
 pub use diff_view_settings::DiffViewSettings;
 pub use display_uuid::DisplayUuid;
+pub use file_set_revision::FileSetRevision;
 pub use github_cache::GitHubCache;
 pub use line_wrapping::LineWrapping;
 pub use patch_fingerprint::PatchFingerprint;

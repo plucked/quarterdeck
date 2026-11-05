@@ -13,6 +13,8 @@
 //! - `detail_event.rs`: `DetailEvent`, what the view tells its owner.
 //! - `parsed_description.rs`: `ParsedDescription`, the description of one version, parsed once.
 //! - `changed_files.rs`: `ChangedFiles`, the load state of the files.
+//! - `fetch_changed_files.rs`: gets a pull request's files from the cache, asking GitHub as little as possible.
+//! - `file_set_update.rs`: `FileSetUpdate`, whether cached files are confirmed or refetched.
 //! - `loaded_file.rs`: `LoadedFile`, a changed file with its built diff, colors and sizes.
 //! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
 //! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.
@@ -22,7 +24,9 @@ mod detail_content;
 mod detail_event;
 mod detail_row;
 mod detail_row_list;
+mod fetch_changed_files;
 mod file_review_state;
+mod file_set_update;
 mod loaded_file;
 mod parsed_description;
 mod pull_request_detail;

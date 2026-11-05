@@ -15,6 +15,7 @@ use super::selection_after_refresh::SelectionAfterRefresh;
 use super::selection_restore::SelectionRestore;
 use crate::app_commands::Refresh;
 use crate::app_services::AppServices;
+use crate::app_settings::AppSettings;
 use crate::pull_request_detail::{DetailEvent, PullRequestDetail};
 use crate::theme;
 use crate::ui_state::UiStateRecorder;
@@ -152,8 +153,8 @@ impl ReviewQueue {
         &self.refresh_status
     }
 
-    /// Fetches the queue from GitHub, caches it and shows it, then arms the
-    /// next timed refresh.
+    /// Fetches the queue from GitHub, caches it and shows it, removes cached
+    /// data unused for longer than the cache TTL, then arms the next timed refresh.
     pub(super) fn refresh(&mut self, cx: &mut Context<Self>) {
         // Any refresh moves the timed one: it is re-armed when this one finishes.
         self.auto_refresh_task = None;
@@ -168,6 +169,7 @@ impl ReviewQueue {
             }
         };
         let cache = self.services.cache.clone();
+        let ttl = AppSettings::cache_ttl(cx).duration();
 
         self.refresh_status = RefreshStatus::Refreshing;
         cx.notify();
@@ -178,6 +180,9 @@ impl ReviewQueue {
                 .spawn(async move {
                     let pull_requests = client.review_requested()?;
                     cache.lock().replace_list(QUEUE_LIST, &pull_requests)?;
+
+                    // With the queue current, drop what has not been used within the TTL.
+                    cache.lock().delete_expired(ttl)?;
                     anyhow::Ok(pull_requests)
                 })
                 .await;

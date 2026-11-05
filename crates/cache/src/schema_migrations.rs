@@ -140,6 +140,24 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     -- relative to that display. NULL for placements saved before this.
     ALTER TABLE window_placement ADD COLUMN display_uuid TEXT;
 ",
+    r"
+    -- File sets record the commits they were fetched for and the tag of the
+    -- pull request response that reported them, so a changed updated_at (a
+    -- comment) is checked with one free conditional request instead of a
+    -- refetch; last_used_at drives cleanup. Existing sets lack the commits
+    -- and may be cut off at the first 100 files, so they are refetched.
+    DELETE FROM pr_file_sets;
+    ALTER TABLE pr_file_sets ADD COLUMN head_sha TEXT NOT NULL DEFAULT '';
+    ALTER TABLE pr_file_sets ADD COLUMN base_sha TEXT NOT NULL DEFAULT '';
+    ALTER TABLE pr_file_sets ADD COLUMN revision_etag TEXT;
+    ALTER TABLE pr_file_sets ADD COLUMN last_used_at INTEGER NOT NULL DEFAULT 0;
+
+    -- How long unused cached GitHub data is kept. One row (id = 1).
+    CREATE TABLE cache_settings (
+        id         INTEGER PRIMARY KEY CHECK (id = 1),
+        ttl_hours  INTEGER NOT NULL CHECK (ttl_hours IN (6, 24, 72, 168))
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

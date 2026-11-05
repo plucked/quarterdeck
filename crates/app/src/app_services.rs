@@ -1,4 +1,5 @@
 use anyhow::Result;
+use gpui::Global;
 use qc_cache::GitHubCache;
 use qc_github::GitHubClient;
 
@@ -13,6 +14,10 @@ pub struct AppServices {
     pub github: Result<GitHubClient, String>,
     pub cache: SharedCache,
 }
+
+/// Also a gpui global, for windows that are not handed the services (the
+/// settings window clears the cache and shows API usage).
+impl Global for AppServices {}
 
 impl AppServices {
     /// Opens the default cache and builds a GitHub client from the environment.

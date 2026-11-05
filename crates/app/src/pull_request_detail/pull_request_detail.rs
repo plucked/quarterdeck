@@ -15,6 +15,7 @@ use super::changed_files::ChangedFiles;
 use super::detail_content::DetailContent;
 use super::detail_event::DetailEvent;
 use super::detail_row_list::DetailRowList;
+use super::fetch_changed_files::fetch_changed_files;
 use super::file_review_state::FileReviewState;
 use super::loaded_file::LoadedFile;
 use super::parsed_description::ParsedDescription;
@@ -441,18 +442,8 @@ impl PullRequestDetail {
             let loaded = cx
                 .background_executor()
                 .spawn(async move {
-                    // A cache hit needs no network; otherwise fetch, then cache for
-                    // the next selection. The read ends its lock before the fetch locks again.
-                    let cached = cache.lock().files(&pull_request)?;
-                    let files = if let Some(files) = cached {
-                        files
-                    } else {
-                        let files = client
-                            .map_err(anyhow::Error::msg)?
-                            .pull_request_files(&pull_request.repo, pull_request.number)?;
-                        cache.lock().put_files(&pull_request, &files)?;
-                        files
-                    };
+                    // The cache first; GitHub only for what changed.
+                    let files = fetch_changed_files(client, &cache, &pull_request)?;
 
                     // Build every diff here too: word comparisons can take a moment on big files.
                     anyhow::Ok(FetchedChanges {
