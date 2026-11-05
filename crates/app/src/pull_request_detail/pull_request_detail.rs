@@ -18,6 +18,7 @@ use qc_github::{GitHubClient, PullRequest, PullRequestFile, PullRequestStack, St
 use qc_markdown::MarkdownDocument;
 use qc_syntax::DiffSyntax;
 
+use super::action_panel::ActionPanel;
 use super::changed_files::ChangedFiles;
 use super::changed_rows::ChangedRows;
 use super::chip_click::ChipClick;
@@ -167,6 +168,8 @@ pub struct PullRequestDetail {
     side_panel_width: f32,
     /// Review comments, the comment being written, and the review tab.
     review: ReviewPane,
+    /// The merge or close panel under the header, while open.
+    action_panel: Option<ActionPanel>,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -225,6 +228,7 @@ impl PullRequestDetail {
             stack_task: None,
             highlight_progress: None,
             stack_map_scroll: UniformListScrollHandle::new(),
+            action_panel: None,
             review: ReviewPane {
                 destination: layout.comment_destination,
                 ..ReviewPane::default()
@@ -481,6 +485,18 @@ impl PullRequestDetail {
             .position(|layer| layer.number == number)
     }
 
+    pub(super) fn action_panel(&self) -> Option<&ActionPanel> {
+        self.action_panel.as_ref()
+    }
+
+    pub(super) fn action_panel_mut(&mut self) -> Option<&mut ActionPanel> {
+        self.action_panel.as_mut()
+    }
+
+    pub(super) fn set_action_panel(&mut self, panel: Option<ActionPanel>) {
+        self.action_panel = panel;
+    }
+
     pub(super) fn review(&self) -> &ReviewPane {
         &self.review
     }
@@ -581,6 +597,7 @@ impl PullRequestDetail {
             self.description = Some(ParsedDescription::parse(&pull_request));
         }
         if !is_same_pull_request {
+            self.action_panel = None;
             self.is_description_expanded = false;
             self.description_scroll
                 .set_offset(gpui::point(px(0.), px(0.)));

@@ -43,8 +43,13 @@
 //! - `local_review_export.rs`: the local notes as Markdown for an agent.
 //! - `comment_card_rendering.rs`: the comment cards and the composer in the diff.
 //! - `review_panel_rendering.rs`: the side panel's review tab.
+//! - `action_panel.rs`: `ActionPanel`, the merge or close panel's options, choices and progress.
+//! - `pull_request_actions.rs`: merging (also as admin), closing and deleting the branch on GitHub.
+//! - `action_panel_rendering.rs`: the merge or close panel under the header.
 //! - `activity_rendering.rs`: the loading indicators: header pill, progress line, loading card.
 
+mod action_panel;
+mod action_panel_rendering;
 mod activity_rendering;
 mod changed_files;
 mod changed_rows;
@@ -69,6 +74,7 @@ mod load_progress;
 mod loaded_file;
 mod local_review_export;
 mod parsed_description;
+mod pull_request_actions;
 mod pull_request_detail;
 mod review_actions;
 mod review_comments;

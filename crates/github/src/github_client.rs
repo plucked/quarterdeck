@@ -19,8 +19,8 @@ use crate::{
     RevisionCheck,
 };
 
-const API_BASE: &str = "https://api.github.com";
-const API_VERSION: &str = "2022-11-28";
+pub(crate) const API_BASE: &str = "https://api.github.com";
+pub(crate) const API_VERSION: &str = "2022-11-28";
 const USER_AGENT: &str = concat!("quick-check/", env!("CARGO_PKG_VERSION"));
 /// The JSON answers of the REST API.
 const JSON_MEDIA_TYPE: &str = "application/vnd.github+json";
@@ -101,6 +101,43 @@ impl GitHubClient {
             }),
         )?;
         Ok(data.into_memberships())
+    }
+
+    /// The HTTP agent, for requests built in sibling files.
+    pub(crate) fn agent(&self) -> &Agent {
+        &self.agent
+    }
+
+    /// Sends `builder` (a PUT, PATCH or POST) with a JSON body under API
+    /// version `api_version`, and returns the answer's body.
+    pub(crate) fn send_json(
+        &self,
+        builder: RequestBuilder<ureq::typestate::WithBody>,
+        body: &serde_json::Value,
+        api_version: &str,
+    ) -> Result<String, GitHubError> {
+        let builder = self.with_versioned_headers(builder, JSON_MEDIA_TYPE, None, api_version);
+        Ok(self
+            .read_response(builder.send_json(body)?, &mut |_| {})?
+            .body)
+    }
+
+    /// Sends a GET under API version `api_version` and returns the body.
+    pub(crate) fn send_versioned_get(
+        &self,
+        url: &str,
+        api_version: &str,
+    ) -> Result<String, GitHubError> {
+        let builder =
+            self.with_versioned_headers(self.agent.get(url), JSON_MEDIA_TYPE, None, api_version);
+        Ok(self.read_response(builder.call()?, &mut |_| {})?.body)
+    }
+
+    /// Sends a DELETE.
+    pub(crate) fn send_delete(&self, url: &str) -> Result<(), GitHubError> {
+        let builder = self.with_headers(self.agent.delete(url), JSON_MEDIA_TYPE, None);
+        self.read_response(builder.call()?, &mut |_| {})?;
+        Ok(())
     }
 
     /// Sends a GraphQL query or mutation and decodes its data; GraphQL
@@ -288,11 +325,22 @@ impl GitHubClient {
         accept: &str,
         etag: Option<&ETag>,
     ) -> RequestBuilder<B> {
+        self.with_versioned_headers(request, accept, etag, API_VERSION)
+    }
+
+    /// [`Self::with_headers`] under API version `api_version`.
+    fn with_versioned_headers<B>(
+        &self,
+        request: RequestBuilder<B>,
+        accept: &str,
+        etag: Option<&ETag>,
+        api_version: &str,
+    ) -> RequestBuilder<B> {
         let request = request
             .header("Accept", accept)
             .header("Authorization", format!("Bearer {}", self.token))
             .header("User-Agent", USER_AGENT)
-            .header("X-GitHub-Api-Version", API_VERSION);
+            .header("X-GitHub-Api-Version", api_version);
         match etag {
             Some(etag) => request.header("If-None-Match", etag.as_str()),
             None => request,

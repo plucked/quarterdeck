@@ -35,6 +35,11 @@
 //! - `review_submission.rs`: `ReviewSubmission`, a review to submit, and its parts.
 //! - `review_queries.rs`: the GraphQL texts of reviewing and their answers.
 //! - `review_requests.rs`: `GitHubClient`'s review calls: state, submit, edit, delete, resolve.
+//! - `merge_method.rs`: `MergeMethod`, merge commit, squash or rebase.
+//! - `merge_options.rs`: `MergeOptions`, what merging or closing can do now, with its parts.
+//! - `merge_outcome.rs`: `MergeOutcome`, how an asynchronous merge ended or that it runs.
+//! - `merge_queries.rs`: the merge options query and the asynchronous merge answers.
+//! - `pull_request_requests.rs`: `GitHubClient`'s merge, close and branch deletion calls.
 
 mod api_usage;
 mod conditional_response;
@@ -45,9 +50,14 @@ mod github_error;
 mod graphql_response;
 mod line_side;
 mod listed_stack_membership;
+mod merge_method;
+mod merge_options;
+mod merge_outcome;
+mod merge_queries;
 mod next_page_url;
 mod pull_request;
 mod pull_request_file;
+mod pull_request_requests;
 mod pull_request_review_state;
 mod pull_request_revision;
 mod pull_request_stack;
@@ -76,6 +86,11 @@ pub use github_client::GitHubClient;
 pub use github_error::GitHubError;
 pub use line_side::LineSide;
 pub use listed_stack_membership::ListedStackMembership;
+pub use merge_method::MergeMethod;
+pub use merge_options::{
+    MergeOptions, MergePermissions, MergeQueueState, MergeReadiness, PullRequestState,
+};
+pub use merge_outcome::MergeOutcome;
 pub use pull_request::PullRequest;
 pub use pull_request_file::PullRequestFile;
 pub use pull_request_review_state::PullRequestReviewState;

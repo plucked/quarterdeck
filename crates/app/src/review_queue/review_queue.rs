@@ -143,6 +143,7 @@ impl ReviewQueue {
             cx.subscribe(&detail, |queue, _, event: &DetailEvent, cx| match event {
                 DetailEvent::Scrolled => queue.record_view_state(cx),
                 DetailEvent::OpenLayer(request) => queue.open_layer(request, cx),
+                DetailEvent::PullRequestChanged => queue.refresh(cx),
                 DetailEvent::TargetChanged => cx.notify(),
             });
 

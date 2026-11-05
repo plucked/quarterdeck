@@ -66,6 +66,7 @@ impl PullRequestDetail {
                     .child("Open on GitHub ↗"),
             )
             .children(self.render_activity_pill())
+            .children(self.render_action_buttons(cx))
             .child(Self::render_tree_toggle(cx));
 
         let meta = div()
@@ -92,6 +93,7 @@ impl PullRequestDetail {
             .child(title_row)
             .child(meta)
             .children(self.render_stack_bar(cx))
+            .children(self.render_action_panel(cx))
             .when(is_expanded, |header| {
                 header.child(self.render_description_box())
             });
