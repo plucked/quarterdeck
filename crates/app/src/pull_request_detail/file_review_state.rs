@@ -48,6 +48,16 @@ impl FileReviewState {
         self.viewed.len()
     }
 
+    pub fn is_viewed(&self, filename: &str) -> bool {
+        self.viewed.contains(filename)
+    }
+
+    /// Marks `file` viewed (collapsing it) or not viewed (expanding it), for
+    /// a folder's checkbox; `None` when it already was.
+    pub fn set_viewed(&mut self, file: &LoadedFile, is_viewed: bool) -> Option<ViewedToggle> {
+        (self.is_viewed(file.filename()) != is_viewed).then(|| self.toggle_viewed(file))
+    }
+
     /// Collapses an expanded file or expands a collapsed one.
     pub fn toggle_collapsed(&mut self, filename: &str) {
         if !self.collapsed.remove(filename) {

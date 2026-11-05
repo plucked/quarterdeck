@@ -11,6 +11,7 @@ anyhow.workspace = true
 gpui.workspace = true
 qc-cache.workspace = true
 qc-diff.workspace = true
+qc-file-tree.workspace = true
 qc-github.workspace = true
 qc-markdown.workspace = true
 qc-syntax.workspace = true

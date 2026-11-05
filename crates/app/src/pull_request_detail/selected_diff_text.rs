@@ -66,10 +66,11 @@ mod tests {
         )];
         let review = FileReviewState::for_loaded(&files, &[]);
         let changed = ChangedFiles::Loaded(files.clone());
+        let shown = vec![true; files.len()];
         let rows = DetailRowList::build(&DetailContent {
             has_pull_request: true,
-            has_description: false,
             changed_files: Some(&changed),
+            shown_files: &shown,
             file_review: &review,
             settings: DiffViewSettings {
                 layout,
@@ -79,8 +80,8 @@ mod tests {
         (rows, files)
     }
 
-    /// The row index of the first diff line (after header, summary, file and hunk headers).
-    const FIRST_LINE_ROW: usize = 4;
+    /// The row index of the first diff line (after the summary, file and hunk headers).
+    const FIRST_LINE_ROW: usize = 3;
 
     /// A unified selection copies the code of each line, without markers.
     #[test]

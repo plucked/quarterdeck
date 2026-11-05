@@ -16,6 +16,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently. 
 | `qc-markdown` | `crates/markdown` | GitHub-flavored Markdown → typed document (`pulldown-cmark`) |
 | `qc-syntax` | `crates/syntax` | syntax colors for diff hunks (`syntect` + bat's grammars via `two-face`, `TwoDark` theme) |
 | `qc-diff` | `crates/diff` | per-file patch → hunks, side-by-side rows, inline word/char changes, whitespace folding (`similar`) |
+| `qc-file-tree` | `crates/file_tree` | changed files as a folder tree (shared file order), test/generated detection, file filters |
 
 Only the app depends on gpui. Library crates are blocking and UI-free; the app runs them on `cx.background_executor()`. No tokio.
 

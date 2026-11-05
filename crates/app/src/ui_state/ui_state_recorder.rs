@@ -4,7 +4,8 @@ use std::time::Duration;
 use anyhow::Result;
 use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 use qc_cache::{
-    CacheTtl, DiffViewSettings, ReviewQueueViewState, UiStateStore, ViewedFile, WindowPlacement,
+    CacheTtl, DiffViewSettings, ReviewLayoutState, ReviewQueueViewState, UiStateStore, ViewedFile,
+    WindowPlacement,
 };
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
@@ -18,6 +19,7 @@ struct PendingUiState {
     review_queue: Option<ReviewQueueViewState>,
     diff_view_settings: Option<DiffViewSettings>,
     cache_ttl: Option<CacheTtl>,
+    review_layout: Option<ReviewLayoutState>,
     /// Every viewed mark change, in the order made: unlike settings, each counts.
     viewed_changes: Vec<ViewedChange>,
 }
@@ -28,6 +30,7 @@ impl PendingUiState {
             && self.review_queue.is_none()
             && self.diff_view_settings.is_none()
             && self.cache_ttl.is_none()
+            && self.review_layout.is_none()
             && self.viewed_changes.is_empty()
     }
 }
@@ -111,6 +114,22 @@ impl UiStateRecorder {
     pub fn record_cache_ttl(cx: &mut App, ttl: CacheTtl) {
         cx.update_global::<Self, _>(|recorder, cx| {
             recorder.pending.cache_ttl = Some(ttl);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// The review layout saved before the last relaunch; `None` when there
+    /// is none or it no longer reads. Reads on the main thread at startup only.
+    pub fn saved_review_layout(&self) -> Option<ReviewLayoutState> {
+        self.lock_store()
+            .review_layout()
+            .unwrap_or_else(|error| report_unreadable("review layout", &error))
+    }
+
+    /// Records the review layout and schedules a write.
+    pub fn record_review_layout(cx: &mut App, layout: ReviewLayoutState) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.review_layout = Some(layout);
             recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
@@ -241,6 +260,11 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
         && let Err(error) = store.put_diff_view_settings(settings)
     {
         eprintln!("ui state: cannot save diff view settings: {error:#}");
+    }
+    if let Some(layout) = &pending.review_layout
+        && let Err(error) = store.put_review_layout(layout)
+    {
+        eprintln!("ui state: cannot save the review layout: {error:#}");
     }
     if let Some(ttl) = pending.cache_ttl
         && let Err(error) = store.put_cache_ttl(ttl)

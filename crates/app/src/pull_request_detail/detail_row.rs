@@ -9,13 +9,12 @@ use crate::diff_view::FileNote;
 pub enum DetailRow {
     /// No pull request is selected.
     NoSelection,
-    /// Title and metadata of the pull request.
-    Header,
-    Description,
     FilesLoading,
     FilesFailed,
     /// The totals above the files.
     SummaryBar,
+    /// Every file is hidden by the filters (or viewed while viewed files are hidden).
+    AllFilesHidden,
     FileHeader {
         file: usize,
     },

@@ -3594,6 +3594,7 @@ dependencies = [
  "gpui",
  "qc-cache",
  "qc-diff",
+ "qc-file-tree",
  "qc-github",
  "qc-markdown",
  "qc-syntax",

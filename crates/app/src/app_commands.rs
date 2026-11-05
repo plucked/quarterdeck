@@ -2,9 +2,22 @@ use gpui::{App, KeyBinding, Menu, MenuItem, SystemMenuType, actions};
 
 use crate::settings_window::open_settings_window;
 
+/// The key context of the review queue; single-letter keys only act inside it.
+pub const REVIEW_QUEUE_CONTEXT: &str = "ReviewQueue";
+
 actions!(
     quick_check,
-    [Quit, OpenSettings, CloseWindow, Refresh, Copy]
+    [
+        Quit,
+        OpenSettings,
+        CloseWindow,
+        Refresh,
+        Copy,
+        NextFile,
+        PreviousFile,
+        MarkViewedAndNext,
+        ToggleFileTree
+    ]
 );
 
 /// Registers the app-level command handlers, their key bindings and the menu bar.
@@ -18,6 +31,10 @@ pub fn install_app_commands(cx: &mut App) {
         KeyBinding::new("cmd-w", CloseWindow, None),
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-c", Copy, None),
+        KeyBinding::new("cmd-b", ToggleFileTree, None),
+        KeyBinding::new("]", NextFile, Some(REVIEW_QUEUE_CONTEXT)),
+        KeyBinding::new("[", PreviousFile, Some(REVIEW_QUEUE_CONTEXT)),
+        KeyBinding::new("v", MarkViewedAndNext, Some(REVIEW_QUEUE_CONTEXT)),
     ]);
 
     // The menu bar exposes the same actions as the key bindings.
@@ -38,7 +55,14 @@ pub fn install_app_commands(cx: &mut App) {
         },
         Menu {
             name: "View".into(),
-            items: vec![MenuItem::action("Refresh", Refresh)],
+            items: vec![
+                MenuItem::action("Refresh", Refresh),
+                MenuItem::separator(),
+                MenuItem::action("Toggle File Tree", ToggleFileTree),
+                MenuItem::action("Next File", NextFile),
+                MenuItem::action("Previous File", PreviousFile),
+                MenuItem::action("Mark Viewed and Next File", MarkViewedAndNext),
+            ],
         },
         Menu {
             name: "Window".into(),

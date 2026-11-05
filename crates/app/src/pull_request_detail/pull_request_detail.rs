@@ -3,10 +3,11 @@ use std::sync::Arc;
 
 use gpui::{
     ClipboardItem, Context, EventEmitter, FocusHandle, ListAlignment, ListOffset, ListState,
-    Pixels, Point, ScrollWheelEvent, Subscription, Task, Window, px,
+    Pixels, Point, ScrollHandle, ScrollWheelEvent, Subscription, Task, Window, px,
 };
 use qc_cache::{DetailScrollPosition, DiffViewSettings, LineWrapping, ViewedFile};
 use qc_diff::FileDiff;
+use qc_file_tree::{FileTree, NodeId};
 use qc_github::PullRequest;
 use qc_markdown::MarkdownDocument;
 use qc_syntax::DiffSyntax;
@@ -18,6 +19,9 @@ use super::detail_row_list::DetailRowList;
 use super::diff_selection::DiffSelection;
 use super::fetch_changed_files::fetch_changed_files;
 use super::file_review_state::FileReviewState;
+use super::file_tree_state::FileTreeState;
+use super::filter_toggle::FilterToggle;
+use super::folder_viewed_state::FolderViewedState;
 use super::loaded_file::LoadedFile;
 use super::parsed_description::ParsedDescription;
 use super::selected_diff_text::{row_code_text, selected_diff_text};
@@ -41,6 +45,13 @@ const DOUBLE_CLICK: usize = 2;
 /// Dragging past the pane's edge scrolls by this share of the overshoot per mouse move.
 const AUTOSCROLL_SHARE: f32 = 0.5;
 
+/// Which way to move between files.
+#[derive(Clone, Copy)]
+enum FileDirection {
+    Next,
+    Previous,
+}
+
 /// Where the list scrolls after its rows are rebuilt.
 #[derive(Clone, Copy)]
 enum ScrollAnchor {
@@ -52,7 +63,9 @@ enum ScrollAnchor {
 /// A pull request's changed files as loaded on the background executor,
 /// with the viewed marks saved for it.
 struct FetchedChanges {
+    /// In tree order: `tree`'s file indexes are positions here.
     files: Vec<LoadedFile>,
+    tree: FileTree,
     viewed_marks: Vec<ViewedFile>,
 }
 
@@ -62,9 +75,11 @@ struct HighlightedDiff {
     syntax: Option<Arc<DiffSyntax>>,
 }
 
-/// The right pane: the shown pull request's header, description, diff
-/// summary and changed files, as one virtualized list of rows. Only rows in
-/// view are rendered, so its cost does not grow with the pull request.
+/// The right pane: a sticky header with the shown pull request's title (and
+/// its description when expanded), the changed files as one virtualized
+/// list of rows, and the file tree panel beside them. Only rows in view are
+/// rendered, so its cost does not grow with the pull request. The tree and
+/// the diff share one file order and one filter.
 ///
 /// Files are read from the cache when current for the pull request's
 /// `updated_at`, otherwise fetched and cached; diffs are built and colored
@@ -98,6 +113,12 @@ pub struct PullRequestDetail {
     diff_selection: Option<DiffSelection>,
     /// Whether a press in the code is being dragged.
     is_selecting: bool,
+    /// The file tree panel: the files as a tree, the filter, folders, visibility.
+    file_tree: FileTreeState,
+    /// Whether the sticky header shows the description; collapsed for each new pull request.
+    is_description_expanded: bool,
+    /// The scroll of the description inside the expanded header.
+    description_scroll: ScrollHandle,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -139,6 +160,13 @@ impl PullRequestDetail {
             code_segments: CodeSegments::default(),
             diff_selection: None,
             is_selecting: false,
+            file_tree: FileTreeState::new(
+                cx.global::<UiStateRecorder>()
+                    .saved_review_layout()
+                    .unwrap_or_default(),
+            ),
+            is_description_expanded: false,
+            description_scroll: ScrollHandle::new(),
             _settings_subscription: settings_subscription,
         };
         detail.rebuild_rows(ScrollAnchor::Top);
@@ -361,6 +389,11 @@ impl PullRequestDetail {
         if !is_described {
             self.description = Some(ParsedDescription::parse(&pull_request));
         }
+        if !is_same_pull_request {
+            self.is_description_expanded = false;
+            self.description_scroll
+                .set_offset(gpui::point(px(0.), px(0.)));
+        }
         self.pull_request = Some(pull_request);
         self.horizontal_offsets.clear();
         self.load_changed_files(cx);
@@ -384,14 +417,18 @@ impl PullRequestDetail {
     fn rebuild_rows(&mut self, anchor: ScrollAnchor) {
         // Row numbers change, so a selection would point at other text.
         self.diff_selection = None;
+        let shown_files = self
+            .file_tree
+            .shown_files(self.loaded_files(), &self.file_review);
         self.rows = DetailRowList::build(&DetailContent {
             has_pull_request: self.pull_request.is_some(),
-            has_description: self.description().is_some(),
             changed_files: self.changed_files.as_ref(),
+            shown_files: &shown_files,
             file_review: &self.file_review,
             settings: self.diff_settings,
         });
         self.list.reset(self.rows.len());
+        self.refresh_tree_rows();
 
         let files_settled = !matches!(self.changed_files, Some(ChangedFiles::Loading));
         let pending = if files_settled {
@@ -424,22 +461,192 @@ impl PullRequestDetail {
             .map_or(ScrollAnchor::Top, ScrollAnchor::File)
     }
 
-    /// Rebuilds the rows of file `file` alone, keeping the scroll position
-    /// and the measured heights of every other row.
+    /// Rebuilds the rows of file `file` alone (none when the filter now hides
+    /// it), keeping the scroll position and the measured heights of every
+    /// other row.
     fn rebuild_file_rows(&mut self, file: usize) {
         let Some(loaded) = self.loaded_files().get(file) else {
             return;
         };
-        let rows = DetailRowList::file_rows(
-            file,
-            loaded,
-            self.file_review.state_of(loaded),
-            self.diff_settings,
+        let is_shown = self.file_tree.filter().shows(
+            loaded.filename(),
+            self.file_review.is_viewed(loaded.filename()),
         );
+        let rows = if is_shown {
+            DetailRowList::file_rows(
+                file,
+                loaded,
+                self.file_review.state_of(loaded),
+                self.diff_settings,
+            )
+        } else {
+            Vec::new()
+        };
         let new_length = rows.len();
         self.diff_selection = None;
         if let Some(old_range) = self.rows.replace_file(file, rows) {
             self.list.splice(old_range, new_length);
+        }
+        self.refresh_tree_rows();
+    }
+
+    /// Recomputes the tree's visible rows from the files, filter and marks.
+    fn refresh_tree_rows(&mut self) {
+        let files = match &self.changed_files {
+            Some(ChangedFiles::Loaded(files)) => files.as_slice(),
+            Some(ChangedFiles::Loading | ChangedFiles::Failed(_)) | None => &[],
+        };
+        self.file_tree.refresh_rows(files, &self.file_review);
+    }
+
+    pub(super) fn file_tree(&self) -> &FileTreeState {
+        &self.file_tree
+    }
+
+    pub(super) fn is_description_expanded(&self) -> bool {
+        self.is_description_expanded
+    }
+
+    pub(super) fn description_scroll(&self) -> &ScrollHandle {
+        &self.description_scroll
+    }
+
+    pub(super) fn toggle_description(&mut self, cx: &mut Context<Self>) {
+        self.is_description_expanded = !self.is_description_expanded;
+        cx.notify();
+    }
+
+    /// Shows or hides the file tree panel (cmd-b), and saves it.
+    pub fn toggle_file_tree(&mut self, cx: &mut Context<Self>) {
+        self.file_tree.toggle_visibility();
+        UiStateRecorder::record_review_layout(cx, self.file_tree.layout());
+        cx.notify();
+    }
+
+    /// Flips one hide toggle of the filter; the tree and the diff follow, and it is saved.
+    pub(super) fn toggle_filter(&mut self, toggle: FilterToggle, cx: &mut Context<Self>) {
+        self.file_tree.toggle_filter(toggle);
+        UiStateRecorder::record_review_layout(cx, self.file_tree.layout());
+        self.rebuild_rows(self.anchor_at_top());
+        cx.notify();
+    }
+
+    /// Hides or shows the files with `extension` in the tree and the diff.
+    pub(super) fn toggle_extension(&mut self, extension: &str, cx: &mut Context<Self>) {
+        self.file_tree.toggle_extension(extension);
+        self.rebuild_rows(self.anchor_at_top());
+        cx.notify();
+    }
+
+    /// Collapses or expands a folder of the tree.
+    pub(super) fn toggle_folder(&mut self, path: &str, cx: &mut Context<Self>) {
+        self.file_tree.toggle_folder(path);
+        self.refresh_tree_rows();
+        cx.notify();
+    }
+
+    /// Marks every file a folder covers as viewed, or, when all already
+    /// are, as not viewed; saves the marks.
+    pub(super) fn toggle_folder_viewed(&mut self, folder: NodeId, cx: &mut Context<Self>) {
+        let Some(pull_request_id) = self
+            .pull_request
+            .as_ref()
+            .map(|pull_request| pull_request.id)
+        else {
+            return;
+        };
+        let files = self.loaded_files().to_vec();
+        let mark_viewed = self
+            .file_tree
+            .folder_viewed_state(folder, &files, &self.file_review)
+            != FolderViewedState::All;
+        for file in self.file_tree.folder_files(folder, &files) {
+            match self.file_review.set_viewed(&files[file], mark_viewed) {
+                Some(ViewedToggle::Marked(mark)) => {
+                    UiStateRecorder::record_file_viewed(cx, pull_request_id, mark);
+                }
+                Some(ViewedToggle::Unmarked(filename)) => {
+                    UiStateRecorder::record_file_unviewed(cx, pull_request_id, filename);
+                }
+                None => {}
+            }
+        }
+        self.rebuild_rows(self.anchor_at_top());
+        cx.notify();
+    }
+
+    /// The file whose rows are at the top of the diff, highlighted in the tree.
+    pub(super) fn current_file(&self) -> Option<usize> {
+        self.rows
+            .file_at_row(self.list.logical_scroll_top().item_ix)
+    }
+
+    /// Scrolls the diff to file `file`'s header; nothing while it is hidden.
+    pub(super) fn reveal_file(&mut self, file: usize, cx: &mut Context<Self>) {
+        if let Some(row) = self.rows.file_start(file) {
+            self.list.scroll_to(ListOffset {
+                item_ix: row,
+                offset_in_item: px(0.),
+            });
+            cx.notify();
+        }
+    }
+
+    /// The shown file after (or before) the current one, in diff order.
+    fn neighbour_file(&self, direction: FileDirection) -> Option<usize> {
+        let shown: Vec<usize> = (0..self.loaded_files().len())
+            .filter(|file| self.rows.file_start(*file).is_some())
+            .collect();
+        let current = self.current_file();
+        match direction {
+            FileDirection::Next => shown
+                .iter()
+                .copied()
+                .find(|file| current.is_none_or(|current| *file > current)),
+            FileDirection::Previous => shown
+                .iter()
+                .rev()
+                .copied()
+                .find(|file| current.is_some_and(|current| *file < current)),
+        }
+    }
+
+    /// Scrolls to the next shown file (`]`).
+    pub fn reveal_next_file(&mut self, cx: &mut Context<Self>) {
+        if let Some(file) = self.neighbour_file(FileDirection::Next) {
+            self.reveal_file(file, cx);
+        }
+    }
+
+    /// Scrolls to the previous shown file (`[`).
+    pub fn reveal_previous_file(&mut self, cx: &mut Context<Self>) {
+        if let Some(file) = self.neighbour_file(FileDirection::Previous) {
+            self.reveal_file(file, cx);
+        }
+    }
+
+    /// Marks the current file viewed and moves on to the next file not yet
+    /// viewed (`v`); on a viewed file, only unmarks it.
+    pub fn mark_current_viewed_and_advance(&mut self, cx: &mut Context<Self>) {
+        let Some(file) = self.current_file() else {
+            return;
+        };
+        let was_viewed = self
+            .loaded_files()
+            .get(file)
+            .is_some_and(|loaded| self.file_review.is_viewed(loaded.filename()));
+        self.toggle_file_viewed(file, cx);
+        if was_viewed {
+            return;
+        }
+        let next_unviewed = (file + 1..self.loaded_files().len()).find(|next| {
+            self.rows.file_start(*next).is_some()
+                && !self
+                    .file_review
+                    .is_viewed(self.loaded_files()[*next].filename())
+        });
+        if let Some(next) = next_unviewed {
+            self.reveal_file(next, cx);
         }
     }
 
@@ -593,11 +800,24 @@ impl PullRequestDetail {
                     let files = fetch_changed_files(client, &cache, &pull_request)?;
 
                     // Build every diff here too: word comparisons can take a moment on big files.
+                    let built: Vec<LoadedFile> = files
+                        .into_iter()
+                        .map(|file| LoadedFile::build(file, options))
+                        .collect();
+
+                    // Put the files in tree order, so the tree and the diff agree.
+                    let paths: Vec<&str> = built.iter().map(LoadedFile::filename).collect();
+                    let ordered: Vec<LoadedFile> = FileTree::build(&paths)
+                        .file_order()
+                        .into_iter()
+                        .map(|index| built[index].clone())
+                        .collect();
+                    let ordered_paths: Vec<&str> =
+                        ordered.iter().map(LoadedFile::filename).collect();
+                    let tree = FileTree::build(&ordered_paths);
                     anyhow::Ok(FetchedChanges {
-                        files: files
-                            .into_iter()
-                            .map(|file| LoadedFile::build(file, options))
-                            .collect(),
+                        files: ordered,
+                        tree,
                         viewed_marks: read_viewed_files(&ui_state, pull_request.id),
                     })
                 })
@@ -610,6 +830,7 @@ impl PullRequestDetail {
                         Ok(fetched) => {
                             detail.file_review =
                                 FileReviewState::for_loaded(&fetched.files, &fetched.viewed_marks);
+                            detail.file_tree.reset_for(fetched.tree, &fetched.files);
                             ChangedFiles::Loaded(fetched.files)
                         }
                         Err(error) => ChangedFiles::Failed(format!("{error:#}").into()),

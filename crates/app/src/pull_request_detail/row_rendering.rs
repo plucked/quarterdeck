@@ -5,8 +5,7 @@ use gpui::{
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, WeakEntity, Window, canvas, div,
     list, prelude::*,
 };
-use qc_cache::{DiffLayout, LineWrapping};
-use qc_github::PullRequest;
+use qc_cache::{DiffLayout, LineWrapping, PanelVisibility};
 
 use super::changed_files::ChangedFiles;
 use super::detail_row::DetailRow;
@@ -18,7 +17,6 @@ use crate::diff_view::{
     render_file_header, render_file_note, render_hunk_header, render_split_row,
     render_unified_line,
 };
-use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
 
@@ -27,14 +25,12 @@ impl Render for PullRequestDetail {
         // This frame's code texts register again as they paint.
         self.code_segments().clear();
 
-        // `min_w_0` lets the pane shrink to the window, so its text wraps.
-        div()
+        // The diff: the virtualized rows, their scrollbar, and code selection.
+        let diff_area = div()
             .relative()
             .flex_1()
             .min_w_0()
             .h_full()
-            .track_focus(self.focus())
-            .on_action(cx.listener(|detail, _: &Copy, _, cx| detail.copy_diff_selection(cx)))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|detail, event: &MouseDownEvent, window, cx| {
@@ -56,6 +52,30 @@ impl Render for PullRequestDetail {
                 drag_listener(cx.entity().downgrade())
                     .absolute()
                     .size_full(),
+            );
+
+        // The sticky header above; the file tree beside the diff when shown.
+        // `min_w_0` and `min_h_0` let the pane shrink to the window.
+        let shows_tree = self.file_tree().visibility() == PanelVisibility::Shown
+            && !self.loaded_files().is_empty();
+        div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .track_focus(self.focus())
+            .on_action(cx.listener(|detail, _: &Copy, _, cx| detail.copy_diff_selection(cx)))
+            .children(self.render_sticky_header(cx))
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .min_h_0()
+                    .child(diff_area)
+                    .when(shows_tree, |pane| {
+                        pane.child(self.render_file_tree_panel(cx))
+                    }),
             )
     }
 }
@@ -105,10 +125,9 @@ impl PullRequestDetail {
                 .text_color(theme::muted())
                 .child("Select a pull request")
                 .into_any_element(),
-            DetailRow::Header => self.render_header(),
-            DetailRow::Description => self.render_description(),
             DetailRow::FilesLoading => render_status_line("Loading files…", theme::muted()),
             DetailRow::FilesFailed => self.render_failure(),
+            DetailRow::AllFilesHidden => self.render_all_files_hidden(),
             DetailRow::SummaryBar => div()
                 .pb_3()
                 .child(self.render_summary_bar(cx))
@@ -152,33 +171,18 @@ impl PullRequestDetail {
             .into_any_element()
     }
 
-    /// Title, metadata line and a link that opens the pull request in the browser.
-    fn render_header(&self) -> AnyElement {
-        let Some(pull_request) = self.pull_request() else {
-            return div().into_any_element();
+    /// The row in place of the files when the filters hide them all.
+    fn render_all_files_hidden(&self) -> AnyElement {
+        let all_viewed = self
+            .loaded_files()
+            .iter()
+            .all(|loaded| self.file_review().is_viewed(loaded.filename()));
+        let message = if all_viewed {
+            "Every file is viewed."
+        } else {
+            "No file matches the filters."
         };
-        div()
-            .pb_3()
-            .child(render_pull_request_header(pull_request))
-            .into_any_element()
-    }
-
-    /// The description rendered as Markdown.
-    fn render_description(&self) -> AnyElement {
-        let Some(description) = self.description() else {
-            return div().into_any_element();
-        };
-        div()
-            .pb_3()
-            .child(
-                div()
-                    .p_3()
-                    .rounded_md()
-                    .bg(theme::panel())
-                    .text_sm()
-                    .child(MarkdownView::new("description", description.clone())),
-            )
-            .into_any_element()
+        render_status_line(message, theme::muted())
     }
 
     fn render_failure(&self) -> AnyElement {
@@ -287,37 +291,4 @@ fn render_status_line(message: impl Into<gpui::SharedString>, color: gpui::Rgba)
         .text_color(color)
         .child(message.into())
         .into_any_element()
-}
-
-/// Title, metadata line and a link that opens the pull request in the browser.
-fn render_pull_request_header(pull_request: &PullRequest) -> impl IntoElement {
-    let url = pull_request.html_url.clone();
-    div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(div().text_xl().child(pull_request.title.clone()))
-        .child(
-            div()
-                .flex()
-                .gap_2()
-                .text_sm()
-                .text_color(theme::muted())
-                .child(div().min_w_0().child(format!(
-                    "{}#{} by {} · updated {}",
-                    pull_request.repo.full_name(),
-                    pull_request.number,
-                    pull_request.author.login,
-                    pull_request.updated_at
-                )))
-                .child(
-                    div()
-                        .id("open-on-github")
-                        .flex_none()
-                        .text_color(theme::accent())
-                        .cursor_pointer()
-                        .on_click(move |_, _, cx| cx.open_url(&url))
-                        .child("Open on GitHub ↗"),
-                ),
-        )
 }

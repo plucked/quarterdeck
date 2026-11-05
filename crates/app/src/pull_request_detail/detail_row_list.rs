@@ -19,17 +19,14 @@ pub struct DetailRowList {
 }
 
 impl DetailRowList {
-    /// The rows for `content`: header and description, then the files'
-    /// rows, or a loading or failure row while there are none.
+    /// The rows for `content`: the summary, then the rows of every file the
+    /// filter shows (a hidden file keeps an empty range where its rows would
+    /// go), or a loading, failure or all-hidden row instead.
     pub fn build(content: &DetailContent<'_>) -> Self {
         let mut list = Self::default();
         if !content.has_pull_request {
             list.rows.push(DetailRow::NoSelection);
             return list;
-        }
-        list.rows.push(DetailRow::Header);
-        if content.has_description {
-            list.rows.push(DetailRow::Description);
         }
         match content.changed_files {
             None | Some(ChangedFiles::Loading) => list.rows.push(DetailRow::FilesLoading),
@@ -37,11 +34,16 @@ impl DetailRowList {
             Some(ChangedFiles::Loaded(files)) => {
                 list.rows.push(DetailRow::SummaryBar);
                 for (index, loaded) in files.iter().enumerate() {
-                    let state = content.file_review.state_of(loaded);
                     let start = list.rows.len();
-                    list.rows
-                        .extend(Self::file_rows(index, loaded, state, content.settings));
+                    if content.shown_files.get(index).copied().unwrap_or(true) {
+                        let state = content.file_review.state_of(loaded);
+                        list.rows
+                            .extend(Self::file_rows(index, loaded, state, content.settings));
+                    }
                     list.file_ranges.push(start..list.rows.len());
+                }
+                if !files.is_empty() && !content.shown_files.contains(&true) {
+                    list.rows.push(DetailRow::AllFilesHidden);
                 }
             }
         }
@@ -97,9 +99,12 @@ impl DetailRowList {
         self.rows.get(index).copied()
     }
 
-    /// The first row (the header) of file `file`.
+    /// The first row (the header) of file `file`; `None` while it is hidden.
     pub fn file_start(&self, file: usize) -> Option<usize> {
-        self.file_ranges.get(file).map(|range| range.start)
+        self.file_ranges
+            .get(file)
+            .filter(|range| !range.is_empty())
+            .map(|range| range.start)
     }
 
     /// The file whose rows include row `row`; `None` above the files.
@@ -183,10 +188,11 @@ mod tests {
         settings: DiffViewSettings,
     ) -> DetailRowList {
         let changed = ChangedFiles::Loaded(files.to_vec());
+        let shown = vec![true; files.len()];
         DetailRowList::build(&DetailContent {
             has_pull_request: true,
-            has_description: true,
             changed_files: Some(&changed),
+            shown_files: &shown,
             file_review: review,
             settings,
         })
@@ -201,8 +207,6 @@ mod tests {
         assert_eq!(
             list.rows,
             [
-                DetailRow::Header,
-                DetailRow::Description,
                 DetailRow::SummaryBar,
                 DetailRow::FileHeader { file: 0 },
                 DetailRow::HunkHeader { file: 0, hunk: 0 },
@@ -224,8 +228,8 @@ mod tests {
                 DetailRow::FileEnd { file: 0 },
             ]
         );
-        assert_eq!(list.file_at_row(5), Some(0));
-        assert_eq!(list.file_at_row(1), None);
+        assert_eq!(list.file_at_row(3), Some(0));
+        assert_eq!(list.file_at_row(0), None);
     }
 
     /// Split rows pair the removed and added line into one row.
@@ -269,6 +273,32 @@ mod tests {
         assert_eq!(
             list.get(list.file_start(1).unwrap()),
             Some(DetailRow::FileHeader { file: 1 })
+        );
+    }
+
+    /// Hidden files get no rows, and with all hidden the list says so.
+    #[test]
+    fn hidden_files_have_no_rows() {
+        let files = [loaded("a.rs", Some(PATCH)), loaded("b.rs", Some(PATCH))];
+        let review = FileReviewState::for_loaded(&files, &[]);
+        let changed = ChangedFiles::Loaded(files.to_vec());
+        let build = |shown: &[bool]| {
+            DetailRowList::build(&DetailContent {
+                has_pull_request: true,
+                changed_files: Some(&changed),
+                shown_files: shown,
+                file_review: &review,
+                settings: DiffViewSettings::default(),
+            })
+        };
+        let first_hidden = build(&[false, true]);
+        assert_eq!(first_hidden.file_start(0), None);
+        assert_eq!(first_hidden.get(1), Some(DetailRow::FileHeader { file: 1 }));
+
+        let all_hidden = build(&[false, false]);
+        assert_eq!(
+            all_hidden.rows,
+            [DetailRow::SummaryBar, DetailRow::AllFilesHidden]
         );
     }
 

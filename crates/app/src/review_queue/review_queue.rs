@@ -13,7 +13,9 @@ use super::refresh_status::RefreshStatus;
 use super::restore_phase::RestorePhase;
 use super::selection_after_refresh::SelectionAfterRefresh;
 use super::selection_restore::SelectionRestore;
-use crate::app_commands::Refresh;
+use crate::app_commands::{
+    MarkViewedAndNext, NextFile, PreviousFile, REVIEW_QUEUE_CONTEXT, Refresh, ToggleFileTree,
+};
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::pull_request_detail::{DetailEvent, PullRequestDetail};
@@ -320,13 +322,46 @@ impl ReviewQueue {
     fn on_refresh(&mut self, _: &Refresh, _: &mut Window, cx: &mut Context<Self>) {
         self.refresh(cx);
     }
+
+    /// Handles the `NextFile` action (`]`): scrolls the detail to the next shown file.
+    fn on_next_file(&mut self, _: &NextFile, _: &mut Window, cx: &mut Context<Self>) {
+        self.detail.update(cx, PullRequestDetail::reveal_next_file);
+    }
+
+    /// Handles the `PreviousFile` action (`[`): scrolls the detail to the previous shown file.
+    fn on_previous_file(&mut self, _: &PreviousFile, _: &mut Window, cx: &mut Context<Self>) {
+        self.detail
+            .update(cx, PullRequestDetail::reveal_previous_file);
+    }
+
+    /// Handles the `MarkViewedAndNext` action (`v`): marks the file at the
+    /// top viewed and moves to the next unviewed one.
+    fn on_mark_viewed_and_next(
+        &mut self,
+        _: &MarkViewedAndNext,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.detail
+            .update(cx, PullRequestDetail::mark_current_viewed_and_advance);
+    }
+
+    /// Handles the `ToggleFileTree` action (cmd-b): shows or hides the file tree.
+    fn on_toggle_file_tree(&mut self, _: &ToggleFileTree, _: &mut Window, cx: &mut Context<Self>) {
+        self.detail.update(cx, PullRequestDetail::toggle_file_tree);
+    }
 }
 
 impl Render for ReviewQueue {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .key_context(REVIEW_QUEUE_CONTEXT)
             .track_focus(&self.focus)
             .on_action(cx.listener(Self::on_refresh))
+            .on_action(cx.listener(Self::on_next_file))
+            .on_action(cx.listener(Self::on_previous_file))
+            .on_action(cx.listener(Self::on_mark_viewed_and_next))
+            .on_action(cx.listener(Self::on_toggle_file_tree))
             .flex()
             .size_full()
             .bg(theme::background())
