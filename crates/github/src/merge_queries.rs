@@ -13,11 +13,11 @@ use crate::{
 pub(crate) const MERGE_OPTIONS_QUERY: &str = r"
 query MergeOptions($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
-    mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed deleteBranchOnMerge
+    mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed deleteBranchOnMerge viewerPermission
     pullRequest(number: $number) {
       state mergeable mergeStateStatus isInMergeQueue isMergeQueueEnabled
       headRefName headRefOid baseRefName isCrossRepository
-      viewerCanMergeAsAdmin viewerCanClose viewerCanDeleteHeadRef
+      viewerCanMergeAsAdmin viewerCanClose viewerCanDeleteHeadRef headRef { name }
     }
   }
 }
@@ -35,6 +35,8 @@ struct RepositoryNode {
     #[serde(flatten)]
     methods: AllowedMethodsNode,
     delete_branch_on_merge: bool,
+    /// `ADMIN`, `MAINTAIN`, `WRITE`, `TRIAGE` or `READ`; `None` without access.
+    viewer_permission: Option<String>,
     pull_request: Option<PullRequestNode>,
 }
 
@@ -60,7 +62,12 @@ struct PullRequestNode {
     is_cross_repository: bool,
     #[serde(flatten)]
     permissions: PermissionsNode,
+    /// `None` once the head branch is deleted.
+    head_ref: Option<NameNode>,
 }
+
+#[derive(Deserialize)]
+struct NameNode {}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,6 +92,15 @@ impl MergeOptionsData {
             .pull_request
             .ok_or("GitHub knows no such pull request")?;
         let methods = repository.methods;
+
+        // GitHub reports no head branch deletion for an open pull request
+        // (only after it is closed); pushing to the repository is what it takes.
+        let can_push = matches!(
+            repository.viewer_permission.as_deref(),
+            Some("ADMIN" | "MAINTAIN" | "WRITE")
+        );
+        let can_delete_head_ref = pull_request.permissions.viewer_can_delete_head_ref
+            || (can_push && !pull_request.is_cross_repository && pull_request.head_ref.is_some());
         let allowed_methods = [
             (methods.merge_commit_allowed, MergeMethod::Merge),
             (methods.squash_merge_allowed, MergeMethod::Squash),
@@ -107,7 +123,7 @@ impl MergeOptionsData {
             permissions: MergePermissions {
                 can_merge_as_admin: pull_request.permissions.viewer_can_merge_as_admin,
                 can_close: pull_request.permissions.viewer_can_close,
-                can_delete_head_ref: pull_request.permissions.viewer_can_delete_head_ref,
+                can_delete_head_ref,
             },
             deletes_branch_on_merge: repository.delete_branch_on_merge,
             merge_queue: match (
@@ -169,12 +185,13 @@ mod tests {
     fn reads_merge_options() {
         let json = r#"{"data": {"repository": {
             "mergeCommitAllowed": false, "squashMergeAllowed": true, "rebaseMergeAllowed": false,
-            "deleteBranchOnMerge": true,
+            "deleteBranchOnMerge": true, "viewerPermission": "READ",
             "pullRequest": {
                 "state": "OPEN", "isDraft": false, "mergeable": "MERGEABLE", "mergeStateStatus": "BLOCKED",
                 "isInMergeQueue": false, "isMergeQueueEnabled": false,
                 "headRefName": "feature", "headRefOid": "abc", "baseRefName": "main", "isCrossRepository": false,
-                "viewerCanMergeAsAdmin": true, "viewerCanClose": true, "viewerCanDeleteHeadRef": false
+                "viewerCanMergeAsAdmin": true, "viewerCanClose": true, "viewerCanDeleteHeadRef": false,
+                "headRef": {"name": "feature"}
             }
         }}}"#;
         let response: GraphQlResponse<MergeOptionsData> = serde_json::from_str(json).unwrap();
@@ -182,6 +199,26 @@ mod tests {
         assert_eq!(options.allowed_methods, [MergeMethod::Squash]);
         assert_eq!(options.readiness, MergeReadiness::Blocked);
         assert!(options.permissions.can_merge_as_admin && !options.permissions.can_delete_head_ref);
+    }
+
+    /// Write access lets the viewer delete the branch of an open pull
+    /// request, which GitHub reports as not deletable until it is closed.
+    #[test]
+    fn write_access_deletes_open_branches() {
+        let json = r#"{"data": {"repository": {
+            "mergeCommitAllowed": true, "squashMergeAllowed": true, "rebaseMergeAllowed": true,
+            "deleteBranchOnMerge": false, "viewerPermission": "ADMIN",
+            "pullRequest": {
+                "state": "OPEN", "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN",
+                "isInMergeQueue": false, "isMergeQueueEnabled": false,
+                "headRefName": "feature", "headRefOid": "abc", "baseRefName": "main", "isCrossRepository": false,
+                "viewerCanMergeAsAdmin": false, "viewerCanClose": true, "viewerCanDeleteHeadRef": false,
+                "headRef": {"name": "feature"}
+            }
+        }}}"#;
+        let response: GraphQlResponse<MergeOptionsData> = serde_json::from_str(json).unwrap();
+        let options = response.into_data().unwrap().into_options().unwrap();
+        assert!(options.permissions.can_delete_head_ref);
     }
 
     /// Conflicts win over the merge state.

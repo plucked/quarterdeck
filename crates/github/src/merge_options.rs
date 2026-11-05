@@ -110,5 +110,8 @@ pub struct MergePermissions {
     /// May merge past unmet requirements (an admin merge).
     pub can_merge_as_admin: bool,
     pub can_close: bool,
+    /// May delete the head branch: GitHub says so, or (while the pull
+    /// request is open, when GitHub never does) the viewer can push to the
+    /// repository and the branch is not a fork's.
     pub can_delete_head_ref: bool,
 }
