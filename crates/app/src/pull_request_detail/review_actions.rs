@@ -164,7 +164,7 @@ impl PullRequestDetail {
             let last = (*open_line).max(line);
             *start_line = (first != last).then_some(first);
             *open_line = last;
-            self.rebuild_rows_in_place();
+            self.refresh_comment_files(&[Some(file)]);
             cx.notify();
             return;
         }
@@ -205,13 +205,70 @@ impl PullRequestDetail {
             },
         );
         area.read(cx).focus(window);
+
+        // Only the files of the editor closed and the one opened change rows.
+        let closed_file = self
+            .review()
+            .editor
+            .as_ref()
+            .and_then(|editor| self.editor_file(&editor.target));
+        let opened_file = self.editor_file(&target);
         self.review_mut().editor = Some(CommentEditor {
             target,
             text: area,
             _subscription: subscription,
         });
-        self.rebuild_rows_in_place();
+        self.refresh_comment_files(&[closed_file, opened_file]);
         cx.notify();
+    }
+
+    /// The loaded file at `path`.
+    fn file_of_path(&self, path: &str) -> Option<usize> {
+        self.loaded_files()
+            .iter()
+            .position(|loaded| loaded.filename() == path)
+    }
+
+    /// The file whose rows show the editor for `target`.
+    fn editor_file(&self, target: &EditorTarget) -> Option<usize> {
+        match target {
+            EditorTarget::NewComment { file, .. } => Some(*file),
+            EditorTarget::Reply { path, .. } => self.file_of_path(path),
+            EditorTarget::EditNote(id) => self
+                .review()
+                .comments
+                .note(*id)
+                .and_then(|note| self.file_of_path(&note.path)),
+            EditorTarget::EditGitHubComment { comment_id } => {
+                let thread = self
+                    .review()
+                    .comments
+                    .github
+                    .as_ref()?
+                    .threads
+                    .iter()
+                    .find(|thread| {
+                        thread
+                            .comments
+                            .iter()
+                            .any(|comment| comment.id == *comment_id)
+                    })?;
+                self.file_of_path(&thread.path)
+            }
+        }
+    }
+
+    /// Places the comments again and rebuilds the rows of `files` alone,
+    /// keeping every other row and its measured height.
+    fn refresh_comment_files(&mut self, files: &[Option<usize>]) {
+        self.refresh_comment_layout();
+        let mut rebuilt: Vec<usize> = Vec::new();
+        for file in files.iter().flatten() {
+            if !rebuilt.contains(file) {
+                self.rebuild_file_rows(*file);
+                rebuilt.push(*file);
+            }
+        }
     }
 
     /// Lets the list measure the editor's row again as its text grows.
@@ -224,11 +281,21 @@ impl PullRequestDetail {
         else {
             return;
         };
-        let row = (0..self.rows().len()).find(|row| match (self.rows().get(*row), &target) {
-            (Some(DetailRow::Composer { .. }), EditorTarget::NewComment { .. }) => true,
-            (Some(DetailRow::CommentCard { card, .. }), _) => self.card_holds_editor(card, &target),
-            _ => false,
-        });
+        let Some(rows) = self
+            .editor_file(&target)
+            .and_then(|file| self.rows().file_range(file))
+        else {
+            return;
+        };
+        let row = rows
+            .into_iter()
+            .find(|row| match (self.rows().get(*row), &target) {
+                (Some(DetailRow::Composer { .. }), EditorTarget::NewComment { .. }) => true,
+                (Some(DetailRow::CommentCard { card, .. }), _) => {
+                    self.card_holds_editor(card, &target)
+                }
+                _ => false,
+            });
         if let Some(row) = row {
             self.remeasure_row(row);
         }
@@ -268,8 +335,9 @@ impl PullRequestDetail {
     /// Closes the editor without saving; the diff takes the keys again.
     pub(super) fn close_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(self.focus());
-        if self.review_mut().editor.take().is_some() {
-            self.rebuild_rows_in_place();
+        if let Some(editor) = self.review_mut().editor.take() {
+            let file = self.editor_file(&editor.target);
+            self.refresh_comment_files(&[file]);
             cx.notify();
         }
     }
@@ -281,9 +349,10 @@ impl PullRequestDetail {
         let Some(editor) = self.review_mut().editor.take() else {
             return;
         };
+        let file = self.editor_file(&editor.target);
         let body = editor.text.read(cx).text().trim().to_owned();
         if body.is_empty() {
-            self.rebuild_rows_in_place();
+            self.refresh_comment_files(&[file]);
             cx.notify();
             return;
         }
@@ -335,7 +404,7 @@ impl PullRequestDetail {
                 });
             }
         }
-        self.rebuild_rows_in_place();
+        self.refresh_comment_files(&[file]);
         cx.notify();
     }
 
@@ -368,12 +437,17 @@ impl PullRequestDetail {
 
     /// Deletes one of the user's notes.
     pub(super) fn delete_note(&mut self, id: NoteId, cx: &mut Context<Self>) {
+        let file = self
+            .review()
+            .comments
+            .note(id)
+            .and_then(|note| self.file_of_path(&note.path));
         self.review_mut()
             .comments
             .notes
             .retain(|note| note.id != id);
         UiStateRecorder::record_review_change(cx, ReviewChange::DeleteNote(id));
-        self.rebuild_rows_in_place();
+        self.refresh_comment_files(&[file]);
         cx.notify();
     }
 

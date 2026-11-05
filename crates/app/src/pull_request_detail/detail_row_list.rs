@@ -138,6 +138,11 @@ impl DetailRowList {
         self.rows.get(index).copied()
     }
 
+    /// The rows of file `file`; empty while it is hidden.
+    pub fn file_range(&self, file: usize) -> Option<Range<usize>> {
+        self.file_ranges.get(file).cloned()
+    }
+
     /// The first row (the header) of file `file`; `None` while it is hidden.
     pub fn file_start(&self, file: usize) -> Option<usize> {
         self.file_ranges
