@@ -1,11 +1,9 @@
-use std::ops::Range;
-
-use gpui::{
-    AnyElement, Div, ElementId, HighlightStyle, IntoElement, Rgba, StyledText, div, prelude::*, px,
-};
+use gpui::{AnyElement, Div, ElementId, IntoElement, Rgba, StyledText, div, prelude::*, px};
 use qc_cache::LineWrapping;
 use qc_diff::{DiffLine, DiffLineKind};
+use qc_syntax::SyntaxSpan;
 
+use super::code_highlights::code_highlights;
 use crate::theme;
 
 /// Height of one diff row; rows of a split view in scroll mode line up because all share it.
@@ -48,23 +46,16 @@ pub fn render_marker(kind: DiffLineKind) -> Div {
         .child(marker)
 }
 
-/// A line's text with its changed ranges on a stronger background. Wraps
-/// within the row, or stays on one line for horizontal scrolling.
-pub fn render_code(line: &DiffLine, wrapping: LineWrapping) -> Div {
-    let emphasis = emphasis_background(line.kind);
-    let highlights = line
-        .changed_ranges
-        .iter()
-        .map(|range: &Range<usize>| {
-            (
-                range.clone(),
-                HighlightStyle {
-                    background_color: Some(emphasis.into()),
-                    ..HighlightStyle::default()
-                },
-            )
-        })
-        .collect::<Vec<_>>();
+/// A line's text in its syntax colors, with its changed ranges on a
+/// stronger background. Wraps within the row, or stays on one line for
+/// horizontal scrolling.
+pub fn render_code(line: &DiffLine, syntax: &[SyntaxSpan], wrapping: LineWrapping) -> Div {
+    let highlights = code_highlights(
+        line.text.len(),
+        syntax,
+        &line.changed_ranges,
+        emphasis_background(line.kind),
+    );
     let text = StyledText::new(line.text.clone()).with_highlights(highlights);
     match wrapping {
         LineWrapping::Wrap => div().flex_1().min_w_0().pr_2().child(text),

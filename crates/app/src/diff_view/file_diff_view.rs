@@ -5,6 +5,7 @@ use gpui::{AnyElement, App, ClickEvent, IntoElement, RenderOnce, Window, div, pr
 use qc_cache::{DiffLayout, DiffViewSettings};
 use qc_diff::{FileDiff, WhitespaceMode};
 use qc_github::PullRequestFile;
+use qc_syntax::DiffSyntax;
 
 use super::FileDiffState;
 use super::diff_cell_rendering::DIFF_ROW_HEIGHT;
@@ -24,6 +25,8 @@ pub struct FileDiffView {
     index: usize,
     file: Arc<PullRequestFile>,
     diff: Arc<FileDiff>,
+    /// Syntax colors, once highlighted; until then lines draw plain.
+    syntax: Option<Arc<DiffSyntax>>,
     settings: DiffViewSettings,
     state: FileDiffState,
     on_toggle_collapsed: FileClickHandler,
@@ -43,11 +46,18 @@ impl FileDiffView {
             index,
             file,
             diff,
+            syntax: None,
             settings,
             state,
             on_toggle_collapsed: ignore_click.clone(),
             on_toggle_viewed: ignore_click,
         }
+    }
+
+    /// Draws the lines in these syntax colors.
+    pub fn syntax(mut self, syntax: Option<Arc<DiffSyntax>>) -> Self {
+        self.syntax = syntax;
+        self
     }
 
     /// Called when the header (or a large file's expand note) is clicked.
@@ -109,9 +119,11 @@ impl FileDiffView {
         if self.diff.is_empty() {
             return render_note(empty_diff_message(&self.file, self.settings));
         }
+        let syntax = self.syntax.as_deref();
+        let wrapping = self.settings.wrapping;
         let body = match self.settings.layout {
-            DiffLayout::Unified => render_unified(&self.diff, self.settings.wrapping, self.index),
-            DiffLayout::Split => render_split(&self.diff, self.settings.wrapping, self.index),
+            DiffLayout::Unified => render_unified(&self.diff, syntax, wrapping, self.index),
+            DiffLayout::Split => render_split(&self.diff, syntax, wrapping, self.index),
         };
         div()
             .font_family(theme::MONO_FONT)

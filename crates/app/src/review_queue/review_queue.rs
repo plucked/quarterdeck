@@ -6,8 +6,10 @@ use gpui::{
     UniformListScrollHandle, Window, div, point, prelude::*, px,
 };
 use qc_cache::{DiffViewSettings, PullRequestListKey, ReviewQueueViewState, ViewedFile};
+use qc_diff::FileDiff;
 use qc_github::PullRequest;
 use qc_markdown::MarkdownDocument;
+use qc_syntax::DiffSyntax;
 
 use super::activation_refresh::ActivationRefresh;
 use super::changed_files::ChangedFiles;
@@ -25,6 +27,15 @@ use crate::theme;
 use crate::ui_state::{UiStateRecorder, read_viewed_files};
 
 const QUEUE_LIST: PullRequestListKey = PullRequestListKey::REVIEW_REQUESTED;
+
+/// Batches when the number of cores is unknown.
+const DEFAULT_HIGHLIGHT_BATCHES: usize = 4;
+
+/// The syntax colors computed for one diff, matched back by the diff's `Arc`.
+struct HighlightedDiff {
+    diff: Arc<FileDiff>,
+    syntax: Option<Arc<DiffSyntax>>,
+}
 
 /// A pull request's changed files as loaded on the background executor,
 /// with the viewed marks saved for it.
@@ -111,6 +122,8 @@ pub struct ReviewQueue {
     file_review: FileReviewState,
     /// The rebuild of the loaded diffs after a settings change; replacing it cancels the previous one.
     diff_task: Option<Task<()>>,
+    /// The syntax highlighting of the loaded diffs; replacing it cancels the previous one.
+    syntax_task: Option<Task<()>>,
 }
 
 impl ReviewQueue {
@@ -170,6 +183,7 @@ impl ReviewQueue {
             diff_settings,
             file_review: FileReviewState::default(),
             diff_task: None,
+            syntax_task: None,
             _activation_subscription: activation_subscription,
         };
         queue.restore_selection(RestorePhase::CachedQueue, cx);
@@ -277,6 +291,7 @@ impl ReviewQueue {
                             .all(|(shown, built)| shown.fingerprint == built.fingerprint);
                     if is_same_files {
                         queue.changed_files = Some(ChangedFiles::Loaded(rebuilt));
+                        queue.highlight_syntax(cx);
                         cx.notify();
                     }
                 })
@@ -561,10 +576,73 @@ impl ReviewQueue {
                     if let Some(offset) = queue.pending_detail_scroll.take() {
                         queue.detail_scroll.set_offset(point(px(0.), px(offset)));
                     }
+                    queue.highlight_syntax(cx);
                     cx.notify();
                 })
                 .ok();
         }));
+    }
+
+    /// Colors the loaded diffs by language off the main thread, one batch of
+    /// files per core, showing each batch's colors as it finishes. Files show
+    /// plain until then, so loading never waits on it.
+    fn highlight_syntax(&mut self, cx: &mut Context<Self>) {
+        let files = self.loaded_files().to_vec();
+        if files.is_empty() {
+            self.syntax_task = None;
+            return;
+        }
+
+        // Start every batch at once; they run on the executor's threads.
+        let cores =
+            std::thread::available_parallelism().map_or(DEFAULT_HIGHLIGHT_BATCHES, usize::from);
+        let batch_size = files.len().div_ceil(cores);
+        let executor = cx.background_executor().clone();
+        let batches: Vec<Task<Vec<HighlightedDiff>>> = files
+            .chunks(batch_size)
+            .map(|batch| {
+                let batch = batch.to_vec();
+                executor.spawn(async move {
+                    batch
+                        .into_iter()
+                        .map(|loaded| HighlightedDiff {
+                            syntax: loaded.highlight_syntax(),
+                            diff: loaded.diff,
+                        })
+                        .collect()
+                })
+            })
+            .collect();
+
+        // Show batches in order; dropping this task cancels the rest.
+        self.syntax_task = Some(cx.spawn(async move |queue, cx| {
+            for batch in batches {
+                let highlighted = batch.await;
+                let applied = queue.update(cx, |queue, cx| {
+                    queue.apply_syntax(highlighted);
+                    cx.notify();
+                });
+                if applied.is_err() {
+                    return;
+                }
+            }
+        }));
+    }
+
+    /// Sets the syntax colors of the files whose diffs are still the ones
+    /// highlighted; a diff rebuilt meanwhile waits for its own pass.
+    fn apply_syntax(&mut self, highlighted: Vec<HighlightedDiff>) {
+        let Some(ChangedFiles::Loaded(files)) = &mut self.changed_files else {
+            return;
+        };
+        for result in highlighted {
+            if let Some(loaded) = files
+                .iter_mut()
+                .find(|loaded| Arc::ptr_eq(&loaded.diff, &result.diff))
+            {
+                loaded.syntax = result.syntax;
+            }
+        }
     }
 
     /// Handles the Refresh action (cmd-r, View menu).

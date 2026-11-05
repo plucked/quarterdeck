@@ -3592,6 +3592,7 @@ dependencies = [
  "qc-diff",
  "qc-github",
  "qc-markdown",
+ "qc-syntax",
 ]
 
 [[package]]

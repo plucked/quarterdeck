@@ -131,6 +131,7 @@ impl ReviewQueue {
             self.diff_settings(),
             self.file_review().state_of(loaded),
         )
+        .syntax(loaded.syntax.clone())
         .on_toggle_collapsed(cx.listener(move |queue, _, _, cx| {
             queue.toggle_file_collapsed(index, cx);
         }))

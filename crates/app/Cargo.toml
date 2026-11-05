@@ -13,6 +13,7 @@ qc-cache.workspace = true
 qc-diff.workspace = true
 qc-github.workspace = true
 qc-markdown.workspace = true
+qc-syntax.workspace = true
 
 [lints]
 workspace = true
