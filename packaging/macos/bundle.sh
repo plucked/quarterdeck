@@ -42,7 +42,8 @@ make_icon() {
 
 # Lays out bundle $1 around binary $2: the executable under the app's name
 # (hard-linked when $3 is "link", else copied), Info.plist with the
-# version, and the icon.
+# version, the icon, and the startup movie (Git LFS; a clone without it has
+# only a pointer file, and the app then starts without the splash).
 lay_out_bundle() {
 	app="$1"
 	mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
@@ -55,6 +56,7 @@ lay_out_bundle() {
 	plutil -replace CFBundleVersion -string "$VERSION" "$app/Contents/Info.plist"
 	make_icon
 	cp "$ICON" "$app/Contents/Resources/AppIcon.icns"
+	cp "$ROOT/crates/app/assets/startup-intro.mp4" "$app/Contents/Resources/startup-intro.mp4"
 }
 
 case "${1:-}" in

@@ -2,8 +2,9 @@
 
 | Module | Holds |
 |---|---|
-| `launch_app` | gpui start-up; opens the main window at its saved placement or centered |
-| `main_window` | `MainWindow` root view: owns `ReviewQueue`, records window placement, writes UI state on focus loss |
+| `launch_app` | gpui start-up; opens the main window at its saved placement or centered, hidden behind the startup splash when the movie is there (`StartupMode`) |
+| `main_window` | `MainWindow` root view: owns `ReviewQueue`, records window placement, writes UI state on focus loss; `MainWindowReveal` (hidden behind the splash, fading in, shown) |
+| `startup_splash` | `StartupSplash`: borderless see-through `PopUp` window (1000×300 pt, centered on the main window's display) playing the startup movie on time from `decode_splash_frames` (its own thread: `qd_video::VideoReader` is not `Send`; bounded `futures` channel, 4 frames ahead; each frame a `RenderImage`, the previous one freed with `drop_image`); at the end or on a click it fades out (`STARTUP_FADE`, 1 s) and calls `MainWindow::reveal`, then closes; `startup_video_path` (bundle `Resources`, else the source tree) |
 | `app_commands` | actions (`Quit`, `OpenSettings`, `CloseWindow`, `Refresh`, `Copy`, `NextFile`, `PreviousFile`, `MarkViewedAndNext`, `ToggleFileTree`, `ToggleSidebar`, `NextLayer`, `PreviousLayer`, `ToggleStackReview`, `ShowAuthored`, `ShowReviewRequested`), key bindings, menu bar, `REVIEW_QUEUE_CONTEXT` |
 | `app_settings` | `AppSettings` global: the preferences (diff view settings, cache TTL), loaded at launch, saved on change, observed by views |
 | `settings_window` | settings window (cmd-,, single instance): category list + page per `SettingsCategory` (File Diff; GitHub: cache TTL, cache size on disk with a breakdown per kind (read in the background on open and after clearing), clear cache, API usage), `SettingRow` component |

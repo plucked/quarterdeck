@@ -2,7 +2,8 @@
 //!
 //! Files:
 //! - `launch_app.rs`: starts gpui and opens the main window where it was last placed.
-//! - `main_window.rs`: `MainWindow`, the root view; records the window placement.
+//! - `main_window.rs`: `MainWindow`, the root view; records the window placement; fades in after the splash.
+//! - `startup_splash/`: `StartupSplash`, the intro movie at launch, played while the main window loads.
 //! - `app_commands.rs`: app-level actions with their key bindings and menus.
 //! - `app_settings.rs`: `AppSettings`, the user's preferences shared by every window.
 //! - `app_services.rs`: `AppServices`, the GitHub client and cache handed to views.
@@ -48,6 +49,7 @@ mod scrollbar;
 mod segmented_control;
 mod settings_window;
 mod shared_cache;
+mod startup_splash;
 mod text_area;
 mod theme;
 mod ui_state;

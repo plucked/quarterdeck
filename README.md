@@ -4,6 +4,9 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 ## Features
 
+**Starting up**
+- A short intro movie plays while Quarterdeck loads your queue and syncs with GitHub, then fades into the app. Click it to skip.
+
 **Your review queue**
 - Two lists: **Mine** (pull requests you opened) and **Review** (those asking for your review), with counts.
 - Grouped by repository, and stacked pull requests grouped as stacks with every layer in order. Groups fold, and stay folded across launches.
@@ -37,7 +40,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 ## Run it
 
-You need macOS, [Rust](https://rustup.rs) (stable; `rust-toolchain.toml` picks it), and access to GitHub through either the [GitHub CLI](https://cli.github.com) or a token:
+You need macOS, [Rust](https://rustup.rs) (stable; `rust-toolchain.toml` picks it), [Git LFS](https://git-lfs.com) for the intro movie (without it the app starts without the intro), and access to GitHub through either the [GitHub CLI](https://cli.github.com) or a token:
 
 ```bash
 gh auth login              # or: export GITHUB_TOKEN=<a token with repo access>

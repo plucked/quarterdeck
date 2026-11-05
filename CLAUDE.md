@@ -18,6 +18,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: 
 | `qd-syntax` | `crates/syntax` | syntax colors for diff hunks (`syntect` + bat's grammars via `two-face`, `TwoDark` theme) |
 | `qd-diff` | `crates/diff` | per-file patch → hunks, side-by-side rows, inline word/char changes, whitespace folding (`similar`) |
 | `qd-file-tree` | `crates/file_tree` | changed files as a folder tree (shared file order), test/generated detection, file filters |
+| `qd-video` | `crates/video` | movie frames decoded by macOS AVFoundation into BGRA (the startup splash) |
 
 Only the app depends on gpui. Library crates are blocking and UI-free; the app runs them on `cx.background_executor()`. No tokio.
 
@@ -32,7 +33,7 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 ```
 
-App bundle: `packaging/macos/bundle.sh [--universal]` → `target/bundle/Quarterdeck.app`; `--dev` keeps `target/debug/Quarterdeck.app` (debug binary hard-linked, icon remade only when `AppIcon.png` changes), which bacon's `app` job runs so the app has its icon and name (`de.plucked.quarterdeck`, `Info.plist` template, version from `[workspace.package]`, `AppIcon.icns` from the 1024 px `AppIcon.png`, ad hoc signed; no Developer ID or notarization yet). Started from Finder the app gets launchd's environment: no `GITHUB_TOKEN`, no Homebrew `PATH`.
+App bundle: `packaging/macos/bundle.sh [--universal]` → `target/bundle/Quarterdeck.app`; `--dev` keeps `target/debug/Quarterdeck.app` (debug binary hard-linked, icon remade only when `AppIcon.png` changes, startup movie copied into `Resources`), which bacon's `app` job runs so the app has its icon and name (`de.plucked.quarterdeck`, `Info.plist` template, version from `[workspace.package]`, `AppIcon.icns` from the 1024 px `AppIcon.png`, ad hoc signed; no Developer ID or notarization yet). Started from Finder the app gets launchd's environment: no `GITHUB_TOKEN`, no Homebrew `PATH`.
 
 Devbox: `devbox.json` pins rustup, bacon, gh, sqlite; `devbox run app | dev | check | test`. `devbox.lock` pins the resolved versions (Devbox 0.19); `devbox update` moves them.
 
@@ -44,4 +45,5 @@ Devbox: `devbox.json` pins rustup, bacon, gh, sqlite; `devbox run app | dev | ch
 - Queue refresh: at launch, `cmd-r`, every 5 min after the last refresh, and on window activation when older than 1 min. Two search requests (mine, review requested) and one GraphQL request (stack memberships; the search API lacks them) each.
 - GitHub requests are minimized: cached files are reused while the PR's commits are unchanged (checked with a conditional request, free on 304); stacks are checked with a conditional request; a combined stack diff is one `.diff` download per commit pair, cached for good (commits never change); unused cached data expires after the TTL (Settings → GitHub, default 1 day).
 - Stacks: GitHub stacked PRs (GA Oct 2026). Membership from GraphQL `PullRequest.stack`/`stackEntry`; layers from `GET /repos/{o}/{r}/stacks/{number}` (bottom first, each targets the layer below). Search/issues ids differ from pulls ids (`StackLayer::pull_request_id`): match layers by number.
-- Lints: clippy `pedantic` (warn, `-D warnings` in checks), `module_inception`/`missing_errors_doc`/`must_use_candidate` allowed, `unsafe_code = "deny"`.
+- Lints: clippy `pedantic` (warn, `-D warnings` in checks), `module_inception`/`missing_errors_doc`/`must_use_candidate` allowed, `unsafe_code = "deny"` (one exception: `qd-video`'s `video_reader.rs`, the AVFoundation calls).
+- Startup: the main window opens hidden and see-through while `StartupSplash` plays `crates/app/assets/startup-intro.mp4` (Git LFS, `*.mp4`; copied into the bundle's `Contents/Resources`), so the queue loads and refreshes underneath; at the end (or a click) the splash fades out over 1 s as the main window fades in. Without the movie (a clone without LFS has a pointer file) the main window shows at once.

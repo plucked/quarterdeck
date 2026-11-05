@@ -1,12 +1,15 @@
+use std::path::PathBuf;
+
 use gpui::{
-    App, Application, Bounds, DisplayId, Pixels, Size, TitlebarOptions, WindowBounds,
-    WindowOptions, point, prelude::*, px, size,
+    App, Application, Bounds, DisplayId, Pixels, Size, TitlebarOptions, WindowBackgroundAppearance,
+    WindowBounds, WindowOptions, point, prelude::*, px, size,
 };
 
 use crate::app_commands::install_app_commands;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
-use crate::main_window::MainWindow;
+use crate::main_window::{MainWindow, MainWindowReveal};
+use crate::startup_splash::{StartupSplash, startup_video_path};
 use crate::ui_state::{UiStateRecorder, window_bounds_from_placement};
 
 const WINDOW_TITLE: &str = "Quarterdeck";
@@ -18,8 +21,44 @@ const WINDOW_MIN_HEIGHT: f32 = 480.;
 const TRAFFIC_LIGHTS_X: f32 = 14.;
 const TRAFFIC_LIGHTS_Y: f32 = 13.;
 
+/// How the main window comes up.
+enum StartupMode {
+    /// Behind the startup splash playing this movie: opened hidden and
+    /// see-through, revealed when the movie ends.
+    Splash(PathBuf),
+    /// At once (the movie is missing).
+    Direct,
+}
+
+impl StartupMode {
+    /// The splash when its movie is there.
+    fn detect() -> Self {
+        startup_video_path().map_or(Self::Direct, Self::Splash)
+    }
+
+    fn shows_main_window_at_once(&self) -> bool {
+        matches!(self, Self::Direct)
+    }
+
+    /// See-through while hidden behind the splash, so it can fade in.
+    fn main_window_background(&self) -> WindowBackgroundAppearance {
+        match self {
+            Self::Splash(_) => WindowBackgroundAppearance::Transparent,
+            Self::Direct => WindowBackgroundAppearance::Opaque,
+        }
+    }
+
+    fn main_window_reveal(&self) -> MainWindowReveal {
+        match self {
+            Self::Splash(_) => MainWindowReveal::AfterSplash,
+            Self::Direct => MainWindowReveal::Shown,
+        }
+    }
+}
+
 /// Initializes the services, starts gpui and opens the main window where it
-/// was last placed, on the display it was on. Exits the process when the database cannot be opened.
+/// was last placed, on the display it was on, behind the startup splash when
+/// its movie is there. Exits the process when the database cannot be opened.
 pub fn launch_app() {
     // Services and UI state first: without the database there is nothing to show.
     let opened = AppServices::initialize().and_then(|services| {
@@ -42,22 +81,36 @@ pub fn launch_app() {
         cx.set_global(services.clone());
         cx.set_global(recorder);
 
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(restored.bounds),
-                display_id: restored.display_id,
-                window_min_size: Some(min_size),
-                // The app draws the title bar (the queue's top bar); the traffic lights sit in it.
-                titlebar: Some(TitlebarOptions {
-                    title: Some(WINDOW_TITLE.into()),
-                    appears_transparent: true,
-                    traffic_light_position: Some(point(px(TRAFFIC_LIGHTS_X), px(TRAFFIC_LIGHTS_Y))),
-                }),
-                ..Default::default()
-            },
-            |window, cx| cx.new(|cx| MainWindow::new(services, window, cx)),
-        )
-        .expect("failed to open the main window");
+        // The main window opens first, hidden during the splash, so the queue
+        // loads and refreshes from GitHub while the movie plays.
+        let startup = StartupMode::detect();
+        let reveal = startup.main_window_reveal();
+        let main_window = cx
+            .open_window(
+                WindowOptions {
+                    window_bounds: Some(restored.bounds),
+                    display_id: restored.display_id,
+                    window_min_size: Some(min_size),
+                    // The app draws the title bar (the queue's top bar); the traffic lights sit in it.
+                    titlebar: Some(TitlebarOptions {
+                        title: Some(WINDOW_TITLE.into()),
+                        appears_transparent: true,
+                        traffic_light_position: Some(point(
+                            px(TRAFFIC_LIGHTS_X),
+                            px(TRAFFIC_LIGHTS_Y),
+                        )),
+                    }),
+                    show: startup.shows_main_window_at_once(),
+                    focus: startup.shows_main_window_at_once(),
+                    window_background: startup.main_window_background(),
+                    ..Default::default()
+                },
+                |window, cx| cx.new(|cx| MainWindow::new(services, reveal, window, cx)),
+            )
+            .expect("failed to open the main window");
+        if let StartupMode::Splash(video) = startup {
+            StartupSplash::open(video, main_window, restored.display_id, cx);
+        }
         cx.activate(true);
     });
 }
