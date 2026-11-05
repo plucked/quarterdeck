@@ -36,6 +36,10 @@ pub fn muted() -> Rgba {
 pub fn accent() -> Rgba {
     rgb(0x54_8a_f7)
 }
+/// Background of code blocks and inline code in rendered Markdown.
+pub fn code_background() -> Rgba {
+    rgb(0x1b_1c_1f)
+}
 /// Added-line count.
 pub fn added() -> Rgba {
     rgb(0x5f_b8_65)

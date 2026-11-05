@@ -4,6 +4,7 @@ use qc_github::PullRequest;
 use super::ReviewQueue;
 use super::changed_files::ChangedFiles;
 use super::render_file_diff::render_file_diff;
+use crate::markdown_view::MarkdownView;
 use crate::theme;
 
 impl ReviewQueue {
@@ -33,8 +34,21 @@ impl ReviewQueue {
 
         container
             .child(render_detail_header(pull_request))
-            .children(render_description(pull_request))
+            .children(self.render_description())
             .child(self.render_changed_files())
+    }
+
+    /// The description rendered as Markdown; `None` when it is empty.
+    fn render_description(&self) -> Option<impl IntoElement> {
+        let description = self.description()?;
+        Some(
+            div()
+                .p_3()
+                .rounded_md()
+                .bg(theme::panel())
+                .text_sm()
+                .child(MarkdownView::new("description", description.clone())),
+        )
     }
 
     /// The changed files in their load state.
@@ -88,20 +102,4 @@ fn render_detail_header(pull_request: &PullRequest) -> impl IntoElement {
                         .child("Open on GitHub ↗"),
                 ),
         )
-}
-
-/// The description as plain text; `None` when it is empty.
-fn render_description(pull_request: &PullRequest) -> Option<impl IntoElement> {
-    let description = pull_request
-        .body
-        .as_deref()
-        .filter(|body| !body.trim().is_empty())?;
-    Some(
-        div()
-            .p_3()
-            .rounded_md()
-            .bg(theme::panel())
-            .text_sm()
-            .child(description.to_owned()),
-    )
 }

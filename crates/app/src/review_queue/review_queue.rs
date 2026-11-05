@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use gpui::{
@@ -6,6 +7,7 @@ use gpui::{
 };
 use qc_cache::{PullRequestListKey, ReviewQueueViewState};
 use qc_github::PullRequest;
+use qc_markdown::MarkdownDocument;
 
 use super::activation_refresh::ActivationRefresh;
 use super::changed_files::ChangedFiles;
@@ -52,6 +54,9 @@ pub struct ReviewQueue {
     pending_restore: Option<PendingRestore>,
     /// The saved detail scroll, applied once the restored files have loaded.
     pending_detail_scroll: Option<f32>,
+    /// The selected pull request's description, parsed when the selection
+    /// or the queue changes; `None` when it has none.
+    description: Option<Arc<MarkdownDocument>>,
     /// The in-flight refresh; replacing it cancels the previous one.
     refresh_task: Option<Task<()>>,
     /// The timer waiting for the next timed refresh; any refresh replaces it.
@@ -108,6 +113,7 @@ impl ReviewQueue {
             detail_scroll: ScrollHandle::new(),
             pending_restore,
             pending_detail_scroll: None,
+            description: None,
             refresh_task: None,
             auto_refresh_task: None,
             files_task: None,
@@ -137,6 +143,22 @@ impl ReviewQueue {
     pub(super) fn selected_pull_request(&self) -> Option<&PullRequest> {
         self.selected_index
             .and_then(|index| self.pull_requests.get(index))
+    }
+
+    pub(super) fn description(&self) -> Option<&Arc<MarkdownDocument>> {
+        self.description.as_ref()
+    }
+
+    /// Selects the pull request at `index` (or none) and parses its
+    /// description, so rendering never parses.
+    fn set_selected_index(&mut self, index: Option<usize>) {
+        self.selected_index = index;
+        self.description = self
+            .selected_pull_request()
+            .and_then(|pull_request| pull_request.body.as_deref())
+            .map(MarkdownDocument::parse)
+            .filter(|document| !document.is_empty())
+            .map(Arc::new);
     }
 
     pub(super) fn changed_files(&self) -> Option<&ChangedFiles> {
@@ -232,14 +254,14 @@ impl ReviewQueue {
 
         match selection {
             SelectionAfterRefresh::Cleared => {
-                self.selected_index = None;
+                self.set_selected_index(None);
                 self.changed_files = None;
                 self.files_task = None;
                 self.record_view_state(cx);
             }
-            SelectionAfterRefresh::Kept(index) => self.selected_index = Some(index),
+            SelectionAfterRefresh::Kept(index) => self.set_selected_index(Some(index)),
             SelectionAfterRefresh::KeptAndUpdated(index) => {
-                self.selected_index = Some(index);
+                self.set_selected_index(Some(index));
                 self.load_changed_files(cx);
             }
         }
@@ -260,7 +282,7 @@ impl ReviewQueue {
         self.pending_detail_scroll = None;
         self.detail_scroll.set_offset(point(px(0.), px(0.)));
 
-        self.selected_index = Some(index);
+        self.set_selected_index(Some(index));
         self.load_changed_files(cx);
         self.record_view_state(cx);
     }
@@ -277,7 +299,7 @@ impl ReviewQueue {
                 // The scroll waits for the files; the list scrolls to the row now.
                 self.pending_detail_scroll = Some(pending.detail_scroll_offset);
                 self.pending_restore = None;
-                self.selected_index = Some(index);
+                self.set_selected_index(Some(index));
                 self.queue_list_scroll
                     .scroll_to_item(index, ScrollStrategy::Center);
                 self.load_changed_files(cx);

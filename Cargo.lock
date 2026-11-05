@@ -3553,6 +3553,7 @@ dependencies = [
  "gpui",
  "qc-cache",
  "qc-github",
+ "qc-markdown",
 ]
 
 [[package]]
