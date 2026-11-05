@@ -6,9 +6,10 @@ use crate::unix_now::unix_now;
 use crate::{CleanupCounts, GitHubCache};
 
 impl GitHubCache {
-    /// Removes cached data not used for longer than `ttl`: changed files not
-    /// read or refetched since, and pull requests no longer in any list and
-    /// not fetched since. Pull requests still in a list (the queue) stay.
+    /// Removes cached data not used for longer than `ttl`: changed files and
+    /// combined diffs not read or refetched since, stacks not read or
+    /// confirmed since, and pull requests no longer in any list and not
+    /// fetched since. Pull requests still in a list (the queue) stay.
     pub fn delete_expired(&mut self, ttl: Duration) -> Result<CleanupCounts> {
         let ttl_seconds = i64::try_from(ttl.as_secs()).unwrap_or(i64::MAX);
         let cutoff = unix_now().saturating_sub(ttl_seconds);
@@ -17,6 +18,12 @@ impl GitHubCache {
         // Deleting a set deletes its files (ON DELETE CASCADE).
         let file_sets =
             transaction.execute("DELETE FROM pr_file_sets WHERE last_used_at < ?1", [cutoff])?;
+        let comparisons = transaction.execute(
+            "DELETE FROM compare_file_sets WHERE last_used_at < ?1",
+            [cutoff],
+        )?;
+        let stacks =
+            transaction.execute("DELETE FROM pr_stacks WHERE last_used_at < ?1", [cutoff])?;
         let pull_requests = transaction.execute(
             "DELETE FROM pull_requests
              WHERE fetched_at < ?1 AND id NOT IN (SELECT pr_id FROM pr_lists)",
@@ -26,14 +33,19 @@ impl GitHubCache {
         Ok(CleanupCounts {
             file_sets,
             pull_requests,
+            comparisons,
+            stacks,
         })
     }
 
     /// Removes every cached pull request, list and file; the next refresh
     /// fetches them again. User state (viewed marks, settings) stays.
     pub fn clear(&mut self) -> Result<()> {
-        // Lists and file sets go with their pull requests (ON DELETE CASCADE).
+        // Lists and file sets go with their pull requests, layers with their stacks and files with their comparisons (ON DELETE CASCADE).
         self.connection().execute("DELETE FROM pull_requests", [])?;
+        self.connection().execute("DELETE FROM pr_stacks", [])?;
+        self.connection()
+            .execute("DELETE FROM compare_file_sets", [])?;
         Ok(())
     }
 }
@@ -67,6 +79,7 @@ mod tests {
             draft: false,
             created_at: String::new(),
             updated_at: "t".into(),
+            stack: None,
         }
     }
 
@@ -134,7 +147,8 @@ mod tests {
             counts,
             CleanupCounts {
                 file_sets: 2,
-                pull_requests: 1
+                pull_requests: 1,
+                ..CleanupCounts::default()
             }
         );
         assert_eq!(cache.list(LIST).unwrap().len(), 1);

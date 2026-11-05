@@ -33,12 +33,20 @@
 //! - `viewed_file.rs`: `ViewedFile`, a file marked as viewed.
 //! - `patch_fingerprint.rs`: `PatchFingerprint`, a stable hash of a file's patch.
 //! - `viewed_files_storage.rs`: reads and writes of viewed marks.
+//! - `viewed_scope.rs`: `ViewedScope`, a pull request or a combined range of stack layers.
+//! - `queue_tab.rs`: `QueueTab`, which list the queue shows.
+//! - `stack_review_mode.rs`: `StackReviewMode`, one layer or combined layers.
+//! - `cached_stack.rs`: `CachedStack`, a stack with the tag of its response.
+//! - `stack_storage.rs`: reads and writes of cached stacks and their layers.
+//! - `comparison_storage.rs`: reads and writes of the changed files between two commits.
 
 mod cache_cleanup;
 mod cache_settings_storage;
 mod cache_ttl;
 mod cached_file_set;
+mod cached_stack;
 mod cleanup_counts;
+mod comparison_storage;
 mod database_connection;
 mod detail_scroll_position;
 mod diff_layout;
@@ -53,20 +61,25 @@ mod line_wrapping;
 mod panel_visibility;
 mod patch_fingerprint;
 mod pull_request_list_key;
+mod queue_tab;
 mod review_layout_state;
 mod review_layout_storage;
 mod review_queue_view_state;
 mod schema_migrations;
 mod sql_integers;
+mod stack_review_mode;
+mod stack_storage;
 mod ui_state_store;
 mod unix_now;
 mod viewed_file;
 mod viewed_files_storage;
+mod viewed_scope;
 mod window_mode;
 mod window_placement;
 
 pub use cache_ttl::CacheTtl;
 pub use cached_file_set::CachedFileSet;
+pub use cached_stack::CachedStack;
 pub use cleanup_counts::CleanupCounts;
 pub use detail_scroll_position::DetailScrollPosition;
 pub use diff_layout::DiffLayout;
@@ -78,9 +91,12 @@ pub use line_wrapping::LineWrapping;
 pub use panel_visibility::PanelVisibility;
 pub use patch_fingerprint::PatchFingerprint;
 pub use pull_request_list_key::PullRequestListKey;
+pub use queue_tab::QueueTab;
 pub use review_layout_state::ReviewLayoutState;
 pub use review_queue_view_state::ReviewQueueViewState;
+pub use stack_review_mode::StackReviewMode;
 pub use ui_state_store::UiStateStore;
 pub use viewed_file::ViewedFile;
+pub use viewed_scope::ViewedScope;
 pub use window_mode::WindowMode;
 pub use window_placement::WindowPlacement;

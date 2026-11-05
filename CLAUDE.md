@@ -1,6 +1,6 @@
 # quick-check
 
-macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently. Personal tool; macOS only for now.
+macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: the viewer's own and review-requested ones, including GitHub stacks (layer by layer or combined). Personal tool; macOS only for now.
 
 ## Workflow
 - Local only: no remote, work directly on `main`. Small atomic commits, prefixed `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`/`style:`/`test:`.
@@ -11,7 +11,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently. 
 | Crate | Path | Holds |
 |---|---|---|
 | `quick-check` | `crates/app` | gpui binary: window, views, background tasks, UI state restore |
-| `qc-github` | `crates/github` | blocking GitHub REST client (`ureq`) and its data shapes |
+| `qc-github` | `crates/github` | blocking GitHub REST client (`ureq`, plus one GraphQL query for stacks) and its data shapes |
 | `qc-cache` | `crates/cache` | the local SQLite database: cached GitHub data + UI state, with migrations |
 | `qc-markdown` | `crates/markdown` | GitHub-flavored Markdown → typed document (`pulldown-cmark`) |
 | `qc-syntax` | `crates/syntax` | syntax colors for diff hunks (`syntect` + bat's grammars via `two-face`, `TwoDark` theme) |
@@ -36,6 +36,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 - Token: `GITHUB_TOKEN`, else `gh auth token`. Without one the app shows cached data only.
 - Database: `~/Library/Application Support/quick-check/cache.sqlite` (delete to reset cache and UI state).
 - Everything stored is typed SQLite columns, cached GitHub data included; never JSON (see the skill's Persistence section).
-- Queue refresh: at launch, `cmd-r`, every 5 min after the last refresh, and on window activation when older than 1 min. One search request each.
-- GitHub requests are minimized: cached files are reused while the PR's commits are unchanged (checked with a conditional request, free on 304); unused cached data expires after the TTL (Settings → GitHub, default 1 day).
+- Queue refresh: at launch, `cmd-r`, every 5 min after the last refresh, and on window activation when older than 1 min. Two search requests (mine, review requested) and one GraphQL request (stack memberships; the search API lacks them) each.
+- GitHub requests are minimized: cached files are reused while the PR's commits are unchanged (checked with a conditional request, free on 304); stacks are checked with a conditional request; a combined stack diff is one `.diff` download per commit pair, cached for good (commits never change); unused cached data expires after the TTL (Settings → GitHub, default 1 day).
+- Stacks: GitHub stacked PRs (GA Oct 2026). Membership from GraphQL `PullRequest.stack`/`stackEntry`; layers from `GET /repos/{o}/{r}/stacks/{number}` (bottom first, each targets the layer below). Search/issues ids differ from pulls ids (`StackLayer::pull_request_id`): match layers by number.
 - Lints: clippy `pedantic` (warn, `-D warnings` in checks), `module_inception`/`missing_errors_doc`/`must_use_candidate` allowed, `unsafe_code = "deny"`.

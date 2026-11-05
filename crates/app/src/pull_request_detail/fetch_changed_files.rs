@@ -2,6 +2,7 @@ use anyhow::Result;
 use qc_github::{GitHubClient, PullRequest, PullRequestFile};
 
 use super::file_set_update::FileSetUpdate;
+use super::load_progress::LoadProgress;
 use crate::shared_cache::SharedCache;
 
 /// The changed files of `pull_request`, asking GitHub as little as possible:
@@ -12,12 +13,15 @@ use crate::shared_cache::SharedCache;
 ///    keep the cached files: a comment or review moved `updated_at`.
 /// 3. Only new commits (or nothing cached) fetch the files, every page.
 ///
+/// Reports each step that talks to GitHub, and the files fetched so far.
+///
 /// Blocking: runs on the background executor. Each cache access locks on its
 /// own, so no lock is held during a request.
 pub fn fetch_changed_files(
     client: Result<GitHubClient, String>,
     cache: &SharedCache,
     pull_request: &PullRequest,
+    on_progress: &mut dyn FnMut(LoadProgress),
 ) -> Result<Vec<PullRequestFile>> {
     // Step 1: a set confirmed for this version needs no request.
     let cached = cache.lock().file_set(pull_request.id)?;
@@ -29,6 +33,7 @@ pub fn fetch_changed_files(
 
     // Step 2: ask for the commits, free when nothing changed since the tag.
     let client = client.map_err(anyhow::Error::msg)?;
+    on_progress(LoadProgress::CheckingCommits);
     let etag = cached.as_ref().and_then(|set| set.revision.etag.clone());
     let answer =
         client.pull_request_revision(&pull_request.repo, pull_request.number, etag.as_ref())?;
@@ -44,8 +49,24 @@ pub fn fetch_changed_files(
             cache.lock().confirm_files(pull_request, &revision)?;
             Ok(files)
         }
-        FileSetUpdate::Refetch { revision } => {
-            let files = client.pull_request_files(&pull_request.repo, pull_request.number)?;
+        FileSetUpdate::Refetch {
+            revision,
+            expected_files,
+        } => {
+            on_progress(LoadProgress::FetchingFiles {
+                fetched: 0,
+                total: Some(expected_files),
+            });
+            let files = client.pull_request_files(
+                &pull_request.repo,
+                pull_request.number,
+                &mut |fetched| {
+                    on_progress(LoadProgress::FetchingFiles {
+                        fetched,
+                        total: Some(expected_files),
+                    });
+                },
+            )?;
             cache.lock().put_files(pull_request, &files, &revision)?;
             Ok(files)
         }

@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::RevisionCheck;
+
 /// The commits a pull request compares: its head and its base. The changed
 /// files only change when one of them does, unlike `updated_at`, which also
 /// moves on every comment and review.
@@ -14,6 +16,7 @@ pub struct PullRequestRevision {
 pub(crate) struct PullRequestRefs {
     head: CommitRef,
     base: CommitRef,
+    changed_files: u64,
 }
 
 #[derive(Deserialize)]
@@ -22,10 +25,13 @@ struct CommitRef {
 }
 
 impl PullRequestRefs {
-    pub fn into_revision(self) -> PullRequestRevision {
-        PullRequestRevision {
-            head_sha: self.head.sha,
-            base_sha: self.base.sha,
+    pub fn into_check(self) -> RevisionCheck {
+        RevisionCheck {
+            revision: PullRequestRevision {
+                head_sha: self.head.sha,
+                base_sha: self.base.sha,
+            },
+            changed_files: self.changed_files,
         }
     }
 }
@@ -34,16 +40,19 @@ impl PullRequestRefs {
 mod tests {
     use super::*;
 
-    /// The head and base commits are read from a pull request response.
+    /// The head and base commits and the file count are read from a pull request response.
     #[test]
     fn reads_head_and_base_commits() {
-        let json = r#"{"number": 1, "head": {"sha": "aaa", "ref": "x"}, "base": {"sha": "bbb", "ref": "main"}}"#;
+        let json = r#"{"number": 1, "changed_files": 12, "head": {"sha": "aaa", "ref": "x"}, "base": {"sha": "bbb", "ref": "main"}}"#;
         let refs: PullRequestRefs = serde_json::from_str(json).unwrap();
         assert_eq!(
-            refs.into_revision(),
-            PullRequestRevision {
-                head_sha: "aaa".into(),
-                base_sha: "bbb".into()
+            refs.into_check(),
+            RevisionCheck {
+                revision: PullRequestRevision {
+                    head_sha: "aaa".into(),
+                    base_sha: "bbb".into()
+                },
+                changed_files: 12
             }
         );
     }

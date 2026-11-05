@@ -139,8 +139,9 @@ impl GitHubCache {
     }
 }
 
-/// Reads a changed file from a row of the `file_set` query's columns, in order.
-fn pull_request_file_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequestFile> {
+/// Reads a changed file from a row of the `file_set` query's columns, in
+/// order (the comparison query reads the same columns).
+pub(crate) fn pull_request_file_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequestFile> {
     Ok(PullRequestFile {
         filename: row.get(0)?,
         previous_filename: row.get(1)?,
@@ -176,6 +177,7 @@ mod tests {
             draft: false,
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: updated_at.into(),
+            stack: None,
         }
     }
 

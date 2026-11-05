@@ -1,67 +1,95 @@
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use gpui::{
-    App, Context, Entity, FocusHandle, ScrollStrategy, Subscription, Task, UniformListScrollHandle,
-    Window, div, prelude::*,
+    App, Context, Entity, FocusHandle, ScrollStrategy, SharedString, Subscription, Task,
+    UniformListScrollHandle, Window, div, prelude::*,
 };
-use qc_cache::{DetailScrollPosition, PullRequestListKey, ReviewQueueViewState};
-use qc_github::PullRequest;
+use qc_cache::{DetailScrollPosition, PullRequestListKey, QueueTab, ReviewQueueViewState};
+use qc_github::{GitHubClient, PullRequest, RepoRef, StackMembership};
 
 use super::activation_refresh::ActivationRefresh;
+use super::queue_lists::QueueLists;
+use super::queue_row::QueueRow;
 use super::refresh_schedule::RefreshSchedule;
 use super::refresh_status::RefreshStatus;
 use super::restore_phase::RestorePhase;
 use super::selection_after_refresh::SelectionAfterRefresh;
+use super::selection_origin::SelectionOrigin;
 use super::selection_restore::SelectionRestore;
+use super::stack_key::StackKey;
 use crate::app_commands::{
-    MarkViewedAndNext, NextFile, PreviousFile, REVIEW_QUEUE_CONTEXT, Refresh, ToggleFileTree,
+    MarkViewedAndNext, NextFile, NextLayer, PreviousFile, PreviousLayer, REVIEW_QUEUE_CONTEXT,
+    Refresh, ShowAuthored, ShowReviewRequested, ToggleFileTree, ToggleStackReview,
 };
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
-use crate::pull_request_detail::{DetailEvent, PullRequestDetail};
+use crate::pull_request_detail::{DetailEvent, LayerRequest, PullRequestDetail};
+use crate::shared_cache::SharedCache;
 use crate::theme;
 use crate::ui_state::UiStateRecorder;
 
-const QUEUE_LIST: PullRequestListKey = PullRequestListKey::REVIEW_REQUESTED;
-
-/// A selection saved before the last relaunch, not yet matched to the queue.
+/// A selection saved before the last relaunch, not yet matched to the lists.
 struct PendingRestore {
     pull_request_id: u64,
     detail_scroll: DetailScrollPosition,
 }
 
-/// The main view: pull requests that request the viewer's review on the
-/// left, and the selected one in a [`PullRequestDetail`] on the right.
+/// Both lists as fetched by a refresh, with their stacks filled in.
+struct RefreshedLists {
+    lists: QueueLists,
+    /// Why the stacks could not be read, when they could not (the lists keep the last known ones).
+    stack_error: Option<String>,
+}
+
+/// A stack layer being fetched because it is in no list.
+struct OpeningLayer {
+    number: u64,
+    _task: Task<()>,
+}
+
+/// The main view: the viewer's own pull requests and those that request
+/// their review on the left (one tab each, stacks grouped), and the
+/// selected one in a [`PullRequestDetail`] on the right.
 ///
-/// The queue is shown from the cache at once and refreshed from GitHub in the
-/// background: at launch, on cmd-r, on a timer after each refresh and when the
-/// window becomes active with a stale queue.
+/// The lists are shown from the cache at once and refreshed from GitHub in
+/// the background: at launch, on cmd-r, on a timer after each refresh and
+/// when the window becomes active with a stale queue.
 ///
-/// The selection and detail scroll are recorded as UI state on every change
-/// and restored after a relaunch; a selected pull request that left the
-/// queue falls back to no selection.
+/// The tab, selection and detail scroll are recorded as UI state on every
+/// change and restored after a relaunch; a selected pull request that left
+/// the lists falls back to no selection, unless it was opened from a stack.
 pub struct ReviewQueue {
     services: AppServices,
     focus: FocusHandle,
-    pull_requests: Vec<PullRequest>,
-    selected_index: Option<usize>,
+    lists: QueueLists,
+    tab: QueueTab,
+    /// The sidebar rows of the shown tab.
+    rows: Vec<QueueRow>,
+    collapsed_stacks: HashSet<StackKey>,
+    selected: Option<PullRequest>,
+    selection_origin: SelectionOrigin,
     refresh_status: RefreshStatus,
     refresh_schedule: RefreshSchedule,
     queue_list_scroll: UniformListScrollHandle,
     /// The right pane; it re-renders on its own when it scrolls.
     detail: Entity<PullRequestDetail>,
-    /// The saved selection, until the queue it is in has loaded.
+    /// The saved selection, until the lists it is in have loaded.
     pending_restore: Option<PendingRestore>,
     /// The in-flight refresh; replacing it cancels the previous one.
     refresh_task: Option<Task<()>>,
     /// The timer waiting for the next timed refresh; any refresh replaces it.
     auto_refresh_task: Option<Task<()>>,
-    /// Keep the window activation and detail scroll observers registered.
+    /// A stack layer in no list, being fetched to be shown.
+    opening_layer: Option<OpeningLayer>,
+    /// Why the last stack layer could not be opened.
+    layer_error: Option<SharedString>,
+    /// Keep the window activation and detail observers registered.
     _subscriptions: [Subscription; 2],
 }
 
 impl ReviewQueue {
-    /// Shows the cached queue and starts a refresh from GitHub.
+    /// Shows the cached lists and starts a refresh from GitHub.
     pub fn new(services: AppServices, window: &mut Window, cx: &mut Context<Self>) -> Self {
         // Focus the view so its key bindings (cmd-r) reach it.
         let focus = cx.focus_handle();
@@ -72,11 +100,10 @@ impl ReviewQueue {
             cx.observe_window_activation(window, Self::on_window_activation_changed);
 
         // The cache is local and small, so it is read synchronously at startup.
-        let cached = services.cache.lock().list(QUEUE_LIST);
-        let (pull_requests, refresh_status) = match cached {
-            Ok(pull_requests) => (pull_requests, RefreshStatus::Idle),
+        let (lists, refresh_status) = match read_cached_lists(&services.cache) {
+            Ok(lists) => (lists, RefreshStatus::Idle),
             Err(error) => (
-                Vec::new(),
+                QueueLists::default(),
                 RefreshStatus::Failed(format!("cache: {error:#}").into()),
             ),
         };
@@ -94,18 +121,23 @@ impl ReviewQueue {
                     detail_scroll: saved.detail_scroll,
                 });
 
-        // The detail pane reports its scrolling so the position is saved.
+        // The detail pane reports its scrolling (to save it) and the layers it opens.
         let detail = cx.new(|cx| PullRequestDetail::new(services.clone(), cx));
         let detail_subscription =
             cx.subscribe(&detail, |queue, _, event: &DetailEvent, cx| match event {
                 DetailEvent::Scrolled => queue.record_view_state(cx),
+                DetailEvent::OpenLayer(request) => queue.open_layer(request, cx),
             });
 
         let mut queue = Self {
             services,
             focus,
-            pull_requests,
-            selected_index: None,
+            lists,
+            tab: saved.tab,
+            rows: Vec::new(),
+            collapsed_stacks: HashSet::new(),
+            selected: None,
+            selection_origin: SelectionOrigin::Listed,
             refresh_status,
             refresh_schedule: RefreshSchedule::default(),
             queue_list_scroll: UniformListScrollHandle::new(),
@@ -113,8 +145,11 @@ impl ReviewQueue {
             pending_restore,
             refresh_task: None,
             auto_refresh_task: None,
+            opening_layer: None,
+            layer_error: None,
             _subscriptions: [activation_subscription, detail_subscription],
         };
+        queue.rebuild_rows();
         queue.restore_selection(RestorePhase::CachedQueue, cx);
         queue.refresh(cx);
         queue
@@ -124,39 +159,103 @@ impl ReviewQueue {
         &self.queue_list_scroll
     }
 
-    pub(super) fn pull_requests(&self) -> &[PullRequest] {
-        &self.pull_requests
+    pub(super) fn tab(&self) -> QueueTab {
+        self.tab
     }
 
-    pub(super) fn selected_index(&self) -> Option<usize> {
-        self.selected_index
+    pub(super) fn lists(&self) -> &QueueLists {
+        &self.lists
+    }
+
+    /// The pull requests of the shown tab.
+    pub(super) fn shown_list(&self) -> &[PullRequest] {
+        self.lists.get(self.tab)
+    }
+
+    pub(super) fn rows(&self) -> &[QueueRow] {
+        &self.rows
     }
 
     pub(super) fn selected_pull_request(&self) -> Option<&PullRequest> {
-        self.selected_index
-            .and_then(|index| self.pull_requests.get(index))
-    }
-
-    /// Selects the pull request at `index` (or none) and shows it in the
-    /// detail pane, at `restore` once its files load when given.
-    fn set_selected_index(
-        &mut self,
-        index: Option<usize>,
-        restore: Option<DetailScrollPosition>,
-        cx: &mut Context<Self>,
-    ) {
-        self.selected_index = index;
-        let pull_request = self.selected_pull_request().cloned();
-        self.detail
-            .update(cx, |detail, cx| detail.show(pull_request, restore, cx));
+        self.selected.as_ref()
     }
 
     pub(super) fn refresh_status(&self) -> &RefreshStatus {
         &self.refresh_status
     }
 
-    /// Fetches the queue from GitHub, caches it and shows it, removes cached
-    /// data unused for longer than the cache TTL, then arms the next timed refresh.
+    /// The number of the stack layer being opened, while it is fetched.
+    pub(super) fn opening_layer(&self) -> Option<u64> {
+        self.opening_layer.as_ref().map(|opening| opening.number)
+    }
+
+    pub(super) fn layer_error(&self) -> Option<&SharedString> {
+        self.layer_error.as_ref()
+    }
+
+    /// Rebuilds the sidebar rows of the shown tab.
+    fn rebuild_rows(&mut self) {
+        self.rows = QueueRow::build_all(self.lists.get(self.tab), &self.collapsed_stacks);
+    }
+
+    /// Shows the list of `tab` and records it.
+    pub(super) fn show_tab(&mut self, tab: QueueTab, cx: &mut Context<Self>) {
+        if self.tab == tab {
+            return;
+        }
+        self.tab = tab;
+        self.rebuild_rows();
+        self.scroll_to_selection();
+        self.record_view_state(cx);
+        cx.notify();
+    }
+
+    /// Collapses or expands a stack's group in the sidebar.
+    pub(super) fn toggle_stack_group(&mut self, key: &StackKey, cx: &mut Context<Self>) {
+        if !self.collapsed_stacks.remove(key) {
+            self.collapsed_stacks.insert(key.clone());
+        }
+        self.rebuild_rows();
+        cx.notify();
+    }
+
+    /// Shows `pull_request` (or nothing) in the detail pane, at `restore`
+    /// once its files load when given.
+    fn set_selected(
+        &mut self,
+        pull_request: Option<PullRequest>,
+        origin: SelectionOrigin,
+        restore: Option<DetailScrollPosition>,
+        cx: &mut Context<Self>,
+    ) {
+        self.selected.clone_from(&pull_request);
+        self.selection_origin = origin;
+        self.detail
+            .update(cx, |detail, cx| detail.show(pull_request, restore, cx));
+        cx.notify();
+    }
+
+    /// Scrolls the sidebar to the selected pull request's row, if the shown tab has it.
+    fn scroll_to_selection(&self) {
+        let Some(selected_id) = self.selected.as_ref().map(|selected| selected.id) else {
+            return;
+        };
+        let list = self.lists.get(self.tab);
+        let row = self.rows.iter().position(|row| {
+            row.pull_request_index().is_some_and(|index| {
+                list.get(index)
+                    .is_some_and(|pull_request| pull_request.id == selected_id)
+            })
+        });
+        if let Some(row) = row {
+            self.queue_list_scroll
+                .scroll_to_item(row, ScrollStrategy::Center);
+        }
+    }
+
+    /// Fetches both lists and the stacks of their pull requests from GitHub,
+    /// caches and shows them, removes cached data unused for longer than
+    /// the cache TTL, then arms the next timed refresh.
     pub(super) fn refresh(&mut self, cx: &mut Context<Self>) {
         // Any refresh moves the timed one: it is re-armed when this one finishes.
         self.auto_refresh_task = None;
@@ -172,20 +271,26 @@ impl ReviewQueue {
         };
         let cache = self.services.cache.clone();
         let ttl = AppSettings::cache_ttl(cx).duration();
+        let known_memberships = known_memberships(&self.lists);
 
         self.refresh_status = RefreshStatus::Refreshing;
         cx.notify();
         self.refresh_task = Some(cx.spawn(async move |queue, cx| {
-            // Fetch and cache off the main thread: both calls block.
+            // Fetch and cache off the main thread: every call blocks.
             let fetched = cx
                 .background_executor()
                 .spawn(async move {
-                    let pull_requests = client.review_requested()?;
-                    cache.lock().replace_list(QUEUE_LIST, &pull_requests)?;
+                    let refreshed = fetch_lists(&client, known_memberships)?;
+                    let mut cache = cache.lock();
+                    cache.replace_list(PullRequestListKey::AUTHORED, &refreshed.lists.authored)?;
+                    cache.replace_list(
+                        PullRequestListKey::REVIEW_REQUESTED,
+                        &refreshed.lists.review_requested,
+                    )?;
 
-                    // With the queue current, drop what has not been used within the TTL.
-                    cache.lock().delete_expired(ttl)?;
-                    anyhow::Ok(pull_requests)
+                    // With the lists current, drop what has not been used within the TTL.
+                    cache.delete_expired(ttl)?;
+                    anyhow::Ok(refreshed)
                 })
                 .await;
 
@@ -193,7 +298,12 @@ impl ReviewQueue {
             queue
                 .update(cx, |queue, cx| {
                     match fetched {
-                        Ok(pull_requests) => queue.replace_pull_requests(pull_requests, cx),
+                        Ok(refreshed) => {
+                            if let Some(error) = &refreshed.stack_error {
+                                eprintln!("stacks: keeping the last known ones: {error}");
+                            }
+                            queue.replace_lists(refreshed.lists, cx);
+                        }
                         Err(error) => {
                             queue.refresh_status =
                                 RefreshStatus::Failed(format!("{error:#}").into());
@@ -235,21 +345,35 @@ impl ReviewQueue {
         }
     }
 
-    /// Replaces the queue after a refresh, keeping the selection where the
-    /// pull request is still in it.
-    fn replace_pull_requests(&mut self, pull_requests: Vec<PullRequest>, cx: &mut Context<Self>) {
-        let selection = SelectionAfterRefresh::decide(self.selected_pull_request(), &pull_requests);
-        self.pull_requests = pull_requests;
+    /// Replaces the lists after a refresh, keeping the selection where the
+    /// pull request is still listed (or was opened from a stack).
+    fn replace_lists(&mut self, lists: QueueLists, cx: &mut Context<Self>) {
+        let refreshed = self
+            .selected
+            .as_ref()
+            .and_then(|selected| lists.find_by_id(selected.id))
+            .cloned();
+        let selection = SelectionAfterRefresh::decide(
+            self.selected.is_some(),
+            self.selection_origin,
+            refreshed.as_ref(),
+        );
+        self.lists = lists;
         self.refresh_status = RefreshStatus::Idle;
+        self.rebuild_rows();
 
         // The detail pane reloads an updated pull request and keeps its scroll.
         match selection {
             SelectionAfterRefresh::Cleared => {
-                self.set_selected_index(None, None, cx);
-                self.record_view_state(cx);
+                if self.selected.is_some() {
+                    self.set_selected(None, SelectionOrigin::Listed, None, cx);
+                    self.record_view_state(cx);
+                }
             }
-            SelectionAfterRefresh::Kept(index) | SelectionAfterRefresh::KeptAndUpdated(index) => {
-                self.set_selected_index(Some(index), None, cx);
+            SelectionAfterRefresh::Unchanged => {}
+            SelectionAfterRefresh::Refreshed(pull_request) => {
+                let pull_request = pull_request.clone();
+                self.set_selected(Some(pull_request), SelectionOrigin::Listed, None, cx);
             }
         }
 
@@ -258,33 +382,116 @@ impl ReviewQueue {
         cx.notify();
     }
 
-    /// Selects the pull request at `index` for the user: shows it from the
-    /// top and records the new selection.
+    /// Selects the pull request of the shown list at `index` for the user:
+    /// shows it from the top and records the new selection.
     pub(super) fn select(&mut self, index: usize, cx: &mut Context<Self>) {
-        if self.selected_index == Some(index) {
+        let Some(pull_request) = self.shown_list().get(index).cloned() else {
+            return;
+        };
+        self.select_pull_request(pull_request, SelectionOrigin::Listed, cx);
+    }
+
+    /// Selects `pull_request` for the user, unless it is already selected.
+    fn select_pull_request(
+        &mut self,
+        pull_request: PullRequest,
+        origin: SelectionOrigin,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected.as_ref().map(|selected| selected.id) == Some(pull_request.id) {
             return;
         }
         // A choice by the user replaces whatever was being restored.
         self.pending_restore = None;
-        self.set_selected_index(Some(index), None, cx);
+        self.opening_layer = None;
+        self.layer_error = None;
+        self.set_selected(Some(pull_request), origin, None, cx);
+        self.scroll_to_selection();
         self.record_view_state(cx);
     }
 
-    /// Matches the selection saved before the relaunch against the current
-    /// queue: selects it with its scroll position, keeps waiting for the
-    /// refreshed queue, or drops it.
+    /// Shows the stack layer the detail asked for: from a list when listed,
+    /// otherwise fetched from GitHub (one request) and cached.
+    fn open_layer(&mut self, request: &LayerRequest, cx: &mut Context<Self>) {
+        if let Some(listed) = self
+            .lists
+            .find_by_number(&request.repo, request.number)
+            .cloned()
+        {
+            self.select_pull_request(listed, SelectionOrigin::Listed, cx);
+            return;
+        }
+        let Ok(client) = self.services.github.clone() else {
+            self.layer_error = Some("Opening a layer that is in no list needs GitHub.".into());
+            cx.notify();
+            return;
+        };
+        let cache = self.services.cache.clone();
+        let request = request.clone();
+        let number = request.number;
+        self.layer_error = None;
+        let task = cx.spawn(async move |queue, cx| {
+            let fetched = cx
+                .background_executor()
+                .spawn(async move { fetch_layer(&client, &cache, &request) })
+                .await;
+            queue
+                .update(cx, |queue, cx| {
+                    queue.opening_layer = None;
+                    match fetched {
+                        Ok(pull_request) => {
+                            queue.select_pull_request(
+                                pull_request,
+                                SelectionOrigin::StackLayer,
+                                cx,
+                            );
+                        }
+                        Err(error) => {
+                            queue.layer_error =
+                                Some(format!("Cannot open #{number}: {error:#}").into());
+                        }
+                    }
+                    cx.notify();
+                })
+                .ok();
+        });
+        self.opening_layer = Some(OpeningLayer {
+            number,
+            _task: task,
+        });
+        cx.notify();
+    }
+
+    /// Matches the selection saved before the relaunch: in the lists, or
+    /// at launch also among cached pull requests in no list (a stack layer
+    /// opened from the map). Selects it with its scroll position, keeps
+    /// waiting for the refreshed lists, or drops it.
     fn restore_selection(&mut self, phase: RestorePhase, cx: &mut Context<Self>) {
         let Some(pending) = &self.pending_restore else {
             return;
         };
-        match SelectionRestore::decide(pending.pull_request_id, &self.pull_requests, phase) {
-            SelectionRestore::Select(index) => {
+        let listed = self.lists.find_by_id(pending.pull_request_id).cloned();
+        let (found, origin) = match (listed, phase) {
+            (Some(listed), _) => (Some(listed), SelectionOrigin::Listed),
+            (None, RestorePhase::CachedQueue) => (
+                self.services
+                    .cache
+                    .lock()
+                    .pull_request(pending.pull_request_id)
+                    .ok()
+                    .flatten(),
+                SelectionOrigin::StackLayer,
+            ),
+            (None, RestorePhase::RefreshedQueue) => (None, SelectionOrigin::Listed),
+        };
+        match SelectionRestore::decide(found.as_ref(), phase) {
+            SelectionRestore::Select(pull_request) => {
                 // The detail scroll waits for the files; the list scrolls to the row now.
+                let pull_request = pull_request.clone();
                 let restore = Some(pending.detail_scroll);
                 self.pending_restore = None;
-                self.set_selected_index(Some(index), restore, cx);
-                self.queue_list_scroll
-                    .scroll_to_item(index, ScrollStrategy::Center);
+                self.set_selected(Some(pull_request), origin, restore, cx);
+                self.scroll_to_selection();
             }
             SelectionRestore::WaitForRefresh => {}
             SelectionRestore::Abandon => {
@@ -294,12 +501,13 @@ impl ReviewQueue {
         }
     }
 
-    /// Records the selection and detail scroll as UI state. A
+    /// Records the tab, selection and detail scroll as UI state. A
     /// selection or scroll still waiting to be restored is recorded as saved,
     /// so a relaunch before it resolves does not lose it.
     pub fn record_view_state(&self, cx: &mut App) {
         let selected_pull_request_id = self
-            .selected_pull_request()
+            .selected
+            .as_ref()
             .map(|pull_request| pull_request.id)
             .or(self
                 .pending_restore
@@ -314,6 +522,7 @@ impl ReviewQueue {
             ReviewQueueViewState {
                 selected_pull_request_id,
                 detail_scroll,
+                tab: self.tab,
             },
         );
     }
@@ -321,6 +530,21 @@ impl ReviewQueue {
     /// Handles the Refresh action (cmd-r, View menu).
     fn on_refresh(&mut self, _: &Refresh, _: &mut Window, cx: &mut Context<Self>) {
         self.refresh(cx);
+    }
+
+    /// Handles the `ShowAuthored` action (cmd-1): shows the viewer's own pull requests.
+    fn on_show_authored(&mut self, _: &ShowAuthored, _: &mut Window, cx: &mut Context<Self>) {
+        self.show_tab(QueueTab::Authored, cx);
+    }
+
+    /// Handles the `ShowReviewRequested` action (cmd-2): shows the review requests.
+    fn on_show_review_requested(
+        &mut self,
+        _: &ShowReviewRequested,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.show_tab(QueueTab::ReviewRequested, cx);
     }
 
     /// Handles the `NextFile` action (`]`): scrolls the detail to the next shown file.
@@ -350,6 +574,28 @@ impl ReviewQueue {
     fn on_toggle_file_tree(&mut self, _: &ToggleFileTree, _: &mut Window, cx: &mut Context<Self>) {
         self.detail.update(cx, PullRequestDetail::toggle_file_tree);
     }
+
+    /// Handles the `NextLayer` action (`}`): shows the stack layer above.
+    fn on_next_layer(&mut self, _: &NextLayer, _: &mut Window, cx: &mut Context<Self>) {
+        self.detail.update(cx, PullRequestDetail::open_next_layer);
+    }
+
+    /// Handles the `PreviousLayer` action (`{`): shows the stack layer below.
+    fn on_previous_layer(&mut self, _: &PreviousLayer, _: &mut Window, cx: &mut Context<Self>) {
+        self.detail
+            .update(cx, PullRequestDetail::open_previous_layer);
+    }
+
+    /// Handles the `ToggleStackReview` action (`c`): one layer or combined layers.
+    fn on_toggle_stack_review(
+        &mut self,
+        _: &ToggleStackReview,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.detail
+            .update(cx, PullRequestDetail::toggle_review_mode);
+    }
 }
 
 impl Render for ReviewQueue {
@@ -358,10 +604,15 @@ impl Render for ReviewQueue {
             .key_context(REVIEW_QUEUE_CONTEXT)
             .track_focus(&self.focus)
             .on_action(cx.listener(Self::on_refresh))
+            .on_action(cx.listener(Self::on_show_authored))
+            .on_action(cx.listener(Self::on_show_review_requested))
             .on_action(cx.listener(Self::on_next_file))
             .on_action(cx.listener(Self::on_previous_file))
             .on_action(cx.listener(Self::on_mark_viewed_and_next))
             .on_action(cx.listener(Self::on_toggle_file_tree))
+            .on_action(cx.listener(Self::on_next_layer))
+            .on_action(cx.listener(Self::on_previous_layer))
+            .on_action(cx.listener(Self::on_toggle_stack_review))
             .flex()
             .size_full()
             .bg(theme::background())
@@ -370,4 +621,70 @@ impl Render for ReviewQueue {
             .child(self.render_sidebar(cx))
             .child(self.detail.clone())
     }
+}
+
+/// Both cached lists, read at startup.
+fn read_cached_lists(cache: &SharedCache) -> anyhow::Result<QueueLists> {
+    let cache = cache.lock();
+    Ok(QueueLists {
+        authored: cache.list(PullRequestListKey::AUTHORED)?,
+        review_requested: cache.list(PullRequestListKey::REVIEW_REQUESTED)?,
+    })
+}
+
+/// The stack memberships the lists know now, kept when GraphQL fails.
+fn known_memberships(lists: &QueueLists) -> HashMap<(RepoRef, u64), StackMembership> {
+    lists
+        .iter()
+        .filter_map(|pull_request| {
+            let membership = pull_request.stack.clone()?;
+            Some(((pull_request.repo.clone(), pull_request.number), membership))
+        })
+        .collect()
+}
+
+/// Fetches both lists (one search request each) and their stacks (one
+/// GraphQL request), filling in each pull request's membership. When the
+/// stacks cannot be read, the memberships known before are kept.
+///
+/// Blocking: runs on the background executor.
+fn fetch_lists(
+    client: &GitHubClient,
+    known: HashMap<(RepoRef, u64), StackMembership>,
+) -> anyhow::Result<RefreshedLists> {
+    let mut lists = QueueLists {
+        authored: client.authored()?,
+        review_requested: client.review_requested()?,
+    };
+    let (memberships, stack_error) = match client.stack_memberships() {
+        Ok(listed) => (
+            listed
+                .into_iter()
+                .map(|listed| ((listed.repo, listed.number), listed.membership))
+                .collect(),
+            None,
+        ),
+        Err(error) => (known, Some(format!("{error:#}"))),
+    };
+    for pull_request in lists.authored.iter_mut().chain(&mut lists.review_requested) {
+        pull_request.stack = memberships
+            .get(&(pull_request.repo.clone(), pull_request.number))
+            .cloned();
+    }
+    Ok(RefreshedLists { lists, stack_error })
+}
+
+/// Fetches a stack layer that is in no list, with the membership the stack
+/// gave it, and caches it so a relaunch can show it again.
+///
+/// Blocking: runs on the background executor.
+fn fetch_layer(
+    client: &GitHubClient,
+    cache: &SharedCache,
+    request: &LayerRequest,
+) -> anyhow::Result<PullRequest> {
+    let mut pull_request = client.pull_request_by_number(&request.repo, request.number)?;
+    pull_request.stack = Some(request.membership.clone());
+    cache.lock().put_pull_request(&pull_request)?;
+    Ok(pull_request)
 }

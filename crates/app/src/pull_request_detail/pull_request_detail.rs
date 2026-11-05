@@ -1,34 +1,45 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use futures::StreamExt as _;
+use futures::channel::mpsc;
 use gpui::{
     ClipboardItem, Context, EventEmitter, FocusHandle, ListAlignment, ListOffset, ListState,
-    Pixels, Point, ScrollHandle, ScrollWheelEvent, Subscription, Task, Window, px,
+    Pixels, Point, ScrollHandle, ScrollStrategy, ScrollWheelEvent, SharedString, Subscription,
+    Task, UniformListScrollHandle, Window, px,
 };
-use qc_cache::{DetailScrollPosition, DiffViewSettings, LineWrapping, ViewedFile};
+use qc_cache::{
+    DetailScrollPosition, DiffViewSettings, LineWrapping, ReviewLayoutState, StackReviewMode,
+    ViewedFile, ViewedScope,
+};
 use qc_diff::FileDiff;
 use qc_file_tree::{FileTree, NodeId};
-use qc_github::PullRequest;
+use qc_github::{GitHubClient, PullRequest, PullRequestFile, PullRequestStack, StackMembership};
 use qc_markdown::MarkdownDocument;
 use qc_syntax::DiffSyntax;
 
 use super::changed_files::ChangedFiles;
 use super::detail_content::DetailContent;
-use super::detail_event::DetailEvent;
+use super::detail_event::{DetailEvent, LayerRequest};
 use super::detail_row_list::DetailRowList;
 use super::diff_selection::DiffSelection;
 use super::fetch_changed_files::fetch_changed_files;
+use super::fetch_combined_files::fetch_combined_files;
+use super::fetch_stack::{cached_stack, refresh_stack};
 use super::file_review_state::FileReviewState;
 use super::file_tree_state::FileTreeState;
 use super::filter_toggle::FilterToggle;
 use super::folder_viewed_state::FolderViewedState;
+use super::load_progress::LoadProgress;
 use super::loaded_file::LoadedFile;
 use super::parsed_description::ParsedDescription;
+use super::review_target::ReviewTarget;
 use super::selected_diff_text::{row_code_text, selected_diff_text};
 use super::viewed_toggle::ViewedToggle;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::diff_view::{CodeCells, CodeSegments, DiffPosition, SideSelection};
+use crate::shared_cache::SharedCache;
 use crate::ui_state::{UiStateRecorder, read_viewed_files};
 use crate::word_range_at::word_range_at;
 
@@ -45,7 +56,11 @@ const DOUBLE_CLICK: usize = 2;
 /// Dragging past the pane's edge scrolls by this share of the overshoot per mouse move.
 const AUTOSCROLL_SHARE: f32 = 0.5;
 
-/// Which way to move between files.
+/// A download is reported again only after this many more bytes, so the
+/// pane redraws a few times a second rather than for every chunk.
+const DOWNLOAD_REPORT_BYTES: u64 = 256 * 1024;
+
+/// Which way to move between files or stack layers.
 #[derive(Clone, Copy)]
 enum FileDirection {
     Next,
@@ -67,6 +82,8 @@ struct FetchedChanges {
     files: Vec<LoadedFile>,
     tree: FileTree,
     viewed_marks: Vec<ViewedFile>,
+    /// Whose marks those are, for marks set from now on.
+    scope: ViewedScope,
 }
 
 /// The syntax colors computed for one diff, matched back by the diff's `Arc`.
@@ -119,6 +136,27 @@ pub struct PullRequestDetail {
     is_description_expanded: bool,
     /// The scroll of the description inside the expanded header.
     description_scroll: ScrollHandle,
+    /// Whether stacked pull requests show one layer or combined layers.
+    review_mode: StackReviewMode,
+    /// What the shown (or loading) files are of.
+    target: ReviewTarget,
+    /// Whose viewed marks the shown files use.
+    viewed_scope: Option<ViewedScope>,
+    /// The shown pull request's stack with its layers, once loaded.
+    stack: Option<PullRequestStack>,
+    /// Whether the stack is being read or checked with GitHub.
+    is_stack_loading: bool,
+    /// Why the stack could not be checked with GitHub, if it could not.
+    stack_error: Option<SharedString>,
+    /// The first layer of a combined review (a pull request number), when
+    /// chosen; else the lowest unmerged layer.
+    combined_start: Option<u64>,
+    /// The stack being loaded; replacing it cancels the previous one.
+    stack_task: Option<Task<()>>,
+    /// Syntax batches colored of all started, while highlighting runs.
+    highlight_progress: Option<(usize, usize)>,
+    /// The scroll of the stack map, kept on the shown layer.
+    stack_map_scroll: UniformListScrollHandle,
     /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
     _settings_subscription: Subscription,
 }
@@ -142,6 +180,10 @@ impl PullRequestDetail {
                 .ok();
         });
 
+        let layout = cx
+            .global::<UiStateRecorder>()
+            .saved_review_layout()
+            .unwrap_or_default();
         let mut detail = Self {
             services,
             pull_request: None,
@@ -160,13 +202,19 @@ impl PullRequestDetail {
             code_segments: CodeSegments::default(),
             diff_selection: None,
             is_selecting: false,
-            file_tree: FileTreeState::new(
-                cx.global::<UiStateRecorder>()
-                    .saved_review_layout()
-                    .unwrap_or_default(),
-            ),
+            file_tree: FileTreeState::new(layout),
             is_description_expanded: false,
             description_scroll: ScrollHandle::new(),
+            review_mode: layout.stack_review,
+            target: ReviewTarget::Layer,
+            viewed_scope: None,
+            stack: None,
+            is_stack_loading: false,
+            stack_error: None,
+            combined_start: None,
+            stack_task: None,
+            highlight_progress: None,
+            stack_map_scroll: UniformListScrollHandle::new(),
             _settings_subscription: settings_subscription,
         };
         detail.rebuild_rows(ScrollAnchor::Top);
@@ -339,7 +387,70 @@ impl PullRequestDetail {
     pub(super) fn loaded_files(&self) -> &[LoadedFile] {
         match &self.changed_files {
             Some(ChangedFiles::Loaded(files)) => files,
-            Some(ChangedFiles::Loading | ChangedFiles::Failed(_)) | None => &[],
+            Some(ChangedFiles::Loading(_) | ChangedFiles::Failed(_)) | None => &[],
+        }
+    }
+
+    /// How far the files' load has come, while they load.
+    pub(super) fn load_progress(&self) -> Option<LoadProgress> {
+        match &self.changed_files {
+            Some(ChangedFiles::Loading(progress)) => Some(*progress),
+            Some(ChangedFiles::Loaded(_) | ChangedFiles::Failed(_)) | None => None,
+        }
+    }
+
+    /// Syntax batches colored of all, while highlighting runs.
+    pub(super) fn highlight_progress(&self) -> Option<(usize, usize)> {
+        self.highlight_progress
+    }
+
+    pub(super) fn review_mode(&self) -> StackReviewMode {
+        self.review_mode
+    }
+
+    pub(super) fn target(&self) -> &ReviewTarget {
+        &self.target
+    }
+
+    pub(super) fn stack(&self) -> Option<&PullRequestStack> {
+        self.stack.as_ref()
+    }
+
+    pub(super) fn stack_map_scroll(&self) -> &UniformListScrollHandle {
+        &self.stack_map_scroll
+    }
+
+    /// Scrolls the stack map so the shown layer is in view.
+    fn reveal_current_layer(&self) {
+        if let Some(index) = self.current_layer_index() {
+            self.stack_map_scroll
+                .scroll_to_item(index, ScrollStrategy::Center);
+        }
+    }
+
+    pub(super) fn is_stack_loading(&self) -> bool {
+        self.is_stack_loading
+    }
+
+    pub(super) fn stack_error(&self) -> Option<&SharedString> {
+        self.stack_error.as_ref()
+    }
+
+    /// The position of the shown pull request in its loaded stack.
+    pub(super) fn current_layer_index(&self) -> Option<usize> {
+        let number = self.pull_request.as_ref()?.number;
+        self.stack
+            .as_ref()?
+            .layers
+            .iter()
+            .position(|layer| layer.number == number)
+    }
+
+    /// The layout to save: the file tree's part and the review mode.
+    fn review_layout(&self) -> ReviewLayoutState {
+        ReviewLayoutState {
+            stack_review: self.review_mode,
+            ..self.file_tree.layout()
         }
     }
 
@@ -359,10 +470,14 @@ impl PullRequestDetail {
             self.changed_files = None;
             self.files_task = None;
             self.pending_scroll = None;
+            self.stack = None;
+            self.stack_task = None;
+            self.is_stack_loading = false;
             self.rebuild_rows(ScrollAnchor::Top);
             cx.notify();
             return;
         };
+        let is_other_stack = !is_same_stack(self.stack.as_ref(), &pull_request);
 
         // Decide by what was shown before.
         let shown = self.pull_request.as_ref();
@@ -371,7 +486,12 @@ impl PullRequestDetail {
         });
         let is_same_pull_request = shown.is_some_and(|shown| shown.id == pull_request.id);
         if is_same_version {
+            // The stack membership can arrive later than the pull request.
+            let gained_stack = is_other_stack && pull_request.stack.is_some();
             self.pull_request = Some(pull_request);
+            if gained_stack {
+                self.load_stack(cx);
+            }
             cx.notify();
             return;
         }
@@ -396,7 +516,216 @@ impl PullRequestDetail {
         }
         self.pull_request = Some(pull_request);
         self.horizontal_offsets.clear();
+
+        // Another stack's layers do not apply; the same stack's stay while they are checked.
+        if is_other_stack {
+            self.stack = None;
+            self.combined_start = None;
+        }
+        // New commits can move the layers' heads, so the stack is checked again (free when unchanged).
+        self.target = self.decide_target();
         self.load_changed_files(cx);
+        self.reveal_current_layer();
+        self.load_stack(cx);
+    }
+
+    /// The target for the shown pull request, mode, stack and range start.
+    fn decide_target(&self) -> ReviewTarget {
+        self.pull_request
+            .as_ref()
+            .map_or(ReviewTarget::Layer, |pull_request| {
+                ReviewTarget::decide(
+                    self.review_mode,
+                    pull_request,
+                    self.stack.as_ref(),
+                    self.combined_start,
+                )
+            })
+    }
+
+    /// Recomputes the target and reloads the files when it changed: after
+    /// the stack arrived or changed, the mode flipped or the range moved.
+    fn retarget(&mut self, cx: &mut Context<Self>) {
+        let target = self.decide_target();
+        if target == self.target {
+            return;
+        }
+        self.target = target;
+        self.pending_scroll = None;
+        self.load_changed_files(cx);
+    }
+
+    /// Reads the shown pull request's stack from the cache, then checks it
+    /// with GitHub (free when unchanged); each answer may change the target.
+    fn load_stack(&mut self, cx: &mut Context<Self>) {
+        let Some((repo, number)) = self.pull_request.as_ref().and_then(|pull_request| {
+            Some((
+                pull_request.repo.clone(),
+                pull_request.stack.as_ref()?.number,
+            ))
+        }) else {
+            self.stack_task = None;
+            self.is_stack_loading = false;
+            return;
+        };
+        let cache = self.services.cache.clone();
+        let client = self.services.github.clone();
+        self.is_stack_loading = true;
+        self.stack_error = None;
+        cx.notify();
+        self.stack_task = Some(cx.spawn(async move |detail, cx| {
+            // The cached layers first, so a combined review starts at once.
+            let read_cache = cache.clone();
+            let read_repo = repo.clone();
+            let cached = cx
+                .background_executor()
+                .spawn(async move { cached_stack(&read_cache, &read_repo, number) })
+                .await;
+            let applied = detail.update(cx, |detail, cx| {
+                if let Ok(Some(stack)) = cached {
+                    detail.apply_stack(stack, cx);
+                }
+            });
+            if applied.is_err() {
+                return;
+            }
+
+            // Then GitHub's current layers.
+            let refreshed = cx
+                .background_executor()
+                .spawn(async move { refresh_stack(client, &cache, &repo, number) })
+                .await;
+            detail
+                .update(cx, |detail, cx| {
+                    detail.is_stack_loading = false;
+                    match refreshed {
+                        Ok(stack) => detail.apply_stack(stack, cx),
+                        Err(error) => {
+                            detail.stack_error = Some(format!("{error:#}").into());
+                            // Without layers a combined review cannot start; show the layer.
+                            if detail.target == ReviewTarget::AwaitingStack {
+                                detail.review_mode = StackReviewMode::Layer;
+                                detail.retarget(cx);
+                            }
+                        }
+                    }
+                    cx.notify();
+                })
+                .ok();
+        }));
+    }
+
+    /// Shows `stack`'s layers if it is still the shown pull request's stack.
+    fn apply_stack(&mut self, stack: PullRequestStack, cx: &mut Context<Self>) {
+        let belongs = self.pull_request.as_ref().is_some_and(|pull_request| {
+            pull_request.repo == stack.repo
+                && pull_request
+                    .stack
+                    .as_ref()
+                    .is_some_and(|membership| membership.number == stack.number)
+        });
+        if !belongs || self.stack.as_ref() == Some(&stack) {
+            return;
+        }
+        self.stack = Some(stack);
+        self.reveal_current_layer();
+        self.retarget(cx);
+        cx.notify();
+    }
+
+    /// Switches between one layer and combined layers (`c`), and saves it.
+    pub fn toggle_review_mode(&mut self, cx: &mut Context<Self>) {
+        let is_stacked = self
+            .pull_request
+            .as_ref()
+            .is_some_and(|pull_request| pull_request.stack.is_some());
+        if !is_stacked {
+            return;
+        }
+        self.review_mode = self.review_mode.toggled();
+        UiStateRecorder::record_review_layout(cx, self.review_layout());
+        self.retarget(cx);
+        cx.notify();
+    }
+
+    /// Sets the review mode, from the header's control.
+    pub(super) fn set_review_mode(&mut self, mode: StackReviewMode, cx: &mut Context<Self>) {
+        if self.review_mode != mode {
+            self.toggle_review_mode(cx);
+        }
+    }
+
+    /// Starts the combined range at layer `index` (shift-click in the stack
+    /// map), switching to the combined review; a layer above the shown one
+    /// is not a start.
+    pub(super) fn set_combined_start(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(number) = self
+            .stack
+            .as_ref()
+            .and_then(|stack| stack.layers.get(index))
+            .map(|layer| layer.number)
+        else {
+            return;
+        };
+        if self
+            .current_layer_index()
+            .is_none_or(|current| index > current)
+        {
+            return;
+        }
+        self.combined_start = Some(number);
+        if self.review_mode == StackReviewMode::Layer {
+            self.review_mode = StackReviewMode::Combined;
+            UiStateRecorder::record_review_layout(cx, self.review_layout());
+        }
+        self.retarget(cx);
+        cx.notify();
+    }
+
+    /// Asks the owner to show layer `index` of the stack.
+    pub(super) fn open_layer(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(stack) = &self.stack else {
+            return;
+        };
+        let Some(layer) = stack.layers.get(index) else {
+            return;
+        };
+        let request = LayerRequest {
+            repo: stack.repo.clone(),
+            number: layer.number,
+            membership: StackMembership {
+                number: stack.number,
+                position: u64::try_from(index + 1).unwrap_or(u64::MAX),
+                size: u64::try_from(stack.layers.len()).unwrap_or(u64::MAX),
+                base_ref: stack.base_ref.clone(),
+            },
+        };
+        cx.emit(DetailEvent::OpenLayer(request));
+    }
+
+    /// Shows the layer above the shown one (`}`).
+    pub fn open_next_layer(&mut self, cx: &mut Context<Self>) {
+        self.open_neighbour_layer(FileDirection::Next, cx);
+    }
+
+    /// Shows the layer below the shown one (`{`).
+    pub fn open_previous_layer(&mut self, cx: &mut Context<Self>) {
+        self.open_neighbour_layer(FileDirection::Previous, cx);
+    }
+
+    /// Shows the layer above or below the shown one.
+    fn open_neighbour_layer(&mut self, direction: FileDirection, cx: &mut Context<Self>) {
+        let Some(current) = self.current_layer_index() else {
+            return;
+        };
+        let target = match direction {
+            FileDirection::Next => current + 1,
+            FileDirection::Previous => match current.checked_sub(1) {
+                Some(below) => below,
+                None => return,
+            },
+        };
+        self.open_layer(target, cx);
     }
 
     /// The scroll position to save: one still waiting to be applied, or the
@@ -430,7 +759,7 @@ impl PullRequestDetail {
         self.list.reset(self.rows.len());
         self.refresh_tree_rows();
 
-        let files_settled = !matches!(self.changed_files, Some(ChangedFiles::Loading));
+        let files_settled = !matches!(self.changed_files, Some(ChangedFiles::Loading(_)));
         let pending = if files_settled {
             self.pending_scroll.take()
         } else {
@@ -494,7 +823,7 @@ impl PullRequestDetail {
     fn refresh_tree_rows(&mut self) {
         let files = match &self.changed_files {
             Some(ChangedFiles::Loaded(files)) => files.as_slice(),
-            Some(ChangedFiles::Loading | ChangedFiles::Failed(_)) | None => &[],
+            Some(ChangedFiles::Loading(_) | ChangedFiles::Failed(_)) | None => &[],
         };
         self.file_tree.refresh_rows(files, &self.file_review);
     }
@@ -519,14 +848,14 @@ impl PullRequestDetail {
     /// Shows or hides the file tree panel (cmd-b), and saves it.
     pub fn toggle_file_tree(&mut self, cx: &mut Context<Self>) {
         self.file_tree.toggle_visibility();
-        UiStateRecorder::record_review_layout(cx, self.file_tree.layout());
+        UiStateRecorder::record_review_layout(cx, self.review_layout());
         cx.notify();
     }
 
     /// Flips one hide toggle of the filter; the tree and the diff follow, and it is saved.
     pub(super) fn toggle_filter(&mut self, toggle: FilterToggle, cx: &mut Context<Self>) {
         self.file_tree.toggle_filter(toggle);
-        UiStateRecorder::record_review_layout(cx, self.file_tree.layout());
+        UiStateRecorder::record_review_layout(cx, self.review_layout());
         self.rebuild_rows(self.anchor_at_top());
         cx.notify();
     }
@@ -548,11 +877,7 @@ impl PullRequestDetail {
     /// Marks every file a folder covers as viewed, or, when all already
     /// are, as not viewed; saves the marks.
     pub(super) fn toggle_folder_viewed(&mut self, folder: NodeId, cx: &mut Context<Self>) {
-        let Some(pull_request_id) = self
-            .pull_request
-            .as_ref()
-            .map(|pull_request| pull_request.id)
-        else {
+        let Some(scope) = self.viewed_scope.clone() else {
             return;
         };
         let files = self.loaded_files().to_vec();
@@ -563,10 +888,10 @@ impl PullRequestDetail {
         for file in self.file_tree.folder_files(folder, &files) {
             match self.file_review.set_viewed(&files[file], mark_viewed) {
                 Some(ViewedToggle::Marked(mark)) => {
-                    UiStateRecorder::record_file_viewed(cx, pull_request_id, mark);
+                    UiStateRecorder::record_file_viewed(cx, scope.clone(), mark);
                 }
                 Some(ViewedToggle::Unmarked(filename)) => {
-                    UiStateRecorder::record_file_unviewed(cx, pull_request_id, filename);
+                    UiStateRecorder::record_file_unviewed(cx, scope.clone(), filename);
                 }
                 None => {}
             }
@@ -713,11 +1038,7 @@ impl PullRequestDetail {
 
     /// Marks file `file` viewed or not, and saves the mark.
     pub(super) fn toggle_file_viewed(&mut self, file: usize, cx: &mut Context<Self>) {
-        let Some(pull_request_id) = self
-            .pull_request
-            .as_ref()
-            .map(|pull_request| pull_request.id)
-        else {
+        let Some(scope) = self.viewed_scope.clone() else {
             return;
         };
         let Some(loaded) = self.loaded_files().get(file).cloned() else {
@@ -725,10 +1046,10 @@ impl PullRequestDetail {
         };
         match self.file_review.toggle_viewed(&loaded) {
             ViewedToggle::Marked(mark) => {
-                UiStateRecorder::record_file_viewed(cx, pull_request_id, mark);
+                UiStateRecorder::record_file_viewed(cx, scope, mark);
             }
             ViewedToggle::Unmarked(filename) => {
-                UiStateRecorder::record_file_unviewed(cx, pull_request_id, filename);
+                UiStateRecorder::record_file_unviewed(cx, scope, filename);
             }
         }
         self.rebuild_file_rows(file);
@@ -776,52 +1097,85 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Loads the shown pull request's changed files: from the cache when
-    /// current, otherwise from GitHub, caching the result.
+    /// Loads the files of the review target: the pull request's (from the
+    /// cache when current, otherwise from GitHub) or a combined range's (from
+    /// the cache, or one diff download), caching what GitHub sent. Shows the
+    /// progress while it runs; a combined review still waiting for the stack
+    /// only shows that.
     fn load_changed_files(&mut self, cx: &mut Context<Self>) {
         let Some(pull_request) = self.pull_request.clone() else {
             return;
         };
+        let target = self.target.clone();
+        let scope = target.viewed_scope(&pull_request);
         let cache = self.services.cache.clone();
         let client = self.services.github.clone();
         let ui_state = cx.global::<UiStateRecorder>().shared_store();
         let options = self.diff_settings.diff_options();
 
-        self.changed_files = Some(ChangedFiles::Loading);
+        // Clear what was shown; a combined review without its layers only waits.
+        let first_step = match target {
+            ReviewTarget::AwaitingStack => LoadProgress::LoadingStack,
+            ReviewTarget::Layer | ReviewTarget::Combined(_) => LoadProgress::ReadingCache,
+        };
+        self.changed_files = Some(ChangedFiles::Loading(first_step));
         self.file_review = FileReviewState::default();
+        self.viewed_scope = None;
         self.syntax_task = None;
+        self.highlight_progress = None;
         self.rebuild_rows(ScrollAnchor::Top);
         cx.notify();
+        if target == ReviewTarget::AwaitingStack {
+            self.files_task = None;
+            return;
+        }
+
         self.files_task = Some(cx.spawn(async move |detail, cx| {
-            let loaded = cx
-                .background_executor()
-                .spawn(async move {
-                    // The cache first; GitHub only for what changed.
-                    let files = fetch_changed_files(client, &cache, &pull_request)?;
+            // Load on the background executor, reporting progress through a channel.
+            let (progress_sender, mut progress) = mpsc::unbounded();
+            let load = cx.background_executor().spawn(async move {
+                let report = |step| {
+                    progress_sender.unbounded_send(step).ok();
+                };
+                let files = fetch_target_files(client, &cache, &pull_request, &target, &report)?;
 
-                    // Build every diff here too: word comparisons can take a moment on big files.
-                    let built: Vec<LoadedFile> = files
-                        .into_iter()
-                        .map(|file| LoadedFile::build(file, options))
-                        .collect();
+                // Build every diff here too: word comparisons can take a moment on big files.
+                report(LoadProgress::BuildingDiffs { files: files.len() });
+                let built: Vec<LoadedFile> = files
+                    .into_iter()
+                    .map(|file| LoadedFile::build(file, options))
+                    .collect();
 
-                    // Put the files in tree order, so the tree and the diff agree.
-                    let paths: Vec<&str> = built.iter().map(LoadedFile::filename).collect();
-                    let ordered: Vec<LoadedFile> = FileTree::build(&paths)
-                        .file_order()
-                        .into_iter()
-                        .map(|index| built[index].clone())
-                        .collect();
-                    let ordered_paths: Vec<&str> =
-                        ordered.iter().map(LoadedFile::filename).collect();
-                    let tree = FileTree::build(&ordered_paths);
-                    anyhow::Ok(FetchedChanges {
-                        files: ordered,
-                        tree,
-                        viewed_marks: read_viewed_files(&ui_state, pull_request.id),
-                    })
+                // Put the files in tree order, so the tree and the diff agree.
+                let paths: Vec<&str> = built.iter().map(LoadedFile::filename).collect();
+                let ordered: Vec<LoadedFile> = FileTree::build(&paths)
+                    .file_order()
+                    .into_iter()
+                    .map(|index| built[index].clone())
+                    .collect();
+                let ordered_paths: Vec<&str> = ordered.iter().map(LoadedFile::filename).collect();
+                let tree = FileTree::build(&ordered_paths);
+                anyhow::Ok(FetchedChanges {
+                    files: ordered,
+                    tree,
+                    viewed_marks: read_viewed_files(&ui_state, &scope),
+                    scope,
                 })
-                .await;
+            });
+
+            // Show each step as it is reported; the channel ends with the load.
+            while let Some(step) = progress.next().await {
+                let shown = detail.update(cx, |detail, cx| {
+                    if let Some(ChangedFiles::Loading(current)) = &mut detail.changed_files {
+                        *current = step;
+                        cx.notify();
+                    }
+                });
+                if shown.is_err() {
+                    return;
+                }
+            }
+            let loaded = load.await;
 
             // Show the files at the pending position, then color them; a closed view drops it.
             detail
@@ -830,6 +1184,7 @@ impl PullRequestDetail {
                         Ok(fetched) => {
                             detail.file_review =
                                 FileReviewState::for_loaded(&fetched.files, &fetched.viewed_marks);
+                            detail.viewed_scope = Some(fetched.scope);
                             detail.file_tree.reset_for(fetched.tree, &fetched.files);
                             ChangedFiles::Loaded(fetched.files)
                         }
@@ -850,6 +1205,7 @@ impl PullRequestDetail {
         let files = self.loaded_files().to_vec();
         if files.is_empty() {
             self.syntax_task = None;
+            self.highlight_progress = None;
             return;
         }
 
@@ -874,12 +1230,16 @@ impl PullRequestDetail {
             })
             .collect();
 
-        // Show batches in order; dropping this task cancels the rest.
+        // Show batches in order, counting them for the indicator; dropping this task cancels the rest.
+        let batch_count = batches.len();
+        self.highlight_progress = Some((0, batch_count));
         self.syntax_task = Some(cx.spawn(async move |detail, cx| {
-            for batch in batches {
+            for (index, batch) in batches.into_iter().enumerate() {
                 let highlighted = batch.await;
                 let applied = detail.update(cx, |detail, cx| {
                     detail.apply_syntax(highlighted);
+                    let done = index + 1;
+                    detail.highlight_progress = (done < batch_count).then_some((done, batch_count));
                     cx.notify();
                 });
                 if applied.is_err() {
@@ -902,6 +1262,46 @@ impl PullRequestDetail {
             {
                 loaded.syntax = result.syntax;
             }
+        }
+    }
+}
+
+/// Whether `pull_request` belongs to `stack` (the stack shown so far); no
+/// stack and no membership count as the same.
+fn is_same_stack(stack: Option<&PullRequestStack>, pull_request: &PullRequest) -> bool {
+    match (stack, &pull_request.stack) {
+        (Some(stack), Some(membership)) => {
+            stack.repo == pull_request.repo && stack.number == membership.number
+        }
+        (None, None) => true,
+        (Some(_), None) | (None, Some(_)) => false,
+    }
+}
+
+/// Fetches the files of `target` for `pull_request`, reporting each step;
+/// downloads are reported in steps of [`DOWNLOAD_REPORT_BYTES`].
+///
+/// Blocking: runs on the background executor.
+fn fetch_target_files(
+    client: Result<GitHubClient, String>,
+    cache: &SharedCache,
+    pull_request: &PullRequest,
+    target: &ReviewTarget,
+    report: &dyn Fn(LoadProgress),
+) -> anyhow::Result<Vec<PullRequestFile>> {
+    match target {
+        ReviewTarget::Layer | ReviewTarget::AwaitingStack => {
+            fetch_changed_files(client, cache, pull_request, &mut |step| report(step))
+        }
+        ReviewTarget::Combined(range) => {
+            let mut reported_bytes = 0;
+            fetch_combined_files(client, cache, range, &mut |download| {
+                let is_done = download.total_bytes == Some(download.received_bytes);
+                if is_done || download.received_bytes >= reported_bytes + DOWNLOAD_REPORT_BYTES {
+                    reported_bytes = download.received_bytes;
+                    report(LoadProgress::DownloadingDiff(download));
+                }
+            })
         }
     }
 }

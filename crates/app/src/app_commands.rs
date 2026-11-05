@@ -16,7 +16,12 @@ actions!(
         NextFile,
         PreviousFile,
         MarkViewedAndNext,
-        ToggleFileTree
+        ToggleFileTree,
+        NextLayer,
+        PreviousLayer,
+        ToggleStackReview,
+        ShowAuthored,
+        ShowReviewRequested
     ]
 );
 
@@ -35,6 +40,11 @@ pub fn install_app_commands(cx: &mut App) {
         KeyBinding::new("]", NextFile, Some(REVIEW_QUEUE_CONTEXT)),
         KeyBinding::new("[", PreviousFile, Some(REVIEW_QUEUE_CONTEXT)),
         KeyBinding::new("v", MarkViewedAndNext, Some(REVIEW_QUEUE_CONTEXT)),
+        KeyBinding::new("}", NextLayer, Some(REVIEW_QUEUE_CONTEXT)),
+        KeyBinding::new("{", PreviousLayer, Some(REVIEW_QUEUE_CONTEXT)),
+        KeyBinding::new("c", ToggleStackReview, Some(REVIEW_QUEUE_CONTEXT)),
+        KeyBinding::new("cmd-1", ShowAuthored, None),
+        KeyBinding::new("cmd-2", ShowReviewRequested, None),
     ]);
 
     // The menu bar exposes the same actions as the key bindings.
@@ -62,6 +72,13 @@ pub fn install_app_commands(cx: &mut App) {
                 MenuItem::action("Next File", NextFile),
                 MenuItem::action("Previous File", PreviousFile),
                 MenuItem::action("Mark Viewed and Next File", MarkViewedAndNext),
+                MenuItem::separator(),
+                MenuItem::action("My Pull Requests", ShowAuthored),
+                MenuItem::action("Review Requests", ShowReviewRequested),
+                MenuItem::separator(),
+                MenuItem::action("Next Stack Layer", NextLayer),
+                MenuItem::action("Previous Stack Layer", PreviousLayer),
+                MenuItem::action("Toggle Combined Stack Review", ToggleStackReview),
             ],
         },
         Menu {

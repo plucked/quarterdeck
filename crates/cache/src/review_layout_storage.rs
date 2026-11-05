@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use rusqlite::{OptionalExtension, params};
 
 use crate::ui_state_store::SINGLE_ROW_ID;
-use crate::{PanelVisibility, ReviewLayoutState, UiStateStore};
+use crate::{PanelVisibility, ReviewLayoutState, StackReviewMode, UiStateStore};
 
 /// The columns of the `review_layout` row, read before decoding.
 struct StoredReviewLayout {
@@ -10,6 +10,7 @@ struct StoredReviewLayout {
     hide_viewed: bool,
     hide_tests: bool,
     hide_generated: bool,
+    stack_review: String,
 }
 
 impl UiStateStore {
@@ -18,7 +19,7 @@ impl UiStateStore {
         let stored = self
             .connection()
             .query_row(
-                "SELECT file_tree_visible, hide_viewed, hide_tests, hide_generated
+                "SELECT file_tree_visible, hide_viewed, hide_tests, hide_generated, stack_review
                  FROM review_layout WHERE id = ?1",
                 [SINGLE_ROW_ID],
                 |row| {
@@ -27,6 +28,7 @@ impl UiStateStore {
                         hide_viewed: row.get(1)?,
                         hide_tests: row.get(2)?,
                         hide_generated: row.get(3)?,
+                        stack_review: row.get(4)?,
                     })
                 },
             )
@@ -37,8 +39,11 @@ impl UiStateStore {
         // The CHECK constraints make other values impossible short of a hand edit.
         let file_tree = PanelVisibility::from_sql_integer(stored.file_tree_visible)
             .ok_or_else(|| anyhow!("unknown file tree visibility {}", stored.file_tree_visible))?;
+        let stack_review = StackReviewMode::from_sql_text(&stored.stack_review)
+            .ok_or_else(|| anyhow!("unknown stack review mode {:?}", stored.stack_review))?;
         Ok(Some(ReviewLayoutState {
             file_tree,
+            stack_review,
             hide_viewed: stored.hide_viewed,
             hide_tests: stored.hide_tests,
             hide_generated: stored.hide_generated,
@@ -48,17 +53,19 @@ impl UiStateStore {
     /// Saves the review layout, replacing the previous one.
     pub fn put_review_layout(&self, layout: &ReviewLayoutState) -> Result<()> {
         self.connection().execute(
-            "INSERT INTO review_layout (id, file_tree_visible, hide_viewed, hide_tests, hide_generated)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO review_layout (id, file_tree_visible, hide_viewed, hide_tests, hide_generated, stack_review)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (id) DO UPDATE SET
                 file_tree_visible = excluded.file_tree_visible, hide_viewed = excluded.hide_viewed,
-                hide_tests = excluded.hide_tests, hide_generated = excluded.hide_generated",
+                hide_tests = excluded.hide_tests, hide_generated = excluded.hide_generated,
+                stack_review = excluded.stack_review",
             params![
                 SINGLE_ROW_ID,
                 layout.file_tree.as_sql_integer(),
                 layout.hide_viewed,
                 layout.hide_tests,
-                layout.hide_generated
+                layout.hide_generated,
+                layout.stack_review.as_sql_text()
             ],
         )?;
         Ok(())
@@ -79,6 +86,7 @@ mod tests {
             hide_viewed: true,
             hide_tests: false,
             hide_generated: true,
+            stack_review: StackReviewMode::Combined,
         };
         store.put_review_layout(&layout).unwrap();
         assert_eq!(store.review_layout().unwrap(), Some(layout));

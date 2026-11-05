@@ -8,20 +8,22 @@ pub struct RateLimit {
     pub resets_at: u64,
 }
 
-/// Which budget a response used: core REST calls (5000 an hour) or search
-/// (30 a minute).
+/// Which budget a response used: core REST calls (5000 an hour), search
+/// (30 a minute) or GraphQL (5000 points an hour).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RateLimitResource {
     Core,
     Search,
+    GraphQl,
 }
 
 impl RateLimitResource {
-    /// Decodes `x-ratelimit-resource`; other budgets (GraphQL, …) are not tracked.
+    /// Decodes `x-ratelimit-resource`; other budgets are not tracked.
     pub(crate) fn from_header(value: &str) -> Option<Self> {
         match value {
             "core" => Some(Self::Core),
             "search" => Some(Self::Search),
+            "graphql" => Some(Self::GraphQl),
             _ => None,
         }
     }
@@ -30,6 +32,7 @@ impl RateLimitResource {
         match self {
             Self::Core => "core",
             Self::Search => "search",
+            Self::GraphQl => "GraphQL",
         }
     }
 }

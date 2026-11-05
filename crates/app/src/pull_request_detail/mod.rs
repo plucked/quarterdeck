@@ -1,8 +1,9 @@
 //! The right pane: the shown pull request's header, description and changed
 //! files as one virtualized list, so scrolling costs the same for a
-//! one-line change as for a hundred files. Owns loading the files, building
-//! and coloring their diffs, the diff settings and each file's viewed and
-//! collapsed state.
+//! one-line change as for a hundred files. For a stacked pull request it
+//! shows one layer or several layers combined, with the stack map. Owns
+//! loading the files (with progress), building and coloring their diffs, the
+//! diff settings and each file's viewed and collapsed state.
 //!
 //! Files:
 //! - `pull_request_detail.rs`: `PullRequestDetail`, the view's state, loading and actions.
@@ -25,7 +26,15 @@
 //! - `folder_viewed_state.rs`: `FolderViewedState`, none, some or all of a folder viewed.
 //! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
 //! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.
+//! - `load_progress.rs`: `LoadProgress`, how far loading the files has come.
+//! - `review_target.rs`: `ReviewTarget`, one layer or a combined range of stack layers.
+//! - `fetch_combined_files.rs`: gets a combined range's files from the cache or one diff download.
+//! - `fetch_stack.rs`: gets a stack's layers from the cache, then checks them with GitHub.
+//! - `stack_bar_rendering.rs`: the header's stack line: layer, neighbours, review mode, range.
+//! - `stack_map_rendering.rs`: the stack map above the file tree: every layer, the range.
+//! - `activity_rendering.rs`: the loading indicators: header pill, progress line, loading card.
 
+mod activity_rendering;
 mod changed_files;
 mod detail_content;
 mod detail_event;
@@ -33,19 +42,25 @@ mod detail_row;
 mod detail_row_list;
 mod diff_selection;
 mod fetch_changed_files;
+mod fetch_combined_files;
+mod fetch_stack;
 mod file_review_state;
 mod file_set_update;
 mod file_tree_rendering;
 mod file_tree_state;
 mod filter_toggle;
 mod folder_viewed_state;
+mod load_progress;
 mod loaded_file;
 mod parsed_description;
 mod pull_request_detail;
+mod review_target;
 mod row_rendering;
 mod selected_diff_text;
+mod stack_bar_rendering;
+mod stack_map_rendering;
 mod sticky_header_rendering;
 mod viewed_toggle;
 
-pub use detail_event::DetailEvent;
+pub use detail_event::{DetailEvent, LayerRequest};
 pub use pull_request_detail::PullRequestDetail;

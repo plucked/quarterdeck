@@ -1,35 +1,31 @@
 use qc_github::PullRequest;
 
-/// What happens to the selection when the queue is replaced by a refresh.
+use super::selection_origin::SelectionOrigin;
+
+/// What happens to the selection when the lists are replaced by a refresh.
 #[derive(Debug, PartialEq, Eq)]
-pub enum SelectionAfterRefresh {
-    /// Nothing was selected, or the selected pull request left the queue.
+pub enum SelectionAfterRefresh<'lists> {
+    /// Nothing was selected, or the listed pull request left every list.
     Cleared,
-    /// The same pull request, unchanged, now at this index.
-    Kept(usize),
-    /// The same pull request, now at this index, was updated since its files
-    /// were loaded, so they are reloaded.
-    KeptAndUpdated(usize),
+    /// The selection stays as it is (a stack layer in no list).
+    Unchanged,
+    /// The same pull request, as the refreshed list has it (its stack
+    /// membership may be new); the detail reloads it if `updated_at` moved.
+    Refreshed(&'lists PullRequest),
 }
 
-impl SelectionAfterRefresh {
-    /// Decides the selection for `refreshed`, given the pull request that was
-    /// selected before the refresh.
-    pub fn decide(previous: Option<&PullRequest>, refreshed: &[PullRequest]) -> Self {
-        // Find the previously selected pull request by its stable id.
-        let found = previous.and_then(|previous| {
-            refreshed
-                .iter()
-                .position(|candidate| candidate.id == previous.id)
-                .map(|index| (previous, index))
-        });
-
-        match found {
-            None => Self::Cleared,
-            Some((previous, index)) if refreshed[index].updated_at == previous.updated_at => {
-                Self::Kept(index)
-            }
-            Some((_, index)) => Self::KeptAndUpdated(index),
+impl<'lists> SelectionAfterRefresh<'lists> {
+    /// Decides the selection given whether something was selected before
+    /// the refresh, where it came from, and the same id in the refreshed lists.
+    pub fn decide(
+        was_selected: bool,
+        origin: SelectionOrigin,
+        refreshed: Option<&'lists PullRequest>,
+    ) -> Self {
+        match (was_selected, refreshed, origin) {
+            (false, _, _) | (true, None, SelectionOrigin::Listed) => Self::Cleared,
+            (true, Some(refreshed), _) => Self::Refreshed(refreshed),
+            (true, None, SelectionOrigin::StackLayer) => Self::Unchanged,
         }
     }
 }
@@ -57,49 +53,44 @@ mod tests {
             draft: false,
             created_at: String::new(),
             updated_at: updated_at.into(),
+            stack: None,
         }
     }
 
     /// Without a previous selection nothing is selected afterwards.
     #[test]
     fn no_previous_selection_clears() {
-        let refreshed = [pull_request(1, "t")];
         assert_eq!(
-            SelectionAfterRefresh::decide(None, &refreshed),
+            SelectionAfterRefresh::decide(false, SelectionOrigin::Listed, None),
             SelectionAfterRefresh::Cleared
         );
     }
 
-    /// A selected pull request that left the queue clears the selection.
+    /// A listed pull request that left every list clears the selection.
     #[test]
-    fn removed_pull_request_clears() {
-        let previous = pull_request(9, "t");
-        let refreshed = [pull_request(1, "t")];
+    fn removed_listed_pull_request_clears() {
         assert_eq!(
-            SelectionAfterRefresh::decide(Some(&previous), &refreshed),
+            SelectionAfterRefresh::decide(true, SelectionOrigin::Listed, None),
             SelectionAfterRefresh::Cleared
         );
     }
 
-    /// An unchanged pull request stays selected at its new index.
+    /// A stack layer opened from the map stays selected though no list has it.
     #[test]
-    fn unchanged_pull_request_is_kept_at_new_index() {
-        let previous = pull_request(2, "t");
-        let refreshed = [pull_request(1, "t"), pull_request(2, "t")];
+    fn unlisted_stack_layer_stays() {
         assert_eq!(
-            SelectionAfterRefresh::decide(Some(&previous), &refreshed),
-            SelectionAfterRefresh::Kept(1)
+            SelectionAfterRefresh::decide(true, SelectionOrigin::StackLayer, None),
+            SelectionAfterRefresh::Unchanged
         );
     }
 
-    /// An updated pull request stays selected and is marked for a file reload.
+    /// A pull request still listed is taken as the refresh has it.
     #[test]
-    fn updated_pull_request_is_kept_and_marked() {
-        let previous = pull_request(1, "t1");
-        let refreshed = [pull_request(1, "t2")];
+    fn listed_pull_request_is_refreshed() {
+        let refreshed = pull_request(1, "t2");
         assert_eq!(
-            SelectionAfterRefresh::decide(Some(&previous), &refreshed),
-            SelectionAfterRefresh::KeptAndUpdated(0)
+            SelectionAfterRefresh::decide(true, SelectionOrigin::Listed, Some(&refreshed)),
+            SelectionAfterRefresh::Refreshed(&refreshed)
         );
     }
 }

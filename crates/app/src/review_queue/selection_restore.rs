@@ -4,24 +4,22 @@ use super::restore_phase::RestorePhase;
 
 /// What to do with a selection saved before the last relaunch.
 #[derive(Debug, PartialEq, Eq)]
-pub enum SelectionRestore {
-    /// The pull request is in the queue at this index: select it.
-    Select(usize),
-    /// Not in the cached queue; it may appear once the queue is refreshed.
+pub enum SelectionRestore<'found> {
+    /// The pull request was found: select it.
+    Select(&'found PullRequest),
+    /// Not found yet; it may appear once the lists are refreshed.
     WaitForRefresh,
-    /// Not in the refreshed queue either (merged, closed, review done): drop it.
+    /// Not in the refreshed lists either (merged, closed, review done): drop it.
     Abandon,
 }
 
-impl SelectionRestore {
-    /// Decides how to restore the saved `pull_request_id` against `queue`.
-    pub fn decide(pull_request_id: u64, queue: &[PullRequest], phase: RestorePhase) -> Self {
-        let position = queue
-            .iter()
-            .position(|pull_request| pull_request.id == pull_request_id);
-        match (position, phase) {
-            (Some(index), RestorePhase::CachedQueue | RestorePhase::RefreshedQueue) => {
-                Self::Select(index)
+impl<'found> SelectionRestore<'found> {
+    /// Decides from the saved pull request as found (in a list, or cached
+    /// on its own) and which lists were searched.
+    pub fn decide(found: Option<&'found PullRequest>, phase: RestorePhase) -> Self {
+        match (found, phase) {
+            (Some(pull_request), RestorePhase::CachedQueue | RestorePhase::RefreshedQueue) => {
+                Self::Select(pull_request)
             }
             (None, RestorePhase::CachedQueue) => Self::WaitForRefresh,
             (None, RestorePhase::RefreshedQueue) => Self::Abandon,
@@ -52,35 +50,34 @@ mod tests {
             draft: false,
             created_at: String::new(),
             updated_at: String::new(),
+            stack: None,
         }
     }
 
-    /// A saved pull request still in the queue is selected at its current index.
+    /// A saved pull request that was found is selected.
     #[test]
-    fn present_pull_request_is_selected() {
-        let queue = [pull_request(1), pull_request(2)];
+    fn found_pull_request_is_selected() {
+        let found = pull_request(2);
         assert_eq!(
-            SelectionRestore::decide(2, &queue, RestorePhase::CachedQueue),
-            SelectionRestore::Select(1)
+            SelectionRestore::decide(Some(&found), RestorePhase::CachedQueue),
+            SelectionRestore::Select(&found)
         );
     }
 
-    /// A pull request missing from the cached queue waits for the refresh.
+    /// A pull request missing from the cached lists waits for the refresh.
     #[test]
     fn missing_from_cache_waits_for_refresh() {
-        let queue = [pull_request(1)];
         assert_eq!(
-            SelectionRestore::decide(9, &queue, RestorePhase::CachedQueue),
+            SelectionRestore::decide(None, RestorePhase::CachedQueue),
             SelectionRestore::WaitForRefresh
         );
     }
 
-    /// A pull request missing from the refreshed queue is abandoned.
+    /// A pull request missing from the refreshed lists is abandoned.
     #[test]
     fn missing_after_refresh_is_abandoned() {
-        let queue = [pull_request(1)];
         assert_eq!(
-            SelectionRestore::decide(9, &queue, RestorePhase::RefreshedQueue),
+            SelectionRestore::decide(None, RestorePhase::RefreshedQueue),
             SelectionRestore::Abandon
         );
     }

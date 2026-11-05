@@ -29,7 +29,7 @@ impl DetailRowList {
             return list;
         }
         match content.changed_files {
-            None | Some(ChangedFiles::Loading) => list.rows.push(DetailRow::FilesLoading),
+            None | Some(ChangedFiles::Loading(_)) => list.rows.push(DetailRow::FilesLoading),
             Some(ChangedFiles::Failed(_)) => list.rows.push(DetailRow::FilesFailed),
             Some(ChangedFiles::Loaded(files)) => {
                 list.rows.push(DetailRow::SummaryBar);

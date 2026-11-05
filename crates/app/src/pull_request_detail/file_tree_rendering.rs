@@ -22,9 +22,11 @@ const TREE_INDENT: f32 = 12.;
 const PROGRESS_BAR_HEIGHT: f32 = 4.;
 
 impl PullRequestDetail {
-    /// The panel beside the diff: progress, filter chips, and the files as
-    /// a folder tree in diff order.
+    /// The panel beside the diff: the stack map of a stacked pull request,
+    /// then progress, filter chips, and the files as a folder tree in diff order.
     pub(super) fn render_file_tree_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        // The stack map on top; the tree once files are loaded.
+        let has_files = !self.loaded_files().is_empty();
         div()
             .flex_none()
             .w(px(PANEL_WIDTH))
@@ -35,8 +37,12 @@ impl PullRequestDetail {
             .border_l_1()
             .border_color(theme::border())
             .text_sm()
-            .child(self.render_tree_header(cx))
-            .child(self.render_tree_body(cx))
+            .children(self.render_stack_map(cx))
+            .when(has_files, |panel| {
+                panel
+                    .child(self.render_tree_header(cx))
+                    .child(self.render_tree_body(cx))
+            })
     }
 
     /// Title, viewed progress and the filter chips. Chips show what is

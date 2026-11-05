@@ -16,6 +16,7 @@ pub struct ApiUsageSnapshot {
     pub not_modified: u64,
     pub core: Option<RateLimit>,
     pub search: Option<RateLimit>,
+    pub graphql: Option<RateLimit>,
 }
 
 impl ApiUsage {
@@ -36,6 +37,7 @@ impl ApiUsage {
         match budget {
             Some((RateLimitResource::Core, limit)) => usage.core = Some(limit),
             Some((RateLimitResource::Search, limit)) => usage.search = Some(limit),
+            Some((RateLimitResource::GraphQl, limit)) => usage.graphql = Some(limit),
             None => {}
         }
     }

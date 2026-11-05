@@ -56,8 +56,9 @@ impl Render for PullRequestDetail {
 
         // The sticky header above; the file tree beside the diff when shown.
         // `min_w_0` and `min_h_0` let the pane shrink to the window.
+        // The side panel holds the stack map and the file tree; it shows when either has content.
         let shows_tree = self.file_tree().visibility() == PanelVisibility::Shown
-            && !self.loaded_files().is_empty();
+            && (!self.loaded_files().is_empty() || self.stack().is_some());
         div()
             .flex()
             .flex_col()
@@ -125,7 +126,7 @@ impl PullRequestDetail {
                 .text_color(theme::muted())
                 .child("Select a pull request")
                 .into_any_element(),
-            DetailRow::FilesLoading => render_status_line("Loading files…", theme::muted()),
+            DetailRow::FilesLoading => self.render_loading_card(),
             DetailRow::FilesFailed => self.render_failure(),
             DetailRow::AllFilesHidden => self.render_all_files_hidden(),
             DetailRow::SummaryBar => div()
@@ -188,7 +189,7 @@ impl PullRequestDetail {
     fn render_failure(&self) -> AnyElement {
         let message = match self.changed_files() {
             Some(ChangedFiles::Failed(message)) => message.clone(),
-            Some(ChangedFiles::Loading | ChangedFiles::Loaded(_)) | None => "".into(),
+            Some(ChangedFiles::Loading(_) | ChangedFiles::Loaded(_)) | None => "".into(),
         };
         render_status_line(message, theme::error())
     }

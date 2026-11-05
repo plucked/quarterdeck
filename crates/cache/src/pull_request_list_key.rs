@@ -6,6 +6,8 @@ pub struct PullRequestListKey(&'static str);
 impl PullRequestListKey {
     /// Open pull requests that request the viewer's review.
     pub const REVIEW_REQUESTED: Self = Self("review_requested");
+    /// The viewer's own open pull requests.
+    pub const AUTHORED: Self = Self("authored");
 
     /// The key as stored in SQLite.
     pub fn as_str(self) -> &'static str {

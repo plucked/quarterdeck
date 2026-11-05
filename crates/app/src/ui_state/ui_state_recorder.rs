@@ -5,7 +5,7 @@ use anyhow::Result;
 use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 use qc_cache::{
     CacheTtl, DiffViewSettings, ReviewLayoutState, ReviewQueueViewState, UiStateStore, ViewedFile,
-    WindowPlacement,
+    ViewedScope, WindowPlacement,
 };
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
@@ -38,11 +38,11 @@ impl PendingUiState {
 /// A change to a file's viewed mark, waiting to be written.
 enum ViewedChange {
     Mark {
-        pull_request_id: u64,
+        scope: ViewedScope,
         file: ViewedFile,
     },
     Unmark {
-        pull_request_id: u64,
+        scope: ViewedScope,
         filename: String,
     },
 }
@@ -149,23 +149,23 @@ impl UiStateRecorder {
     }
 
     /// Records that a file is viewed at its current patch and schedules a write.
-    pub fn record_file_viewed(cx: &mut App, pull_request_id: u64, file: ViewedFile) {
+    pub fn record_file_viewed(cx: &mut App, scope: ViewedScope, file: ViewedFile) {
         cx.update_global::<Self, _>(|recorder, cx| {
-            recorder.pending.viewed_changes.push(ViewedChange::Mark {
-                pull_request_id,
-                file,
-            });
+            recorder
+                .pending
+                .viewed_changes
+                .push(ViewedChange::Mark { scope, file });
             recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
 
     /// Records that a file is no longer viewed and schedules a write.
-    pub fn record_file_unviewed(cx: &mut App, pull_request_id: u64, filename: String) {
+    pub fn record_file_unviewed(cx: &mut App, scope: ViewedScope, filename: String) {
         cx.update_global::<Self, _>(|recorder, cx| {
-            recorder.pending.viewed_changes.push(ViewedChange::Unmark {
-                pull_request_id,
-                filename,
-            });
+            recorder
+                .pending
+                .viewed_changes
+                .push(ViewedChange::Unmark { scope, filename });
             recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
@@ -273,14 +273,8 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
     }
     for change in &pending.viewed_changes {
         let written = match change {
-            ViewedChange::Mark {
-                pull_request_id,
-                file,
-            } => store.mark_file_viewed(*pull_request_id, file),
-            ViewedChange::Unmark {
-                pull_request_id,
-                filename,
-            } => store.unmark_file_viewed(*pull_request_id, filename),
+            ViewedChange::Mark { scope, file } => store.mark_file_viewed(scope, file),
+            ViewedChange::Unmark { scope, filename } => store.unmark_file_viewed(scope, filename),
         };
         if let Err(error) = written {
             eprintln!("ui state: cannot save a viewed mark: {error:#}");
@@ -290,9 +284,9 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
 
 /// The viewed marks of a pull request, read through the shared store on the
 /// background executor; an unreadable table counts as no marks.
-pub fn read_viewed_files(store: &Mutex<UiStateStore>, pull_request_id: u64) -> Vec<ViewedFile> {
+pub fn read_viewed_files(store: &Mutex<UiStateStore>, scope: &ViewedScope) -> Vec<ViewedFile> {
     lock_store(store)
-        .viewed_files(pull_request_id)
+        .viewed_files(scope)
         .unwrap_or_else(|error| {
             eprintln!("ui state: ignoring viewed marks: {error:#}");
             Vec::new()

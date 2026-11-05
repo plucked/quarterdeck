@@ -3591,6 +3591,7 @@ name = "quick-check"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
  "gpui",
  "qc-cache",
  "qc-diff",

@@ -10,9 +10,11 @@ use crate::theme;
 const DESCRIPTION_MAX_HEIGHT: f32 = 320.;
 
 impl PullRequestDetail {
-    /// The header that stays above the diff: chevron, title, links and the
-    /// files toggle, a line of metadata and progress, and the description
-    /// while expanded. `None` without a pull request.
+    /// The header that stays above the diff: chevron, title, links, what is
+    /// loading and the files toggle; a line of metadata and progress; the
+    /// stack line of a stacked pull request; the description while
+    /// expanded; and a progress line along the bottom while loading. `None`
+    /// without a pull request.
     pub(super) fn render_sticky_header(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let pull_request = self.pull_request()?;
         let has_description = self.description().is_some();
@@ -63,6 +65,7 @@ impl PullRequestDetail {
                     })
                     .child("Open on GitHub ↗"),
             )
+            .children(self.render_activity_pill())
             .child(Self::render_tree_toggle(cx));
 
         let meta = div()
@@ -79,22 +82,29 @@ impl PullRequestDetail {
                 self.viewed_progress_text()
             ));
 
+        // The padded content, then the progress line flush with the bottom edge.
+        let content = div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .px_4()
+            .py_2()
+            .child(title_row)
+            .child(meta)
+            .children(self.render_stack_bar(cx))
+            .when(is_expanded, |header| {
+                header.child(self.render_description_box())
+            });
         Some(
             div()
                 .flex_none()
                 .flex()
                 .flex_col()
-                .gap_1()
-                .px_4()
-                .py_2()
                 .bg(theme::panel())
                 .border_b_1()
                 .border_color(theme::border())
-                .child(title_row)
-                .child(meta)
-                .when(is_expanded, |header| {
-                    header.child(self.render_description_box())
-                })
+                .child(content)
+                .children(self.render_progress_line())
                 .into_any_element(),
         )
     }

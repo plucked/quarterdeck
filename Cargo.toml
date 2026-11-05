@@ -20,6 +20,7 @@ qc-syntax = { path = "crates/syntax" }
 # external
 anyhow = "1"
 dirs = "7"
+futures = { version = "0.3", default-features = false, features = ["std"] }
 gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 rusqlite = { version = "0.41", features = ["bundled"] }

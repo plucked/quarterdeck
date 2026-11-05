@@ -168,6 +168,96 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         hide_generated     INTEGER NOT NULL CHECK (hide_generated IN (0, 1))
     );
 ",
+    r"
+    -- Where a cached pull request sits in its stack (from GraphQL); all NULL
+    -- for a standalone one.
+    ALTER TABLE pull_requests ADD COLUMN stack_number INTEGER CHECK (stack_number > 0);
+    ALTER TABLE pull_requests ADD COLUMN stack_position INTEGER CHECK (stack_position > 0);
+    ALTER TABLE pull_requests ADD COLUMN stack_size INTEGER CHECK (stack_size > 0);
+    ALTER TABLE pull_requests ADD COLUMN stack_base_ref TEXT;
+
+    -- A stack with its layers, bottom first, and the tag of the response.
+    CREATE TABLE pr_stacks (
+        repo_owner    TEXT    NOT NULL,
+        repo_name     TEXT    NOT NULL,
+        number        INTEGER NOT NULL CHECK (number > 0),
+        base_ref      TEXT    NOT NULL,
+        is_open       INTEGER NOT NULL CHECK (is_open IN (0, 1)),
+        etag          TEXT,
+        last_used_at  INTEGER NOT NULL,
+        PRIMARY KEY (repo_owner, repo_name, number)
+    );
+
+    CREATE TABLE pr_stack_layers (
+        repo_owner    TEXT    NOT NULL,
+        repo_name     TEXT    NOT NULL,
+        stack_number  INTEGER NOT NULL,
+        position      INTEGER NOT NULL CHECK (position >= 0),
+        -- The pulls API id, not the search id of pull_requests.id.
+        pr_id         INTEGER NOT NULL,
+        pr_number     INTEGER NOT NULL CHECK (pr_number > 0),
+        title         TEXT    NOT NULL,
+        is_open       INTEGER NOT NULL CHECK (is_open IN (0, 1)),
+        is_draft      INTEGER NOT NULL CHECK (is_draft IN (0, 1)),
+        is_merged     INTEGER NOT NULL CHECK (is_merged IN (0, 1)),
+        html_url      TEXT    NOT NULL,
+        head_ref      TEXT    NOT NULL,
+        head_sha      TEXT    NOT NULL,
+        base_ref      TEXT    NOT NULL,
+        base_sha      TEXT    NOT NULL,
+        author_login  TEXT    NOT NULL,
+        PRIMARY KEY (repo_owner, repo_name, stack_number, position),
+        FOREIGN KEY (repo_owner, repo_name, stack_number)
+            REFERENCES pr_stacks (repo_owner, repo_name, number) ON DELETE CASCADE
+    );
+
+    -- The changed files between two commits (a combined stack diff). Commits
+    -- never change, so a set never goes stale; last_used_at drives cleanup.
+    CREATE TABLE compare_file_sets (
+        repo_owner    TEXT    NOT NULL,
+        repo_name     TEXT    NOT NULL,
+        base_sha      TEXT    NOT NULL,
+        head_sha      TEXT    NOT NULL,
+        last_used_at  INTEGER NOT NULL,
+        PRIMARY KEY (repo_owner, repo_name, base_sha, head_sha)
+    );
+
+    CREATE TABLE compare_files (
+        repo_owner         TEXT    NOT NULL,
+        repo_name          TEXT    NOT NULL,
+        base_sha           TEXT    NOT NULL,
+        head_sha           TEXT    NOT NULL,
+        position           INTEGER NOT NULL,
+        filename           TEXT    NOT NULL,
+        previous_filename  TEXT,
+        status             TEXT    NOT NULL,
+        additions          INTEGER NOT NULL CHECK (additions >= 0),
+        deletions          INTEGER NOT NULL CHECK (deletions >= 0),
+        patch              TEXT,
+        PRIMARY KEY (repo_owner, repo_name, base_sha, head_sha, position),
+        FOREIGN KEY (repo_owner, repo_name, base_sha, head_sha)
+            REFERENCES compare_file_sets (repo_owner, repo_name, base_sha, head_sha) ON DELETE CASCADE
+    );
+
+    -- Viewed marks of a combined stack review, per range of layers (by the
+    -- numbers of its first and last pull request). Like viewed_files, the
+    -- fingerprint of a different patch means the file changed.
+    CREATE TABLE combined_viewed_files (
+        repo_owner         TEXT    NOT NULL,
+        repo_name          TEXT    NOT NULL,
+        first_number       INTEGER NOT NULL CHECK (first_number > 0),
+        last_number        INTEGER NOT NULL CHECK (last_number > 0),
+        filename           TEXT    NOT NULL,
+        patch_fingerprint  INTEGER NOT NULL,
+        PRIMARY KEY (repo_owner, repo_name, first_number, last_number, filename)
+    );
+
+    -- The queue's tab, and how stacks are reviewed.
+    ALTER TABLE review_queue_view ADD COLUMN queue_tab TEXT NOT NULL DEFAULT 'authored'
+        CHECK (queue_tab IN ('authored', 'review_requested'));
+    ALTER TABLE review_layout ADD COLUMN stack_review TEXT NOT NULL DEFAULT 'layer'
+        CHECK (stack_review IN ('layer', 'combined'));
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

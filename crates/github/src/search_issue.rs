@@ -2,8 +2,8 @@ use serde::Deserialize;
 
 use crate::{PullRequest, RepoRef, User};
 
-/// A pull request as `GET /search/issues` returns it: issue-shaped, with the
-/// repository only as an API URL.
+/// A pull request as `GET /search/issues` (and `GET /repos/{o}/{r}/issues/{n}`)
+/// returns it: issue-shaped, with the repository only as an API URL.
 #[derive(Deserialize)]
 pub(crate) struct SearchIssue {
     pub id: u64,
@@ -33,6 +33,7 @@ impl SearchIssue {
             draft: self.draft,
             created_at: self.created_at,
             updated_at: self.updated_at,
+            stack: None,
         })
     }
 }

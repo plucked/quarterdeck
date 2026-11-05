@@ -1,6 +1,7 @@
-use crate::{RepoRef, User};
+use crate::{RepoRef, StackMembership, User};
 
-/// A pull request, normalized from the search API's issue shape.
+/// A pull request, normalized from the search API's issue shape, with its
+/// place in a stack filled in from GraphQL.
 ///
 /// Timestamps are GitHub's ISO 8601 strings, kept as received; `updated_at`
 /// doubles as the version the cache checks derived data against.
@@ -17,4 +18,7 @@ pub struct PullRequest {
     pub draft: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// Where it sits in a stack; `None` for a standalone pull request (and
+    /// until the stack membership query answered).
+    pub stack: Option<StackMembership>,
 }

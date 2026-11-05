@@ -4,7 +4,9 @@ use anyhow::{Context as _, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::database_connection::{default_database_path, open_database};
-use crate::{DetailScrollPosition, DisplayUuid, ReviewQueueViewState, WindowMode, WindowPlacement};
+use crate::{
+    DetailScrollPosition, DisplayUuid, QueueTab, ReviewQueueViewState, WindowMode, WindowPlacement,
+};
 
 /// The single row id of the one-row UI state tables.
 pub(crate) const SINGLE_ROW_ID: i64 = 1;
@@ -24,6 +26,7 @@ struct StoredReviewQueueView {
     selected_id: Option<i64>,
     scroll_row: i64,
     scroll_row_offset: f32,
+    queue_tab: String,
 }
 
 /// A connection to the database for the UI state the app restores after a
@@ -127,7 +130,7 @@ impl UiStateStore {
         let row = self
             .connection
             .query_row(
-                "SELECT selected_pr_id, detail_scroll_row, detail_scroll_row_offset
+                "SELECT selected_pr_id, detail_scroll_row, detail_scroll_row_offset, queue_tab
                  FROM review_queue_view WHERE id = ?1",
                 [SINGLE_ROW_ID],
                 |row| {
@@ -135,6 +138,7 @@ impl UiStateStore {
                         selected_id: row.get(0)?,
                         scroll_row: row.get(1)?,
                         scroll_row_offset: row.get(2)?,
+                        queue_tab: row.get(3)?,
                     })
                 },
             )
@@ -149,7 +153,10 @@ impl UiStateStore {
             .map(u64::try_from)
             .transpose()
             .context("negative pull request id")?;
+        let tab = QueueTab::from_sql_text(&stored.queue_tab)
+            .ok_or_else(|| anyhow!("unknown queue tab {:?}", stored.queue_tab))?;
         Ok(Some(ReviewQueueViewState {
+            tab,
             selected_pull_request_id,
             detail_scroll: DetailScrollPosition {
                 row: usize::try_from(stored.scroll_row).context("negative scroll row")?,
@@ -166,17 +173,19 @@ impl UiStateStore {
             .transpose()
             .context("pull request id exceeds SQLite's integer range")?;
         self.connection.execute(
-            "INSERT INTO review_queue_view (id, selected_pr_id, detail_scroll_row, detail_scroll_row_offset)
-             VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO review_queue_view (id, selected_pr_id, detail_scroll_row, detail_scroll_row_offset, queue_tab)
+             VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (id) DO UPDATE SET
                 selected_pr_id = excluded.selected_pr_id,
                 detail_scroll_row = excluded.detail_scroll_row,
-                detail_scroll_row_offset = excluded.detail_scroll_row_offset",
+                detail_scroll_row_offset = excluded.detail_scroll_row_offset,
+                queue_tab = excluded.queue_tab",
             params![
                 SINGLE_ROW_ID,
                 selected_id,
                 i64::try_from(state.detail_scroll.row)?,
-                state.detail_scroll.offset_in_row
+                state.detail_scroll.offset_in_row,
+                state.tab.as_sql_text()
             ],
         )?;
         Ok(())
@@ -227,6 +236,7 @@ mod tests {
                 row: 120,
                 offset_in_row: 6.5,
             },
+            tab: QueueTab::ReviewRequested,
         };
         store.put_review_queue_view_state(&selected).unwrap();
         assert_eq!(store.review_queue_view_state().unwrap(), Some(selected));

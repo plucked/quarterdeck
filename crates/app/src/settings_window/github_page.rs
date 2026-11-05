@@ -70,10 +70,11 @@ fn describe_usage(usage: ApiUsageSnapshot) -> String {
         )
     };
     format!(
-        "{} requests, {} answered unchanged at no cost · {} · {}",
+        "{} requests, {} answered unchanged at no cost · {} · {} · {}",
         usage.requests,
         usage.not_modified,
         budget("core", usage.core),
-        budget("search", usage.search)
+        budget("search", usage.search),
+        budget("GraphQL", usage.graphql)
     )
 }
