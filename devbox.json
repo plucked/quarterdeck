@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.0/.schema/devbox.schema.json",
+  "packages": [
+    "rustup@latest",
+    "bacon@latest",
+    "gh@latest",
+    "sqlite@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "rustup show active-toolchain >/dev/null 2>&1 || rustup toolchain install",
+      "echo 'Quarterdeck: devbox run app | dev | check | test'"
+    ],
+    "scripts": {
+      "app": "cargo run --release",
+      "dev": "bacon",
+      "test": "cargo test --workspace",
+      "check": [
+        "cargo fmt --all --check",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "cargo clippy --workspace -- -D warnings",
+        "cargo test --workspace",
+        "RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --workspace"
+      ]
+    }
+  }
+}

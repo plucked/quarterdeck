@@ -46,6 +46,21 @@ cargo run --release
 
 Quarterdeck uses `GITHUB_TOKEN` when it is set, otherwise the GitHub CLI's login. Without either it shows what it has cached.
 
+### With Devbox
+
+With [Devbox](https://www.jetify.com/devbox), the tools come pinned in a shell of their own (Rust through `rustup`, bacon, the GitHub CLI, SQLite); Xcode's command line tools still have to be installed on the Mac:
+
+```bash
+devbox run app             # build and start Quarterdeck
+devbox run dev             # rebuild and relaunch on every save (bacon)
+devbox run check           # format, lint, test and docs checks
+devbox shell               # a shell with the tools, for anything else
+```
+
+The first run installs Nix if it is missing (Devbox asks for your password) and fetches the tools; `devbox.lock` pins their versions once created.
+
+### Working on it
+
 For working on Quarterdeck itself, [bacon](https://dystroy.org/bacon) rebuilds and relaunches on every save, and the app reopens where it was:
 
 ```bash

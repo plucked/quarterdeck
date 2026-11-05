@@ -32,6 +32,8 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 ```
 
+Devbox: `devbox.json` pins rustup, bacon, gh, sqlite; `devbox run app | dev | check | test`. Commit `devbox.lock` once it exists (it is created on the first Devbox run, which needs Nix).
+
 ## Facts
 - gpui 0.2.2 from crates.io, `default-features = false`, features `font-kit` + `runtime_shaders` (no Metal Toolchain needed to build).
 - Token: `GITHUB_TOKEN`, else `gh auth token`. Without one the app shows cached data only.
