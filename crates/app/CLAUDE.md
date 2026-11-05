@@ -13,7 +13,7 @@
 | `fetch_stack` | `cached_stack` / `refresh_stack`: a stack's layers from the cache, and checked with GitHub (conditional), used by the queue and the detail |
 | `ui_state` | `UiStateRecorder` global (reads saved UI state, batches writes) and window placement conversion |
 | `diff_view` | per-row diff rendering (file header, hunk header, unified line, split row, note, card framing) and `DiffSummaryBar` |
-| `segmented_control` | `SegmentedControl`: reusable row of exclusive options |
+| `segmented_control` | `SegmentedControl`: reusable row of exclusive options; `fill_width` spans its container |
 | `text_area` | `TextArea`: multiline text editor entity (gpui has none): typing through the system input handler (IME), selection, word/line moves, copy/cut/paste, cmd-enter → `TextAreaEvent::Submit`, escape → `Cancel`; key context `TextArea` |
 | `panel_toggle` | `PanelToggle` + `PanelEdge`: icon button drawn as a window outline with the panel's strip (filled while shown), for the top bar |
 | `button` | `Button`: small text button (plain, ghost, primary, danger; selected, disabled) |
@@ -22,7 +22,7 @@
 | `resize_handle` | `ResizeHandle`: reusable divider strip between two panels in a flex row; dragging it reports a clamped width (`ResizeEdge` says which side the panel is on) |
 | `markdown_view` | `MarkdownView`: reusable component rendering a `qc_markdown::MarkdownDocument`, with mouse text selection and copy |
 | `theme` | colors and fonts: a dark palette of layered surfaces (sidebar < background < panel < surface), borders (normal, strong), three text levels (text, muted, subtle), one accent; the system UI font, Menlo for code |
-| `review_queue` | main view: the top bar (sidebar toggle, Mine / Review tabs, refresh, title, side panel toggle), Mine / Review lists (`QueueLists`), stacks grouped in the sidebar (`QueueRow`), selection by id (`SelectionOrigin`), opening stack layers in no list, refresh schedule, restore; owns the detail view |
+| `review_queue` | main view: the top bar (sidebar toggle, refresh, title, side panel toggle), the sidebar with Mine / Review tabs atop its lists (`QueueLists`), stacks grouped in the sidebar (`QueueRow`), selection by id (`SelectionOrigin`), opening stack layers in no list, refresh schedule, restore; owns the detail view |
 | `pull_request_detail` | `PullRequestDetail` view: sticky header (title, meta, stack bar, collapsible description, activity pill + progress line), files as one virtualized `list` of `DetailRow`s, side panel (Files / Review tabs); `ReviewTarget` (layer / combined range), loads files with `LoadProgress`, builds/colors diffs, settings, viewed/collapsed, filters |
 
 - Key bindings: `cmd-,` settings, `cmd-w` close window (settings window handles it), `cmd-r` refresh, `cmd-c` copy (handled by the focused view, e.g. a `MarkdownView` with a selection), `cmd-q` quit, `cmd-b` side panel, `ctrl-cmd-s` sidebar. `cmd-1`/`cmd-2` Mine / Review tab. Single keys only in `ReviewQueue && !TextArea` (the queue's context, not while a text area has focus): `]`/`[` next/previous shown file, `v` mark the top file viewed and jump to the next unviewed one, `}`/`{` next/previous stack layer, `c` layer ↔ combined review. The queue handles them and delegates to the detail.

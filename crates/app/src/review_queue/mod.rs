@@ -6,8 +6,8 @@
 //!
 //! Files:
 //! - `review_queue.rs`: `ReviewQueue`, the queue, selection, refresh and restore, and `Render`.
-//! - `sidebar_rendering.rs`: renders the queue list and its status line.
-//! - `top_bar_rendering.rs`: the bar across the window's top (panel toggles, tabs, refresh).
+//! - `sidebar_rendering.rs`: renders the queue list, its tabs and its status line.
+//! - `top_bar_rendering.rs`: the bar across the window's top (panel toggles, refresh, title).
 //! - `refresh_status.rs`: `RefreshStatus`, the state of the queue's refresh.
 //! - `refresh_schedule.rs`: `RefreshSchedule`, when the queue refreshes on its own.
 //! - `activation_refresh.rs`: `ActivationRefresh`, whether a window activation refreshes.

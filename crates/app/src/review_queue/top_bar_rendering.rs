@@ -1,11 +1,10 @@
-use gpui::{ClickEvent, Context, FontWeight, IntoElement, MouseButton, div, prelude::*, px};
-use qc_cache::{PanelVisibility, QueueTab};
+use gpui::{ClickEvent, Context, FontWeight, IntoElement, div, prelude::*, px};
+use qc_cache::PanelVisibility;
 
 use super::ReviewQueue;
 use crate::button::Button;
 use crate::panel_toggle::{PanelEdge, PanelToggle};
 use crate::pull_request_detail::PullRequestDetail;
-use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
 /// Height of the bar; the window's title bar is drawn by the app, so the
@@ -18,8 +17,7 @@ const APP_TITLE: &str = "Quick Check";
 
 impl ReviewQueue {
     /// The bar across the top of the window, in place of the system title
-    /// bar: the sidebar toggle, the Mine / Review tabs and refresh on the
-    /// left, the app's name in the middle, and the side panel toggle on the
+    /// bar: the sidebar toggle and refresh on the left, the app's name in the middle, and the side panel toggle on the
     /// right. Its empty parts drag the window; a double click zooms it.
     pub(super) fn render_top_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let is_side_panel_shown = self.detail().read(cx).is_side_panel_shown();
@@ -63,7 +61,6 @@ impl ReviewQueue {
                 )
                 .on_click(cx.listener(|queue, _, _, cx| queue.toggle_sidebar(cx))),
             )
-            .child(self.render_tabs(cx))
             .child(
                 Button::new("refresh", "↻ Refresh")
                     .ghost()
@@ -78,36 +75,6 @@ impl ReviewQueue {
                             .detail()
                             .update(cx, PullRequestDetail::toggle_file_tree);
                     })),
-            )
-    }
-
-    /// The Mine / Review tabs with their counts.
-    fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let tab = self.tab();
-        let authored = self.lists().authored.len();
-        let review_requested = self.lists().review_requested.len();
-        let queue = cx.entity().downgrade();
-        let show_tab = move |tab: QueueTab| {
-            let queue = queue.clone();
-            move |_: &mut gpui::Window, cx: &mut gpui::App| {
-                queue.update(cx, |queue, cx| queue.show_tab(tab, cx)).ok();
-            }
-        };
-        // Clicks on the tabs must not reach the bar's double-click zoom.
-        div()
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(
-                SegmentedControl::new("queue-tabs")
-                    .option(
-                        format!("Mine  {authored}"),
-                        tab == QueueTab::Authored,
-                        show_tab(QueueTab::Authored),
-                    )
-                    .option(
-                        format!("Review  {review_requested}"),
-                        tab == QueueTab::ReviewRequested,
-                        show_tab(QueueTab::ReviewRequested),
-                    ),
             )
     }
 }

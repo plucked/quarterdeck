@@ -12,6 +12,7 @@ use super::queue_row::{QueueRow, StackGroup};
 use super::refresh_status::RefreshStatus;
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
+use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
 /// How narrow and how wide the sidebar can be dragged.
@@ -34,7 +35,7 @@ impl ReviewQueue {
             .h_full()
             .flex_shrink_0()
             .bg(theme::sidebar())
-            .child(self.render_sidebar_header())
+            .child(self.render_sidebar_header(cx))
             .child(
                 // The list fills the rest of the column, with a scrollbar over its right edge.
                 div()
@@ -74,15 +75,45 @@ impl ReviewQueue {
         )
     }
 
-    /// What is going on (refreshing, opening a layer, a failure), above
-    /// the rows; nothing while all is quiet.
-    fn render_sidebar_header(&self) -> impl IntoElement {
+    /// The Mine / Review tabs atop the list, and what is going on
+    /// (refreshing, opening a layer, a failure) while it lasts.
+    fn render_sidebar_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let status = self.render_status_line();
         div()
+            .flex()
+            .flex_col()
+            .gap_2()
             .px_3()
-            .pt_1()
-            .when(status.is_some(), |header| header.pt_2().pb_1())
+            .pt_3()
+            .pb_2()
+            .child(self.render_tabs(cx))
             .children(status)
+    }
+
+    /// The Mine / Review tabs with their counts.
+    fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let tab = self.tab();
+        let authored = self.lists().authored.len();
+        let review_requested = self.lists().review_requested.len();
+        let queue = cx.entity().downgrade();
+        let show_tab = move |tab: QueueTab| {
+            let queue = queue.clone();
+            move |_: &mut gpui::Window, cx: &mut gpui::App| {
+                queue.update(cx, |queue, cx| queue.show_tab(tab, cx)).ok();
+            }
+        };
+        SegmentedControl::new("queue-tabs")
+            .fill_width()
+            .option(
+                format!("Mine  {authored}"),
+                tab == QueueTab::Authored,
+                show_tab(QueueTab::Authored),
+            )
+            .option(
+                format!("Review  {review_requested}"),
+                tab == QueueTab::ReviewRequested,
+                show_tab(QueueTab::ReviewRequested),
+            )
     }
 
     /// The refresh state, an opening stack layer, or why one did not open.

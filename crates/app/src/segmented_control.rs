@@ -1,12 +1,23 @@
 //! `SegmentedControl`: a row of mutually exclusive options, like a toolbar
 //! toggle between "Unified" and "Split".
 
-use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window, div, prelude::*};
+use gpui::{
+    App, ElementId, IntoElement, RenderOnce, SharedString, Styled, Window, div, prelude::*,
+};
 
 use crate::theme;
 
 /// What an option does when clicked.
 type SelectHandler = Box<dyn Fn(&mut Window, &mut App)>;
+
+/// How wide the control is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ControlWidth {
+    /// As wide as its labels.
+    Fit,
+    /// As wide as its container, the options sharing it equally.
+    Fill,
+}
 
 /// One option of a [`SegmentedControl`].
 struct SegmentOption {
@@ -21,6 +32,7 @@ struct SegmentOption {
 pub struct SegmentedControl {
     id: ElementId,
     options: Vec<SegmentOption>,
+    width: ControlWidth,
 }
 
 impl SegmentedControl {
@@ -29,7 +41,15 @@ impl SegmentedControl {
         Self {
             id: id.into(),
             options: Vec::new(),
+            width: ControlWidth::Fit,
         }
+    }
+
+    /// Spans the container's width, the options sharing it equally.
+    #[must_use]
+    pub fn fill_width(mut self) -> Self {
+        self.width = ControlWidth::Fill;
+        self
     }
 
     /// Adds an option, shown selected when `is_selected`.
@@ -54,6 +74,7 @@ impl RenderOnce for SegmentedControl {
             .id(self.id)
             .flex()
             .flex_none()
+            .when(self.width == ControlWidth::Fill, Styled::w_full)
             .gap_0p5()
             .p_0p5()
             .rounded_md()
@@ -66,6 +87,9 @@ impl RenderOnce for SegmentedControl {
                     .id(index)
                     .px_2()
                     .py_0p5()
+                    .when(self.width == ControlWidth::Fill, |segment| {
+                        segment.flex_1().flex().justify_center()
+                    })
                     .rounded(gpui::px(4.))
                     .cursor_pointer()
                     .font_weight(gpui::FontWeight::MEDIUM)
