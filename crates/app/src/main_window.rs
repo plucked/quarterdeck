@@ -4,6 +4,7 @@ use qc_cache::DisplayUuid;
 
 use crate::app_services::AppServices;
 use crate::review_queue::ReviewQueue;
+use crate::theme;
 use crate::ui_state::{UiStateRecorder, placement_from_window};
 
 /// The root view of the main window: owns the review queue and records the
@@ -51,6 +52,9 @@ impl MainWindow {
 
 impl Render for MainWindow {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        div().size_full().child(self.review_queue.clone())
+        div()
+            .size_full()
+            .font_family(theme::UI_FONT)
+            .child(self.review_queue.clone())
     }
 }

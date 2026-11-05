@@ -6,12 +6,13 @@ use qc_file_tree::{FacetChoice, FacetCount};
 
 use super::chip_click::ChipClick;
 use super::pull_request_detail::PullRequestDetail;
+use crate::checkbox::{CheckState, Checkbox};
 use crate::theme;
 
 /// Type chips shown before "more"; picked or hidden ones always show.
 const COLLAPSED_TYPE_CHIPS: usize = 8;
 /// Width of a chip row's label column, so both rows' chips line up.
-const ROW_LABEL_WIDTH: f32 = 34.;
+const ROW_LABEL_WIDTH: f32 = 38.;
 
 impl PullRequestDetail {
     /// The filter under the progress bar: the viewed switch, the kind and
@@ -41,8 +42,9 @@ impl PullRequestDetail {
             .text_color(theme::muted())
             .hover(|style| style.text_color(theme::text()))
             .on_click(cx.listener(|detail, _, _, cx| detail.toggle_hide_viewed(cx)))
-            .child(if is_on { "☑" } else { "☐" })
-            .child(format!("Hide viewed ({viewed})"))
+            .child(Checkbox::new(CheckState::from_bool(is_on)))
+            .child("Hide viewed")
+            .child(div().text_color(theme::subtle()).child(viewed.to_string()))
     }
 
     /// The kind chips: Code, Tests, Generated, Moved (those present).
@@ -115,6 +117,7 @@ impl PullRequestDetail {
                 div()
                     .id("type-more")
                     .px_1()
+                    .py_0p5()
                     .text_xs()
                     .text_color(theme::accent())
                     .cursor_pointer()
@@ -134,8 +137,8 @@ impl PullRequestDetail {
         if parts.is_empty() {
             return div()
                 .text_xs()
-                .text_color(theme::muted())
-                .child("Click a chip to show only it · ⌥-click to hide it")
+                .text_color(theme::subtle())
+                .child("Click to show only · ⌥-click to hide")
                 .into_any_element();
         }
         let (shown, total) = self.file_tree().shown_of_total();
@@ -193,10 +196,11 @@ fn render_chip_row(label: &'static str, chips: Vec<AnyElement>) -> Div {
             div()
                 .flex_none()
                 .w(gpui::px(ROW_LABEL_WIDTH))
-                .pt_0p5()
-                .text_xs()
-                .text_color(theme::muted())
-                .child(label),
+                .pt(gpui::px(3.))
+                .text_size(gpui::px(10.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(theme::subtle())
+                .child(label.to_uppercase()),
         )
         .child(div().flex_1().flex().flex_wrap().gap_1().children(chips))
 }
@@ -217,27 +221,33 @@ fn render_chip<T>(
         .id(id)
         .flex()
         .gap_1()
-        .px_1p5()
-        .rounded_md()
+        .px_2()
+        .py_0p5()
+        .rounded_full()
         .border_1()
         .text_xs()
         .cursor_pointer()
         .child(label.to_owned())
-        .child(div().text_color(theme::muted()).child(number.to_string()));
+        .child(div().text_color(theme::subtle()).child(number.to_string()));
     match choice {
         FacetChoice::Only => chip
             .border_color(theme::accent())
             .bg(theme::selected())
             .text_color(theme::text())
-            .font_weight(FontWeight::SEMIBOLD),
+            .font_weight(FontWeight::MEDIUM),
         FacetChoice::Hidden => chip
             .border_color(theme::border())
-            .text_color(theme::muted())
+            .text_color(theme::subtle())
             .line_through(),
         FacetChoice::Open => chip
             .border_color(theme::border())
-            .text_color(theme::text())
-            .hover(|style| style.bg(theme::hover()))
+            .bg(theme::surface())
+            .text_color(theme::muted())
+            .hover(|style| {
+                style
+                    .border_color(theme::border_strong())
+                    .text_color(theme::text())
+            })
             .when(count.matching == 0, |chip| chip.opacity(0.45)),
     }
 }

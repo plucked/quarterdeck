@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{
-    AnyElement, Context, Div, FontWeight, IntoElement, Rgba, Styled, div, prelude::*, px, relative,
+    AnyElement, Context, FontWeight, IntoElement, Rgba, Styled, div, prelude::*, px, relative,
     uniform_list,
 };
 use qc_file_tree::{TreeNodeKind, TreeRow};
@@ -9,6 +9,7 @@ use qc_file_tree::{TreeNodeKind, TreeRow};
 use super::folder_viewed_state::FolderViewedState;
 use super::pull_request_detail::PullRequestDetail;
 use super::side_panel_tab::SidePanelTab;
+use crate::checkbox::{CheckState, Checkbox};
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
@@ -76,9 +77,10 @@ impl PullRequestDetail {
         div()
             .flex()
             .flex_col()
-            .gap_2()
+            .gap_2p5()
             .px_3()
-            .py_2()
+            .pt_2p5()
+            .pb_3()
             .border_b_1()
             .border_color(theme::border())
             .child(
@@ -88,18 +90,17 @@ impl PullRequestDetail {
                     .gap_2()
                     .child(
                         div()
-                            .flex_1()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child("Files"),
+                            .flex_none()
+                            .text_xs()
+                            .text_color(theme::muted())
+                            .child(format!("{viewed} of {} viewed", files.len())),
                     )
                     .child(
                         div()
-                            .text_xs()
-                            .text_color(theme::muted())
-                            .child(format!("{viewed}/{} viewed", files.len())),
+                            .flex_1()
+                            .child(render_progress_bar(viewed, files.len())),
                     ),
             )
-            .child(render_progress_bar(viewed, files.len()))
             .child(self.render_filter_controls(cx))
     }
 
@@ -144,8 +145,8 @@ impl PullRequestDetail {
             .collect()
     }
 
-    /// A folder row (chevron, viewed box, name) or a file row (viewed box,
-    /// status, name), indented by depth. The file at the top of the diff is
+    /// A folder row (chevron, name, viewed box) or a file row (status,
+    /// name, viewed box), indented by depth. The file at the top of the diff is
     /// highlighted.
     fn render_tree_row(&self, index: usize, row: TreeRow, cx: &mut Context<Self>) -> AnyElement {
         let tree = self.file_tree().tree();
@@ -154,12 +155,14 @@ impl PullRequestDetail {
             .id(index)
             .flex()
             .items_center()
-            .gap_1()
+            .gap_1p5()
+            .w_full()
             .h(px(TREE_ROW_HEIGHT))
             .pl(px(TREE_INDENT
                 * f32::from(u16::try_from(row.depth).unwrap_or(u16::MAX))
-                + 8.))
-            .pr_2()
+                + 10.))
+            .pr_3()
+            .text_sm()
             .cursor_pointer()
             .hover(|style| style.bg(theme::hover()));
 
@@ -178,16 +181,9 @@ impl PullRequestDetail {
                         div()
                             .flex_none()
                             .w_3()
-                            .text_color(theme::muted())
+                            .text_xs()
+                            .text_color(theme::subtle())
                             .child(if is_collapsed { "▸" } else { "▾" }),
-                    )
-                    .child(
-                        render_checkbox(folder_glyph(state))
-                            .id(("folder-viewed", index))
-                            .on_click(cx.listener(move |detail, _, _, cx| {
-                                cx.stop_propagation();
-                                detail.toggle_folder_viewed(folder, cx);
-                            })),
                     )
                     .child(
                         div()
@@ -196,6 +192,16 @@ impl PullRequestDetail {
                             .truncate()
                             .text_color(theme::muted())
                             .child(node.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .id(("folder-viewed", index))
+                            .flex_none()
+                            .on_click(cx.listener(move |detail, _, _, cx| {
+                                cx.stop_propagation();
+                                detail.toggle_folder_viewed(folder, cx);
+                            }))
+                            .child(Checkbox::new(folder_check_state(state))),
                     )
                     .into_any_element()
             }
@@ -209,20 +215,11 @@ impl PullRequestDetail {
                 let (letter, color) = status_badge(&loaded.file.status);
                 base.when(is_current, |row| row.bg(theme::selected()))
                     .on_click(cx.listener(move |detail, _, _, cx| detail.reveal_file(file, cx)))
-                    .child(div().flex_none().w_3())
-                    .child(
-                        render_checkbox(if is_viewed { "☑" } else { "☐" })
-                            .id(("file-viewed", index))
-                            .on_click(cx.listener(move |detail, _, _, cx| {
-                                cx.stop_propagation();
-                                detail.toggle_file_viewed(file, cx);
-                            })),
-                    )
                     .child(
                         div()
                             .flex_none()
                             .w_3()
-                            .text_xs()
+                            .text_size(px(9.))
                             .font_weight(FontWeight::BOLD)
                             .text_color(color)
                             .child(letter),
@@ -232,8 +229,18 @@ impl PullRequestDetail {
                             .flex_1()
                             .min_w_0()
                             .truncate()
-                            .when(is_viewed, |name| name.text_color(theme::muted()))
+                            .when(is_viewed, |name| name.text_color(theme::subtle()))
                             .child(node.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .id(("file-viewed", index))
+                            .flex_none()
+                            .on_click(cx.listener(move |detail, _, _, cx| {
+                                cx.stop_propagation();
+                                detail.toggle_file_viewed(file, cx);
+                            }))
+                            .child(Checkbox::new(CheckState::from_bool(is_viewed))),
                     )
                     .into_any_element()
             }
@@ -241,22 +248,12 @@ impl PullRequestDetail {
     }
 }
 
-/// A viewed checkbox glyph that can be clicked on its own.
-fn render_checkbox(glyph: &'static str) -> Div {
-    div()
-        .flex_none()
-        .w_4()
-        .text_color(theme::muted())
-        .hover(|style| style.text_color(theme::text()))
-        .child(glyph)
-}
-
-/// The checkbox glyph for a folder's viewed state.
-fn folder_glyph(state: FolderViewedState) -> &'static str {
+/// The checkbox state for a folder's viewed state.
+fn folder_check_state(state: FolderViewedState) -> CheckState {
     match state {
-        FolderViewedState::None => "☐",
-        FolderViewedState::Some => "◪",
-        FolderViewedState::All => "☑",
+        FolderViewedState::None => CheckState::Unchecked,
+        FolderViewedState::Some => CheckState::Mixed,
+        FolderViewedState::All => CheckState::Checked,
     }
 }
 
@@ -288,6 +285,6 @@ fn status_badge(status: &str) -> (&'static str, Rgba) {
         "removed" => ("D", theme::removed()),
         "renamed" => ("R", theme::renamed()),
         "copied" => ("C", theme::renamed()),
-        _ => ("M", theme::muted()),
+        _ => ("M", theme::accent()),
     }
 }

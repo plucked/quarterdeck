@@ -137,8 +137,9 @@ pub fn render_row(kind: Option<DiffLineKind>) -> Div {
 pub fn render_hunk_header(header: &str, indent: f32) -> Div {
     frame_file_row(
         render_row(None)
+            .bg(theme::hunk_background())
             .pl(px(indent))
-            .text_color(theme::muted())
+            .text_color(theme::subtle())
             .whitespace_nowrap()
             .overflow_hidden()
             .child(header.to_owned()),

@@ -70,8 +70,11 @@ impl PullRequestDetail {
                 .items_center()
                 .gap_1p5()
                 .px_2()
-                .rounded_md()
-                .bg(theme::background())
+                .py_0p5()
+                .rounded_full()
+                .border_1()
+                .border_color(theme::border())
+                .bg(theme::surface())
                 .text_xs()
                 .text_color(theme::muted())
                 .child(
@@ -118,15 +121,15 @@ impl PullRequestDetail {
                     .max_w_full()
                     .flex()
                     .flex_col()
-                    .gap_2()
-                    .p_4()
-                    .rounded_md()
+                    .gap_3()
+                    .p_5()
+                    .rounded_lg()
                     .border_1()
                     .border_color(theme::border())
                     .bg(theme::panel())
                     .child(
                         div()
-                            .font_weight(FontWeight::SEMIBOLD)
+                            .font_weight(FontWeight::MEDIUM)
                             .child(progress.label()),
                     )
                     .child(render_bar(
@@ -134,7 +137,7 @@ impl PullRequestDetail {
                         progress.fraction(),
                         LOADING_BAR_HEIGHT,
                     ))
-                    .child(div().text_xs().text_color(theme::muted()).child(hint)),
+                    .child(div().text_xs().text_color(theme::subtle()).child(hint)),
             )
             .into_any_element()
     }

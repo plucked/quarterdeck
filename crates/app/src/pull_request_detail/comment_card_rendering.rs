@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Context, Div, FontWeight, IntoElement, SharedString, div, prelude::*};
+use gpui::{AnyElement, Context, Div, FontWeight, IntoElement, SharedString, div, prelude::*, px};
 use qc_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote};
 use qc_github::{LineSide, ReviewThread, ThreadComment};
 
@@ -7,6 +7,7 @@ use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::{CommentCard, note_key};
 use crate::button::Button;
 use crate::diff_view::frame_file_row;
+use crate::display_date::short_date;
 use crate::markdown_view::MarkdownView;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
@@ -39,7 +40,7 @@ impl PullRequestDetail {
                 .note(*id)
                 .map(|note| self.render_note_card(note, cx).into_any_element()),
         };
-        frame_file_row(div().px_3().py_1().children(content)).into_any_element()
+        frame_file_row(div().px_4().py_1p5().children(content)).into_any_element()
     }
 
     /// The editor of a new comment under its line, inside its file's frame.
@@ -67,21 +68,21 @@ impl PullRequestDetail {
                     .text_xs()
                     .child(
                         div()
-                            .font_weight(FontWeight::SEMIBOLD)
+                            .font_weight(FontWeight::MEDIUM)
                             .child(format!("New comment · {lines}")),
                     )
                     .child(destination)
                     .child(
                         div()
                             .flex_1()
-                            .text_color(theme::muted())
+                            .text_color(theme::subtle())
                             .text_right()
                             .child("⇧-click another line's + to span lines"),
                     ),
             )
             .child(editor.text.clone())
             .child(Self::render_editor_buttons("composer", "Add comment", cx));
-        frame_file_row(div().px_3().py_1().child(card)).into_any_element()
+        frame_file_row(div().px_4().py_1p5().child(card)).into_any_element()
     }
 
     /// Where the new comment goes: a GitHub / Local switch on a single pull
@@ -134,11 +135,7 @@ impl PullRequestDetail {
             .gap_2()
             .text_xs()
             .text_color(theme::muted())
-            .child(
-                div()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Conversation"),
-            );
+            .child(div().font_weight(FontWeight::MEDIUM).child("Conversation"));
         if thread.is_resolved {
             header = header.child(render_badge("Resolved", theme::added()));
         }
@@ -157,11 +154,11 @@ impl PullRequestDetail {
         if let Some((label, is_resolved)) = resolve {
             let resolving_id = thread_id.clone();
             header = header.child(
-                Button::new(element_id("resolve", &thread_id), label).on_click(cx.listener(
-                    move |detail, _, _, cx| {
+                Button::new(element_id("resolve", &thread_id), label)
+                    .ghost()
+                    .on_click(cx.listener(move |detail, _, _, cx| {
                         detail.set_thread_resolved(resolving_id.clone(), is_resolved, cx);
-                    },
-                )),
+                    })),
             );
         }
 
@@ -191,21 +188,23 @@ impl PullRequestDetail {
                 ));
         } else if thread.permissions.can_reply {
             let path = thread.path.clone();
-            card = card.child(div().child(
-                Button::new(element_id("reply-open", &thread_id), "Reply").on_click(cx.listener(
-                    move |detail, _, window, cx| {
-                        detail.open_editor(
-                            EditorTarget::Reply {
-                                thread_id: thread_id.clone(),
-                                path: path.clone(),
-                            },
-                            "",
-                            window,
-                            cx,
-                        );
-                    },
-                )),
-            ));
+            card = card.child(
+                div().child(
+                    Button::new(element_id("reply-open", &thread_id), "Reply")
+                        .ghost()
+                        .on_click(cx.listener(move |detail, _, window, cx| {
+                            detail.open_editor(
+                                EditorTarget::Reply {
+                                    thread_id: thread_id.clone(),
+                                    path: path.clone(),
+                                },
+                                "",
+                                window,
+                                cx,
+                            );
+                        })),
+                ),
+            );
         }
         card
     }
@@ -228,13 +227,9 @@ impl PullRequestDetail {
                     .child(comment.author_login.clone()),
             )
             .child(
-                div().text_color(theme::muted()).child(
-                    comment
-                        .created_at
-                        .get(..10)
-                        .unwrap_or(&comment.created_at)
-                        .to_owned(),
-                ),
+                div()
+                    .text_color(theme::subtle())
+                    .child(short_date(&comment.created_at)),
             );
         if comment.is_pending {
             header = header.child(render_badge("Pending on GitHub", theme::accent()));
@@ -243,8 +238,9 @@ impl PullRequestDetail {
         if comment.can_update && !is_editing {
             let (id, body) = (comment.id.clone(), comment.body.clone());
             header = header.child(
-                Button::new(element_id("edit-comment", &comment.id), "Edit").on_click(cx.listener(
-                    move |detail, _, window, cx| {
+                Button::new(element_id("edit-comment", &comment.id), "Edit")
+                    .ghost()
+                    .on_click(cx.listener(move |detail, _, window, cx| {
                         detail.open_editor(
                             EditorTarget::EditGitHubComment {
                                 comment_id: id.clone(),
@@ -253,15 +249,14 @@ impl PullRequestDetail {
                             window,
                             cx,
                         );
-                    },
-                )),
+                    })),
             );
         }
         if comment.can_delete {
             let id = comment.id.clone();
             header = header.child(
                 Button::new(element_id("delete-comment", &comment.id), "Delete")
-                    .danger()
+                    .ghost()
                     .on_click(cx.listener(move |detail, _, _, cx| {
                         detail.delete_github_comment(id.clone(), cx);
                     })),
@@ -285,7 +280,7 @@ impl PullRequestDetail {
             .flex()
             .flex_col()
             .gap_1()
-            .pt_1()
+            .pt_2()
             .border_t_1()
             .border_color(theme::border())
             .child(header)
@@ -333,19 +328,21 @@ impl PullRequestDetail {
             .gap_2()
             .text_xs()
             .child(render_badge(label, color))
-            .child(div().text_color(theme::muted()).child(lines))
+            .child(div().text_color(theme::subtle()).child(lines))
             .child(div().flex_1());
         if !is_editing {
             let body = note.body.clone();
-            header = header.child(Button::new(element_id("edit-note", &key), "Edit").on_click(
-                cx.listener(move |detail, _, window, cx| {
-                    detail.open_editor(EditorTarget::EditNote(id), &body, window, cx);
-                }),
-            ));
+            header = header.child(
+                Button::new(element_id("edit-note", &key), "Edit")
+                    .ghost()
+                    .on_click(cx.listener(move |detail, _, window, cx| {
+                        detail.open_editor(EditorTarget::EditNote(id), &body, window, cx);
+                    })),
+            );
         }
         header = header.child(
             Button::new(element_id("delete-note", &key), "Delete")
-                .danger()
+                .ghost()
                 .on_click(cx.listener(move |detail, _, _, cx| detail.delete_note(id, cx))),
         );
         let body = match (is_editing, &self.review().editor) {
@@ -395,6 +392,7 @@ impl PullRequestDetail {
                     gpui::ElementId::NamedChild(Box::new(id.clone()), "cancel".into()),
                     "Cancel",
                 )
+                .ghost()
                 .on_click(cx.listener(|detail, _, window, cx| detail.close_editor(window, cx))),
             )
             .child(
@@ -418,23 +416,25 @@ fn card_frame() -> Div {
     div()
         .flex()
         .flex_col()
-        .gap_1p5()
-        .p_2()
-        .rounded_md()
+        .gap_2()
+        .px_3()
+        .py_2p5()
+        .rounded_lg()
         .border_1()
-        .border_color(theme::border())
-        .bg(theme::panel())
+        .border_color(theme::border_strong())
+        .bg(theme::surface())
 }
 
-/// A small colored label.
+/// A small colored pill.
 fn render_badge(text: impl Into<SharedString>, color: gpui::Rgba) -> impl IntoElement {
     div()
         .flex_none()
-        .px_1()
-        .rounded_sm()
+        .px_1p5()
+        .rounded_full()
         .border_1()
         .border_color(color)
-        .text_xs()
+        .text_size(px(10.))
+        .font_weight(FontWeight::MEDIUM)
         .text_color(color)
         .child(text.into())
 }

@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*};
+use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*, px};
 use qc_cache::{NoteAnchor, NoteDestination, ReviewNote};
 use qc_github::ReviewEvent;
 
@@ -22,7 +22,7 @@ impl PullRequestDetail {
         let review_label = if count == 0 {
             "Review".to_owned()
         } else {
-            format!("Review ({count})")
+            format!("Review  {count}")
         };
         let detail = cx.entity().downgrade();
         let show = move |tab: SidePanelTab| {
@@ -33,7 +33,7 @@ impl PullRequestDetail {
                     .ok();
             }
         };
-        div().flex_none().px_3().pt_2().child(
+        div().flex_none().px_3().pt_3().pb_1().child(
             SegmentedControl::new("side-panel-tabs")
                 .option(
                     "Files",
@@ -63,9 +63,10 @@ impl PullRequestDetail {
             .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap_3()
+            .gap_4()
             .px_3()
-            .py_2()
+            .pt_2()
+            .pb_4()
             .child(self.render_destination_switch(cx))
             .children(self.render_review_status())
             .child(body)
@@ -101,7 +102,7 @@ impl PullRequestDetail {
             .child(
                 div()
                     .text_xs()
-                    .text_color(theme::muted())
+                    .text_color(theme::subtle())
                     .child("Comments go to"),
             )
             .child(
@@ -204,7 +205,7 @@ impl PullRequestDetail {
             .flex()
             .flex_col()
             .gap_3()
-            .child(section_title(format!("Your drafts ({count})")))
+            .child(section_title(&format!("Your drafts ({count})")))
             .child(Self::render_note_list(&drafts, "Click + beside a line in the diff to comment on it. Drafts are posted when you submit.", cx))
             .when(has_pending, |panel| {
                 panel.child(
@@ -220,7 +221,7 @@ impl PullRequestDetail {
                         )),
                 )
             })
-            .child(section_title("Verdict".to_owned()))
+            .child(section_title("Verdict"))
             .child(verdict)
             .children(self.review().summary_editor.clone())
             .child(
@@ -246,7 +247,7 @@ impl PullRequestDetail {
             .flex()
             .flex_col()
             .gap_3()
-            .child(section_title(format!("Local notes ({count})")))
+            .child(section_title(&format!("Local notes ({count})")))
             .child(Self::render_note_list(&notes, "Click + beside a line in the diff to note something. Notes stay on this Mac.", cx))
             .child(
                 div()
@@ -286,8 +287,9 @@ impl PullRequestDetail {
             if current_path != Some(note.path.as_str()) {
                 list = list.child(
                     div()
-                        .pt_1()
+                        .pt_1p5()
                         .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
                         .text_color(theme::muted())
                         .truncate()
                         .child(note.path.clone()),
@@ -311,22 +313,26 @@ impl PullRequestDetail {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .px_1()
-                    .rounded_sm()
+                    .px_2()
+                    .py_1()
+                    .rounded_md()
+                    .border_1()
+                    .border_color(theme::border())
+                    .bg(theme::surface())
                     .text_xs()
                     .cursor_pointer()
-                    .hover(|style| style.bg(theme::hover()))
+                    .hover(|style| style.border_color(theme::border_strong()))
                     .on_click(cx.listener(move |detail, _, _, cx| {
                         detail.reveal_note(id);
                         cx.notify();
                     }))
-                    .child(div().flex_none().text_color(theme::muted()).child(lines))
+                    .child(div().flex_none().text_color(theme::subtle()).child(lines))
                     .child(div().flex_1().min_w_0().truncate().child(first_line))
                     .child(
                         div()
                             .id(element_id("note-delete", &key))
                             .flex_none()
-                            .text_color(theme::muted())
+                            .text_color(theme::subtle())
                             .hover(|style| style.text_color(theme::removed()))
                             .on_click(cx.listener(move |detail, _, _, cx| {
                                 cx.stop_propagation();
@@ -340,19 +346,20 @@ impl PullRequestDetail {
     }
 }
 
-/// A small heading in the panel.
-fn section_title(text: String) -> impl IntoElement {
+/// A small uppercase heading in the panel.
+fn section_title(text: &str) -> impl IntoElement {
     div()
-        .text_xs()
+        .text_size(px(10.))
         .font_weight(FontWeight::SEMIBOLD)
-        .child(text)
+        .text_color(theme::subtle())
+        .child(text.to_uppercase())
 }
 
-/// A muted explanatory line.
+/// A quiet explanatory line.
 fn muted_line(text: &'static str) -> AnyElement {
     div()
         .text_xs()
-        .text_color(theme::muted())
+        .text_color(theme::subtle())
         .child(text)
         .into_any_element()
 }

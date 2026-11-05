@@ -3,6 +3,7 @@ use qc_cache::StackReviewMode;
 
 use super::pull_request_detail::PullRequestDetail;
 use super::review_target::ReviewTarget;
+use crate::button::Button;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
@@ -40,17 +41,20 @@ impl PullRequestDetail {
                 .child(
                     div()
                         .flex_none()
-                        .px_1p5()
-                        .rounded_md()
+                        .px_2()
+                        .py_0p5()
+                        .rounded_full()
                         .bg(theme::selected())
-                        .text_color(theme::text())
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child("⧉ Stack"),
+                        .text_color(theme::accent())
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(format!("Layer {position} of {size}")),
                 )
-                .child(div().flex_none().text_color(theme::muted()).child(format!(
-                    "Layer {position} of {size} → {}",
-                    membership.base_ref
-                )))
+                .child(
+                    div()
+                        .flex_none()
+                        .text_color(theme::subtle())
+                        .child(format!("→ {}", membership.base_ref)),
+                )
                 .child(render_neighbour_button(
                     "layer-below",
                     below.map(|(_, number)| format!("‹ #{number}").into()),
@@ -119,40 +123,23 @@ impl PullRequestDetail {
                 .flex_1()
                 .min_w_0()
                 .truncate()
-                .text_color(theme::muted())
+                .text_color(theme::subtle())
                 .child(text)
                 .into_any_element(),
         )
     }
 }
 
-/// A button to the layer below or above; muted and inert at the stack's end
-/// (or before the layers are known).
+/// A button to the layer below or above; disabled at the stack's end (or
+/// before the layers are known).
 fn render_neighbour_button(
     id: &'static str,
     label: Option<SharedString>,
     end_label: &'static str,
     on_click: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
-) -> AnyElement {
-    let button = div()
-        .id(id)
-        .flex_none()
-        .px_1p5()
-        .rounded_md()
-        .border_1()
-        .border_color(theme::border());
+) -> Button {
     match label {
-        Some(label) => button
-            .text_color(theme::text())
-            .cursor_pointer()
-            .hover(|style| style.bg(theme::hover()))
-            .on_click(on_click)
-            .child(label)
-            .into_any_element(),
-        None => button
-            .text_color(theme::muted())
-            .opacity(0.5)
-            .child(end_label)
-            .into_any_element(),
+        Some(label) => Button::new(id, label).on_click(on_click),
+        None => Button::new(id, end_label).disabled(true),
     }
 }

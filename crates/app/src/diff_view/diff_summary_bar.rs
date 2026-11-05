@@ -3,6 +3,7 @@ use std::rc::Rc;
 use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*};
 
 use super::DiffSummary;
+use crate::button::Button;
 use crate::theme;
 
 /// What a summary bar link does when clicked.
@@ -47,44 +48,32 @@ impl RenderOnce for DiffSummaryBar {
             .flex()
             .items_center()
             .gap_3()
-            .text_sm()
+            .text_xs()
             .text_color(theme::muted())
+            .child(format!("{} files", summary.file_count))
+            .child(
+                div()
+                    .text_color(theme::added())
+                    .child(format!("+{}", summary.additions)),
+            )
+            .child(
+                div()
+                    .text_color(theme::removed())
+                    .child(format!("−{}", summary.deletions)),
+            )
             .child(div().flex_1().min_w_0().child(format!(
-                "{} files · +{} −{} · {}/{} viewed",
-                summary.file_count,
-                summary.additions,
-                summary.deletions,
-                summary.viewed_count,
-                summary.file_count
+                "{}/{} viewed",
+                summary.viewed_count, summary.file_count
             )))
-            .child(render_link(
-                "collapse-all",
-                "Collapse all",
-                move |window, cx| {
-                    collapse_all(window, cx);
-                },
-            ))
-            .child(render_link(
-                "expand-all",
-                "Expand all",
-                move |window, cx| {
-                    expand_all(window, cx);
-                },
-            ))
+            .child(
+                Button::new("collapse-all", "Collapse all")
+                    .ghost()
+                    .on_click(move |_, window, cx| collapse_all(window, cx)),
+            )
+            .child(
+                Button::new("expand-all", "Expand all")
+                    .ghost()
+                    .on_click(move |_, window, cx| expand_all(window, cx)),
+            )
     }
-}
-
-/// A small text link.
-fn render_link(
-    id: &'static str,
-    label: &'static str,
-    on_click: impl Fn(&mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .flex_none()
-        .cursor_pointer()
-        .hover(|style| style.text_color(theme::text()))
-        .on_click(move |_, window, cx| on_click(window, cx))
-        .child(label)
 }

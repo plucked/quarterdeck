@@ -1,6 +1,9 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, Styled, div, prelude::*, px};
+use qc_github::PullRequest;
 
 use super::pull_request_detail::PullRequestDetail;
+use crate::button::Button;
+use crate::display_date::short_date;
 use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
@@ -40,7 +43,8 @@ impl PullRequestDetail {
                 div()
                     .flex_none()
                     .w_3()
-                    .text_color(theme::muted())
+                    .text_xs()
+                    .text_color(theme::subtle())
                     .child(chevron),
             )
             .child(
@@ -52,46 +56,32 @@ impl PullRequestDetail {
                     .when(!is_expanded, Styled::truncate)
                     .child(pull_request.title.clone()),
             )
+            .children(self.render_activity_pill())
             .child(
                 div()
-                    .id("open-on-github")
                     .flex_none()
-                    .text_sm()
-                    .text_color(theme::accent())
-                    .cursor_pointer()
-                    .on_click(move |_, _, cx| {
-                        cx.stop_propagation();
-                        cx.open_url(&url);
-                    })
-                    .child("Open on GitHub ↗"),
-            )
-            .children(self.render_activity_pill())
-            .children(self.render_action_buttons(cx))
-            .child(Self::render_tree_toggle(cx));
-
-        let meta = div()
-            .pl_5()
-            .text_xs()
-            .text_color(theme::muted())
-            .truncate()
-            .child(format!(
-                "{}#{} by {} · updated {}{}",
-                pull_request.repo.full_name(),
-                pull_request.number,
-                pull_request.author.login,
-                pull_request.updated_at,
-                self.viewed_progress_text()
-            ));
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(Button::new("open-on-github", "GitHub ↗").ghost().on_click(
+                        move |_, _, cx| {
+                            cx.open_url(&url);
+                        },
+                    ))
+                    .children(self.render_action_buttons(cx))
+                    .child(self.render_tree_toggle(cx)),
+            );
 
         // The padded content, then the progress line flush with the bottom edge.
         let content = div()
             .flex()
             .flex_col()
-            .gap_1()
+            .gap_1p5()
             .px_4()
-            .py_2()
+            .pt_3()
+            .pb_2p5()
             .child(title_row)
-            .child(meta)
+            .child(self.render_meta_line(pull_request))
             .children(self.render_stack_bar(cx))
             .children(self.render_action_panel(cx))
             .when(is_expanded, |header| {
@@ -111,24 +101,44 @@ impl PullRequestDetail {
         )
     }
 
-    /// The button that shows or hides the file tree.
-    fn render_tree_toggle(cx: &mut Context<Self>) -> impl IntoElement {
+    /// The metadata under the title: draft, where, who, when, and how far
+    /// the review is.
+    fn render_meta_line(&self, pull_request: &PullRequest) -> impl IntoElement {
         div()
-            .id("toggle-file-tree")
-            .flex_none()
-            .px_2()
-            .rounded_md()
-            .border_1()
-            .border_color(theme::border())
+            .pl_5()
+            .flex()
+            .items_center()
+            .gap_2()
             .text_xs()
             .text_color(theme::muted())
-            .cursor_pointer()
-            .hover(|style| style.bg(theme::hover()))
-            .on_click(cx.listener(|detail, _, _, cx| {
-                cx.stop_propagation();
-                detail.toggle_file_tree(cx);
-            }))
-            .child("Files ⌘B")
+            .when(pull_request.draft, |meta| {
+                meta.child(
+                    div()
+                        .flex_none()
+                        .px_1p5()
+                        .rounded_full()
+                        .bg(theme::surface())
+                        .text_color(theme::muted())
+                        .child("Draft"),
+                )
+            })
+            .child(div().min_w_0().truncate().child(format!(
+                "{} #{}  ·  {}  ·  updated {}{}",
+                pull_request.repo.full_name(),
+                pull_request.number,
+                pull_request.author.login,
+                short_date(&pull_request.updated_at),
+                self.viewed_progress_text()
+            )))
+    }
+
+    /// The button that shows or hides the side panel (cmd-b).
+    fn render_tree_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_shown = self.file_tree().visibility() == qc_cache::PanelVisibility::Shown;
+        Button::new("toggle-file-tree", "Panel")
+            .ghost()
+            .selected(is_shown)
+            .on_click(cx.listener(|detail, _, _, cx| detail.toggle_file_tree(cx)))
     }
 
     /// ` · 3/12 viewed` once files are loaded.
@@ -141,7 +151,7 @@ impl PullRequestDetail {
             .iter()
             .filter(|loaded| self.file_review().is_viewed(loaded.filename()))
             .count();
-        format!(" · {viewed}/{} viewed", files.len())
+        format!("  ·  {viewed}/{} viewed", files.len())
     }
 
     /// The description, scrolling inside the header past its maximum height.

@@ -15,10 +15,12 @@
 | `diff_view` | per-row diff rendering (file header, hunk header, unified line, split row, note, card framing) and `DiffSummaryBar` |
 | `segmented_control` | `SegmentedControl`: reusable row of exclusive options |
 | `text_area` | `TextArea`: multiline text editor entity (gpui has none): typing through the system input handler (IME), selection, word/line moves, copy/cut/paste, cmd-enter → `TextAreaEvent::Submit`, escape → `Cancel`; key context `TextArea` |
-| `button` | `Button`: small text button (plain, primary, danger; disabled) |
+| `button` | `Button`: small text button (plain, ghost, primary, danger; selected, disabled) |
+| `checkbox` | `Checkbox` + `CheckState` (unchecked, checked, mixed): a drawn checkbox, used for viewed marks and options |
+| `display_date` | `short_date`: a GitHub timestamp as `21 Oct 2026` |
 | `resize_handle` | `ResizeHandle`: reusable divider strip between two panels in a flex row; dragging it reports a clamped width (`ResizeEdge` says which side the panel is on) |
 | `markdown_view` | `MarkdownView`: reusable component rendering a `qc_markdown::MarkdownDocument`, with mouse text selection and copy |
-| `theme` | colors and fonts |
+| `theme` | colors and fonts: a dark palette of layered surfaces (sidebar < background < panel < surface), borders (normal, strong), three text levels (text, muted, subtle), one accent; the system UI font, Menlo for code |
 | `review_queue` | main view: Mine / Review tabs (`QueueLists`), stacks grouped in the sidebar (`QueueRow`), selection by id (`SelectionOrigin`), opening stack layers in no list, refresh schedule, restore; owns the detail view |
 | `pull_request_detail` | `PullRequestDetail` view: sticky header (title, meta, stack bar, collapsible description, activity pill + progress line), files as one virtualized `list` of `DetailRow`s, side panel (stack map + file tree); `ReviewTarget` (layer / combined range), loads files with `LoadProgress`, builds/colors diffs, settings, viewed/collapsed, filters |
 
@@ -43,4 +45,5 @@
 - Wrapping text in a flex row needs `min_w_0()` on its flex item (see the skill's gpui rules); the detail pane and Markdown list items have it.
 - Window display: gpui reports and takes window bounds relative to the window's display, so the placement saves the display's UUID (`display.uuid()`, stable across reconnects) and `launch_app` reopens with `display_id`; a missing display falls back to the main one, and placements that do not fit their display open centered.
 - gpui on macOS opens windows by content size but reports `window_bounds` as the frame (title bar included): save `viewport_size` for windowed mode or the window grows each relaunch.
+- Look: one accent (blue) for selection and primary actions; secondary actions are ghost buttons; pills (`rounded_full`) for badges, chips and status; cards are `surface` with a strong border; small uppercase `subtle` labels head panel sections; checkboxes are drawn (`Checkbox`), never glyphs.
 - UI changes are verified by running the app; view logic that can be tested without a window lives in plain types (`SelectionAfterRefresh`, `SelectionRestore`, `RefreshSchedule`).

@@ -4,6 +4,7 @@ use qc_github::{MergeOptions, MergeQueueState, PullRequestState};
 use super::action_panel::{ActionPanel, ActionProgress, ArmedAction, PanelAction};
 use super::pull_request_detail::PullRequestDetail;
 use crate::button::Button;
+use crate::checkbox::{CheckState, Checkbox};
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
@@ -19,22 +20,19 @@ impl PullRequestDetail {
                 .flex()
                 .gap_1()
                 .child(
-                    with_open_mark(
-                        Button::new("open-merge", "Merge…"),
-                        open == Some(PanelAction::Merge),
-                    )
-                    .on_click(cx.listener(|detail, _, _, cx| {
-                        detail.toggle_action_panel(PanelAction::Merge, cx);
-                    })),
+                    Button::new("open-merge", "Merge…")
+                        .selected(open == Some(PanelAction::Merge))
+                        .on_click(cx.listener(|detail, _, _, cx| {
+                            detail.toggle_action_panel(PanelAction::Merge, cx);
+                        })),
                 )
                 .child(
-                    with_open_mark(
-                        Button::new("open-close", "Close…"),
-                        open == Some(PanelAction::Close),
-                    )
-                    .on_click(cx.listener(|detail, _, _, cx| {
-                        detail.toggle_action_panel(PanelAction::Close, cx);
-                    })),
+                    Button::new("open-close", "Close…")
+                        .ghost()
+                        .selected(open == Some(PanelAction::Close))
+                        .on_click(cx.listener(|detail, _, _, cx| {
+                            detail.toggle_action_panel(PanelAction::Close, cx);
+                        })),
                 )
                 .into_any_element(),
         )
@@ -63,14 +61,15 @@ impl PullRequestDetail {
             div()
                 .mt_1()
                 .ml_5()
-                .p_3()
+                .px_4()
+                .py_3()
                 .flex()
                 .flex_col()
-                .gap_2()
-                .rounded_md()
+                .gap_2p5()
+                .rounded_lg()
                 .border_1()
-                .border_color(theme::border())
-                .bg(theme::background())
+                .border_color(theme::border_strong())
+                .bg(theme::surface())
                 .text_sm()
                 .child(body)
                 .children(render_progress(&panel.progress))
@@ -350,7 +349,7 @@ impl PullRequestDetail {
             .text_xs()
             .cursor_pointer()
             .on_click(cx.listener(|detail, _, _, cx| detail.toggle_delete_branch(cx)))
-            .child(if is_on { "☑" } else { "☐" })
+            .child(Checkbox::new(CheckState::from_bool(is_on)))
             .child(format!("Delete branch {branch}"))
             .into_any_element()
     }
@@ -377,11 +376,6 @@ impl PullRequestDetail {
     }
 }
 
-/// A button drawn as pressed while its panel is open.
-fn with_open_mark(button: Button, is_open: bool) -> Button {
-    if is_open { button.primary() } else { button }
-}
-
 /// One line of the panel in `color`.
 fn render_line(text: impl Into<SharedString>, color: Rgba) -> AnyElement {
     let text: SharedString = text.into();
@@ -402,8 +396,11 @@ fn render_confirmation(
         .flex()
         .items_center()
         .gap_2()
-        .p_2()
+        .px_3()
+        .py_2()
         .rounded_md()
+        .border_1()
+        .border_color(theme::border())
         .bg(theme::panel())
         .child(
             div()
@@ -413,9 +410,11 @@ fn render_confirmation(
                 .child(question),
         )
         .child(
-            Button::new("action-back", "Back").on_click(cx.listener(|detail, _, _, cx| {
-                detail.arm_action(None, cx);
-            })),
+            Button::new("action-back", "Back")
+                .ghost()
+                .on_click(cx.listener(|detail, _, _, cx| {
+                    detail.arm_action(None, cx);
+                })),
         )
         .child(
             Button::new("action-confirm", confirm_label)

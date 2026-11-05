@@ -49,18 +49,19 @@ impl PullRequestDetail {
                         .items_center()
                         .gap_2()
                         .px_3()
-                        .pt_2()
-                        .pb_1()
+                        .pt_3()
+                        .pb_1p5()
                         .child(
                             div()
                                 .flex_1()
+                                .text_xs()
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .child(format!("Stack #{}", stack.number)),
                         )
                         .child(
                             div()
                                 .text_xs()
-                                .text_color(theme::muted())
+                                .text_color(theme::subtle())
                                 .child(format!("{layer_count} layers → {}", stack.base_ref)),
                         ),
                 )
@@ -68,7 +69,7 @@ impl PullRequestDetail {
                     div()
                         .relative()
                         .h(px(list_height))
-                        .mb_1()
+                        .mb_2()
                         .child(
                             uniform_list(
                                 "stack-map",
@@ -126,7 +127,7 @@ fn render_layer_row(
     let (state_glyph, state_color) = layer_state(layer);
     let rail_color = match role {
         LayerRowRole::Current | LayerRowRole::InRange => theme::accent(),
-        LayerRowRole::Other => theme::border(),
+        LayerRowRole::Other => theme::border_strong(),
     };
     div()
         .id(("stack-layer", index))
@@ -134,12 +135,13 @@ fn render_layer_row(
         .items_center()
         .gap_2()
         .h(px(LAYER_ROW_HEIGHT))
-        .pl_3()
-        .pr_2()
+        .mx_2()
+        .px_1p5()
+        .rounded_md()
         .text_sm()
         .cursor_pointer()
         .when(role == LayerRowRole::Current, |row| {
-            row.bg(theme::selected()).font_weight(FontWeight::SEMIBOLD)
+            row.bg(theme::selected()).font_weight(FontWeight::MEDIUM)
         })
         .when(role != LayerRowRole::Current, |row| {
             row.hover(|style| style.bg(theme::hover()))
@@ -151,13 +153,20 @@ fn render_layer_row(
                 detail.open_layer(index, cx);
             }
         }))
-        .child(div().flex_none().w(px(RAIL_WIDTH)).h_full().bg(rail_color))
         .child(
             div()
                 .flex_none()
-                .w_5()
+                .w(px(RAIL_WIDTH))
+                .h(px(LAYER_ROW_HEIGHT - 8.))
+                .rounded_full()
+                .bg(rail_color),
+        )
+        .child(
+            div()
+                .flex_none()
+                .w_4()
                 .text_xs()
-                .text_color(theme::muted())
+                .text_color(theme::subtle())
                 .child(format!("{}", index + 1)),
         )
         .child(
@@ -172,7 +181,7 @@ fn render_layer_row(
             div()
                 .flex_none()
                 .text_xs()
-                .text_color(theme::muted())
+                .text_color(theme::subtle())
                 .child(format!("#{}", layer.number)),
         )
         .child(
@@ -180,7 +189,11 @@ fn render_layer_row(
                 .flex_1()
                 .min_w_0()
                 .truncate()
-                .when(layer.is_merged, |title| title.text_color(theme::muted()))
+                .text_color(match (role, layer.is_merged) {
+                    (LayerRowRole::Current, _) => theme::text(),
+                    (_, true) => theme::subtle(),
+                    (_, false) => theme::muted(),
+                })
                 .child(layer.title.clone()),
         )
         .into_any_element()

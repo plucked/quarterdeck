@@ -11,6 +11,7 @@ use qc_github::{PullRequest, StackLayer};
 use super::ReviewQueue;
 use super::queue_row::{QueueRow, StackGroup};
 use super::refresh_status::RefreshStatus;
+use crate::button::Button;
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::segmented_control::SegmentedControl;
@@ -33,7 +34,7 @@ impl ReviewQueue {
             .w(px(self.sidebar_width()))
             .h_full()
             .flex_shrink_0()
-            .bg(theme::panel())
+            .bg(theme::sidebar())
             .child(self.render_sidebar_header(cx))
             .child(
                 // The list fills the rest of the column, with a scrollbar over its right edge.
@@ -94,11 +95,10 @@ impl ReviewQueue {
         div()
             .flex()
             .flex_col()
-            .gap_1()
+            .gap_1p5()
             .px_3()
-            .py_2()
-            .border_b_1()
-            .border_color(theme::border())
+            .pt_3()
+            .pb_2()
             .child(
                 div()
                     .flex()
@@ -107,23 +107,20 @@ impl ReviewQueue {
                     .child(
                         SegmentedControl::new("queue-tabs")
                             .option(
-                                format!("Mine ({authored})  ⌘1"),
+                                format!("Mine  {authored}"),
                                 tab == QueueTab::Authored,
                                 show_tab(QueueTab::Authored),
                             )
                             .option(
-                                format!("Review ({review_requested})  ⌘2"),
+                                format!("Review  {review_requested}"),
                                 tab == QueueTab::ReviewRequested,
                                 show_tab(QueueTab::ReviewRequested),
                             ),
                     )
                     .child(
-                        div()
-                            .id("refresh")
-                            .text_color(theme::accent())
-                            .cursor_pointer()
-                            .on_click(cx.listener(|queue, _, _, cx| queue.refresh(cx)))
-                            .child("⟳ Refresh"),
+                        Button::new("refresh", "↻ Refresh")
+                            .ghost()
+                            .on_click(cx.listener(|queue, _, _, cx| queue.refresh(cx))),
                     ),
             )
             .children(self.render_status_line())
@@ -220,7 +217,8 @@ impl ReviewQueue {
                         render_stack_header(index, group, self.tab(), is_reviewed, cx)
                     }
                 };
-                Some(element)
+                // Inset from the sidebar's edges; the row keeps the full width inside.
+                Some(div().px_2().pb_0p5().child(element).into_any_element())
             })
             .collect()
     }
@@ -251,19 +249,28 @@ fn render_error_status(text: SharedString) -> AnyElement {
         .into_any_element()
 }
 
-/// A row's frame: padding, separator, hover and selection.
+/// A row's frame (placed inset by the list): rounded corners, a hover tint
+/// and the selection.
 fn row_frame(id: impl Into<gpui::ElementId>, is_selected: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .px_3()
-        .py_2()
-        .border_b_1()
-        .border_color(theme::border())
+        .px_2p5()
+        .py_1p5()
+        .rounded_md()
         .cursor_pointer()
         .when(is_selected, |row| row.bg(theme::selected()))
         .when(!is_selected, |row| {
             row.hover(|style| style.bg(theme::hover()))
         })
+}
+
+/// A row's second line: small and quiet.
+fn render_meta(text: impl Into<SharedString>) -> impl IntoElement {
+    div()
+        .text_xs()
+        .text_color(theme::subtle())
+        .truncate()
+        .child(text.into())
 }
 
 /// One standalone pull request: title, then `owner/repo#number · author`;
@@ -277,19 +284,11 @@ fn render_pull_request_row(
     let draft_marker = if pull_request.draft { " · draft" } else { "" };
     row_frame(("pull-request", list_index), is_selected)
         .on_click(cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)))
-        .child(div().truncate().child(pull_request.title.clone()))
-        .child(
-            div()
-                .text_xs()
-                .text_color(theme::muted())
-                .truncate()
-                .child(format!(
-                    "{}#{} · {}{draft_marker}",
-                    pull_request.repo.full_name(),
-                    pull_request.number,
-                    pull_request.author.login,
-                )),
-        )
+        .child(div().text_sm().truncate().child(pull_request.title.clone()))
+        .child(render_meta(format!(
+            "{} #{} · {}{draft_marker}",
+            pull_request.repo.name, pull_request.number, pull_request.author.login,
+        )))
         .into_any_element()
 }
 
@@ -313,31 +312,24 @@ fn render_stack_header(
         (QueueTab::ReviewRequested, true) => "all layers to review".to_owned(),
         (QueueTab::ReviewRequested, false) => format!("{} to review", group.listed),
     };
-    div()
-        .id(("stack-header", row_index))
-        .px_3()
-        .py_2()
-        .border_b_1()
-        .border_color(theme::border())
-        .cursor_pointer()
-        .when(is_reviewed, |header| header.bg(theme::selected()))
-        .when(!is_reviewed, |header| {
-            header
-                .bg(theme::background())
-                .hover(|style| style.bg(theme::hover()))
-        })
+    row_frame(("stack-header", row_index), is_reviewed)
+        .mt_1()
         .on_click(cx.listener(move |queue, _, _, cx| queue.open_stack(&open_key, cx)))
         .child(
             div()
                 .flex()
+                .items_center()
                 .gap_1p5()
-                .font_weight(FontWeight::SEMIBOLD)
+                .text_sm()
                 .child(
                     div()
                         .id(("stack-chevron", row_index))
-                        .w_3()
+                        .flex_none()
+                        .w_4()
+                        .text_center()
                         .rounded_sm()
-                        .text_color(theme::muted())
+                        .text_xs()
+                        .text_color(theme::subtle())
                         .hover(|style| style.text_color(theme::text()).bg(theme::hover()))
                         .on_click(cx.listener(move |queue, _, _, cx| {
                             cx.stop_propagation();
@@ -345,20 +337,24 @@ fn render_stack_header(
                         }))
                         .child(chevron),
                 )
-                .child(div().text_color(theme::accent()).child("⧉"))
-                .child(div().truncate().child(format!(
-                    "Stack #{} · {} layers → {}",
-                    group.key.number, group.size, group.base_ref
-                ))),
+                .child(
+                    div()
+                        .flex_none()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(format!("Stack #{}", group.key.number)),
+                )
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(theme::muted())
+                        .child(format!("→ {}", group.base_ref)),
+                ),
         )
-        .child(
-            div()
-                .pl_4()
-                .text_xs()
-                .text_color(theme::muted())
-                .truncate()
-                .child(format!("{} · {listed}", group.key.repo.full_name())),
-        )
+        .child(div().pl(px(22.)).child(render_meta(format!(
+            "{} · {} layers · {listed}",
+            group.key.repo.name, group.size
+        ))))
         .into_any_element()
 }
 
@@ -386,10 +382,10 @@ fn render_layer_row(
     let rail_color = if row.is_listed {
         theme::accent()
     } else {
-        theme::border()
+        theme::border_strong()
     };
     row_frame(row.id, row.is_selected)
-        .pl_2()
+        .pl_1()
         .flex()
         .gap_2()
         .on_click(on_click)
@@ -400,11 +396,11 @@ fn render_layer_row(
                 .flex()
                 .items_center()
                 .justify_end()
-                .gap_1()
+                .gap_1p5()
                 .text_xs()
-                .text_color(theme::muted())
+                .text_color(theme::subtle())
                 .child(row.position.to_string())
-                .child(div().w(px(2.)).h_full().bg(rail_color)),
+                .child(div().w(px(2.)).h_full().rounded_full().bg(rail_color)),
         )
         .child(
             div()
@@ -419,19 +415,14 @@ fn render_layer_row(
                             div()
                                 .flex_1()
                                 .min_w_0()
+                                .text_sm()
                                 .truncate()
                                 .when(!row.is_listed, |title| title.text_color(theme::muted()))
                                 .child(row.title),
                         )
                         .when(row.needs_review, |line| line.child(render_review_badge())),
                 )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(theme::muted())
-                        .truncate()
-                        .child(row.meta),
-                ),
+                .child(render_meta(row.meta)),
         )
         .into_any_element()
 }
@@ -440,11 +431,11 @@ fn render_layer_row(
 fn render_review_badge() -> impl IntoElement {
     div()
         .flex_none()
-        .px_1()
-        .rounded_sm()
-        .border_1()
-        .border_color(theme::accent())
+        .px_1p5()
+        .rounded_full()
+        .bg(theme::selected())
         .text_xs()
+        .font_weight(FontWeight::MEDIUM)
         .text_color(theme::accent())
         .child("Review")
 }

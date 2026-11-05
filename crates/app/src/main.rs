@@ -15,6 +15,8 @@
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
 //! - `button.rs`: `Button`, a small text button.
+//! - `display_date.rs`: `short_date`, a GitHub timestamp as `21 Oct 2026`.
+//! - `checkbox.rs`: `Checkbox`, a drawn checkbox (checked, unchecked or mixed).
 //! - `resize_handle.rs`: `ResizeHandle`, a divider dragged to resize the panel beside it.
 //! - `text_area/`: `TextArea`, a multiline text editor (gpui has none).
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
@@ -26,7 +28,9 @@ mod app_commands;
 mod app_services;
 mod app_settings;
 mod button;
+mod checkbox;
 mod diff_view;
+mod display_date;
 mod fetch_stack;
 mod launch_app;
 mod main_window;
