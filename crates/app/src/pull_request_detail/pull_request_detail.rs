@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::{
-    Context, EventEmitter, ListAlignment, ListOffset, ListState, ScrollWheelEvent, Task, Window, px,
+    Context, EventEmitter, ListAlignment, ListOffset, ListState, ScrollWheelEvent, Subscription,
+    Task, Window, px,
 };
 use qc_cache::{DetailScrollPosition, DiffViewSettings, LineWrapping, ViewedFile};
 use qc_diff::FileDiff;
@@ -19,6 +20,7 @@ use super::loaded_file::LoadedFile;
 use super::parsed_description::ParsedDescription;
 use super::viewed_toggle::ViewedToggle;
 use crate::app_services::AppServices;
+use crate::app_settings::AppSettings;
 use crate::ui_state::{UiStateRecorder, read_viewed_files};
 
 /// How far beyond the visible area rows are laid out, so fast scrolling
@@ -51,7 +53,7 @@ struct HighlightedDiff {
 }
 
 /// The right pane: the shown pull request's header, description, diff
-/// toolbar and changed files, as one virtualized list of rows. Only rows in
+/// summary and changed files, as one virtualized list of rows. Only rows in
 /// view are rendered, so its cost does not grow with the pull request.
 ///
 /// Files are read from the cache when current for the pull request's
@@ -62,7 +64,7 @@ pub struct PullRequestDetail {
     pull_request: Option<PullRequest>,
     description: Option<ParsedDescription>,
     changed_files: Option<ChangedFiles>,
-    /// How diffs show; saved across launches.
+    /// How diffs show, as last applied from [`AppSettings`].
     diff_settings: DiffViewSettings,
     /// Which loaded files are viewed and collapsed.
     file_review: FileReviewState,
@@ -79,18 +81,19 @@ pub struct PullRequestDetail {
     diff_task: Option<Task<()>>,
     /// The syntax highlighting of the loaded diffs.
     syntax_task: Option<Task<()>>,
+    /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
+    _settings_subscription: Subscription,
 }
 
 impl EventEmitter<DetailEvent> for PullRequestDetail {}
 
 impl PullRequestDetail {
-    /// An empty pane with the saved diff settings.
+    /// An empty pane that follows the diff settings in [`AppSettings`].
     pub fn new(services: AppServices, cx: &mut Context<Self>) -> Self {
-        // Nothing saved, or a row that no longer reads, keeps the defaults.
-        let diff_settings = cx
-            .global::<UiStateRecorder>()
-            .saved_diff_view_settings()
-            .unwrap_or_default();
+        let diff_settings = AppSettings::diff_view(cx);
+        let settings_subscription = cx.observe_global::<AppSettings>(|detail, cx| {
+            detail.apply_diff_settings(AppSettings::diff_view(cx), cx);
+        });
 
         // Measure every row once, so the scrollbar knows the full height.
         let list = ListState::new(0, ListAlignment::Top, px(LIST_OVERDRAW)).measure_all();
@@ -115,6 +118,7 @@ impl PullRequestDetail {
             files_task: None,
             diff_task: None,
             syntax_task: None,
+            _settings_subscription: settings_subscription,
         };
         detail.rebuild_rows(ScrollAnchor::Top);
         detail
@@ -291,13 +295,12 @@ impl PullRequestDetail {
         }
     }
 
-    /// Applies new diff settings and saves them. Layout and wrapping rebuild
-    /// the rows (heights change); whitespace and highlight rebuild the diffs
-    /// off the main thread first.
-    pub(super) fn set_diff_settings(&mut self, settings: DiffViewSettings, cx: &mut Context<Self>) {
+    /// Applies diff settings changed in [`AppSettings`]. Layout and wrapping
+    /// rebuild the rows (heights change); whitespace and highlight rebuild
+    /// the diffs off the main thread first.
+    fn apply_diff_settings(&mut self, settings: DiffViewSettings, cx: &mut Context<Self>) {
         let previous = self.diff_settings;
         self.diff_settings = settings;
-        UiStateRecorder::record_diff_view_settings(cx, settings);
         if previous.diff_options() == settings.diff_options() {
             if previous != settings {
                 self.rebuild_rows(self.anchor_at_top());

@@ -14,8 +14,8 @@ pub enum DetailRow {
     Description,
     FilesLoading,
     FilesFailed,
-    /// The diff toolbar above the files.
-    Toolbar,
+    /// The totals above the files.
+    SummaryBar,
     FileHeader {
         file: usize,
     },

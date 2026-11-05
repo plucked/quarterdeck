@@ -4,11 +4,13 @@
 //! - `launch_app.rs`: starts gpui and opens the main window where it was last placed.
 //! - `main_window.rs`: `MainWindow`, the root view; records the window placement.
 //! - `app_commands.rs`: app-level actions with their key bindings and menus.
+//! - `app_settings.rs`: `AppSettings`, the user's preferences shared by every window.
 //! - `app_services.rs`: `AppServices`, the GitHub client and cache handed to views.
 //! - `scrollbar/`: `VerticalScrollbar`, a draggable scrollbar for any scroll container.
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
 //! - `theme.rs`: the color palette and fonts.
 //! - `diff_view/`: `FileDiffView` and `DiffToolbar`, how changed files show.
+//! - `settings_window/`: the settings window (cmd-,), one page per category.
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
 //! - `review_queue/`: the main view, the queue of pull requests awaiting review.
@@ -17,6 +19,7 @@
 
 mod app_commands;
 mod app_services;
+mod app_settings;
 mod diff_view;
 mod launch_app;
 mod main_window;
@@ -25,6 +28,7 @@ mod pull_request_detail;
 mod review_queue;
 mod scrollbar;
 mod segmented_control;
+mod settings_window;
 mod shared_cache;
 mod theme;
 mod ui_state;

@@ -64,6 +64,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 - **Reusable pieces of UI are `RenderOnce` components** (`#[derive(IntoElement)]`) that take what they draw and an `id`, in a module of their own (`MarkdownView`); a view places them, it does not copy their rendering.
 - **Content written by other people is untrusted.** Links from GitHub text open only when they are `http(s)://` URLs; nothing from it runs or reads local files.
 - **Colors and fonts come from `theme`,** never a hex literal in a view.
+- **Preferences live in `AppSettings` and are changed only in the settings window.** The main view stays free of option controls; a view that depends on a preference reads it from the global and observes it (`observe_global::<AppSettings>`), so a change applies everywhere at once (`PullRequestDetail::apply_diff_settings`).
 - **A flex item that holds wrapping text along a row's main axis gets `min_w_0()`.** gpui measures text unwrapped when layout asks for its minimum width, and a flex item's default minimum width is that, so without it the item grows past the window instead of wrapping (the detail pane beside the sidebar, a list item's content beside its bullet). Content that must not wrap (code, patches) goes in an `overflow_x_scroll` container with an id, which scrolls instead of widening its parent.
 
 ## Persistence

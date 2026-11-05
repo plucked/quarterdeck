@@ -2,8 +2,8 @@
 //! detail list: file headers (status, path, counts, viewed checkbox), hunk
 //! headers, unified lines or side-by-side rows with line numbers, syntax
 //! colors and inline change marks, and notes for files without lines. Each
-//! row draws its piece of the file's card. Also the `DiffToolbar` that
-//! switches how diffs show.
+//! row draws its piece of the file's card. Also the `DiffSummaryBar` above
+//! the files; how diffs show is chosen in the settings window.
 //!
 //! Files:
 //! - `file_header_rendering.rs`: a file's header row, the top of its card.
@@ -16,14 +16,14 @@
 //! - `file_note.rs`: `FileNote`, why a file shows a note.
 //! - `file_diff_state.rs`: `FileDiffState`, whether a file is collapsed, viewed or large.
 //! - `diff_row_style.rs`: `DiffRowStyle`, what a file's rows share.
-//! - `diff_toolbar.rs`: `DiffToolbar`, the summary and the view options.
+//! - `diff_summary_bar.rs`: `DiffSummaryBar`, totals and collapse/expand all.
 //! - `diff_summary.rs`: `DiffSummary`, file, line and viewed counts.
 
 mod code_highlights;
 mod diff_cell_rendering;
 mod diff_row_style;
 mod diff_summary;
-mod diff_toolbar;
+mod diff_summary_bar;
 mod file_card_rendering;
 mod file_diff_state;
 mod file_header_rendering;
@@ -35,7 +35,7 @@ mod unified_rendering;
 pub use diff_cell_rendering::{DIFF_CHARACTER_WIDTH, gutter_width, render_hunk_header};
 pub use diff_row_style::DiffRowStyle;
 pub use diff_summary::DiffSummary;
-pub use diff_toolbar::DiffToolbar;
+pub use diff_summary_bar::DiffSummaryBar;
 pub use file_card_rendering::render_file_end;
 pub use file_diff_state::FileDiffState;
 pub use file_header_rendering::{FileClickHandler, render_file_header};

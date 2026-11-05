@@ -5,6 +5,7 @@ use gpui::{
 
 use crate::app_commands::install_app_commands;
 use crate::app_services::AppServices;
+use crate::app_settings::AppSettings;
 use crate::main_window::MainWindow;
 use crate::ui_state::{UiStateRecorder, window_bounds_from_placement};
 
@@ -34,6 +35,7 @@ pub fn launch_app() {
         install_app_commands(cx);
         let min_size = size(px(WINDOW_MIN_WIDTH), px(WINDOW_MIN_HEIGHT));
         let restored = restore_window(&recorder, min_size, cx);
+        cx.set_global(AppSettings::load(&recorder));
         cx.set_global(recorder);
 
         cx.open_window(

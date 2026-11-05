@@ -12,8 +12,9 @@ use super::detail_row::DetailRow;
 use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
 use crate::diff_view::{
-    DiffRowStyle, DiffSummary, DiffToolbar, FileClickHandler, render_file_end, render_file_header,
-    render_file_note, render_hunk_header, render_split_row, render_unified_line,
+    DiffRowStyle, DiffSummary, DiffSummaryBar, FileClickHandler, render_file_end,
+    render_file_header, render_file_note, render_hunk_header, render_split_row,
+    render_unified_line,
 };
 use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
@@ -58,9 +59,9 @@ impl PullRequestDetail {
             DetailRow::Description => self.render_description(),
             DetailRow::FilesLoading => render_status_line("Loading files…", theme::muted()),
             DetailRow::FilesFailed => self.render_failure(),
-            DetailRow::Toolbar => div()
+            DetailRow::SummaryBar => div()
                 .pb_3()
-                .child(self.render_toolbar(cx))
+                .child(self.render_summary_bar(cx))
                 .into_any_element(),
             DetailRow::FileHeader { file } => self.render_file_header_row(file, cx),
             DetailRow::FileNote { file, note } => {
@@ -135,8 +136,8 @@ impl PullRequestDetail {
         render_status_line(message, theme::error())
     }
 
-    /// The totals and view options above the files.
-    fn render_toolbar(&self, cx: &mut Context<Self>) -> DiffToolbar {
+    /// The totals above the files, with collapse and expand all.
+    fn render_summary_bar(&self, cx: &mut Context<Self>) -> DiffSummaryBar {
         let files = self.loaded_files();
         let summary = DiffSummary {
             file_count: files.len(),
@@ -144,24 +145,19 @@ impl PullRequestDetail {
             additions: files.iter().map(|loaded| loaded.file.additions).sum(),
             deletions: files.iter().map(|loaded| loaded.file.deletions).sum(),
         };
-        let detail = cx.entity().downgrade();
-        let collapsing = detail.clone();
-        let expanding = detail.clone();
-        DiffToolbar::new(self.diff_settings(), summary, move |settings, _, cx| {
-            detail
-                .update(cx, |detail, cx| detail.set_diff_settings(*settings, cx))
-                .ok();
-        })
-        .on_collapse_all(move |_, cx| {
-            collapsing
-                .update(cx, PullRequestDetail::collapse_all_files)
-                .ok();
-        })
-        .on_expand_all(move |_, cx| {
-            expanding
-                .update(cx, PullRequestDetail::expand_all_files)
-                .ok();
-        })
+        let collapsing = cx.entity().downgrade();
+        let expanding = collapsing.clone();
+        DiffSummaryBar::new(summary)
+            .on_collapse_all(move |_, cx| {
+                collapsing
+                    .update(cx, PullRequestDetail::collapse_all_files)
+                    .ok();
+            })
+            .on_expand_all(move |_, cx| {
+                expanding
+                    .update(cx, PullRequestDetail::expand_all_files)
+                    .ok();
+            })
     }
 
     /// File `file`'s header, wired to its collapse and viewed toggles.

@@ -35,7 +35,7 @@ impl DetailRowList {
             None | Some(ChangedFiles::Loading) => list.rows.push(DetailRow::FilesLoading),
             Some(ChangedFiles::Failed(_)) => list.rows.push(DetailRow::FilesFailed),
             Some(ChangedFiles::Loaded(files)) => {
-                list.rows.push(DetailRow::Toolbar);
+                list.rows.push(DetailRow::SummaryBar);
                 for (index, loaded) in files.iter().enumerate() {
                     let state = content.file_review.state_of(loaded);
                     let start = list.rows.len();
@@ -203,7 +203,7 @@ mod tests {
             [
                 DetailRow::Header,
                 DetailRow::Description,
-                DetailRow::Toolbar,
+                DetailRow::SummaryBar,
                 DetailRow::FileHeader { file: 0 },
                 DetailRow::HunkHeader { file: 0, hunk: 0 },
                 DetailRow::UnifiedLine {
