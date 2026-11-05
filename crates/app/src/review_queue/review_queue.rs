@@ -29,6 +29,36 @@ struct PendingRestore {
     detail_scroll_offset: f32,
 }
 
+/// The parsed description of one version of a pull request. Kept while that
+/// version stays selected, so a refresh does not replace the document and
+/// reset its text selection.
+struct ParsedDescription {
+    pull_request_id: u64,
+    updated_at: String,
+    /// `None` when the description is empty.
+    document: Option<Arc<MarkdownDocument>>,
+}
+
+impl ParsedDescription {
+    fn parse(pull_request: &PullRequest) -> Self {
+        Self {
+            pull_request_id: pull_request.id,
+            updated_at: pull_request.updated_at.clone(),
+            document: pull_request
+                .body
+                .as_deref()
+                .map(MarkdownDocument::parse)
+                .filter(|document| !document.is_empty())
+                .map(Arc::new),
+        }
+    }
+
+    /// Whether this is the description of `pull_request` as it is now.
+    fn is_of(&self, pull_request: &PullRequest) -> bool {
+        self.pull_request_id == pull_request.id && self.updated_at == pull_request.updated_at
+    }
+}
+
 /// The main view: pull requests that request the viewer's review, and the
 /// changed files of the selected one.
 ///
@@ -55,8 +85,8 @@ pub struct ReviewQueue {
     /// The saved detail scroll, applied once the restored files have loaded.
     pending_detail_scroll: Option<f32>,
     /// The selected pull request's description, parsed when the selection
-    /// or the queue changes; `None` when it has none.
-    description: Option<Arc<MarkdownDocument>>,
+    /// changes to another pull request or version; `None` without a selection.
+    description: Option<ParsedDescription>,
     /// The in-flight refresh; replacing it cancels the previous one.
     refresh_task: Option<Task<()>>,
     /// The timer waiting for the next timed refresh; any refresh replaces it.
@@ -146,19 +176,27 @@ impl ReviewQueue {
     }
 
     pub(super) fn description(&self) -> Option<&Arc<MarkdownDocument>> {
-        self.description.as_ref()
+        self.description
+            .as_ref()
+            .and_then(|description| description.document.as_ref())
     }
 
     /// Selects the pull request at `index` (or none) and parses its
-    /// description, so rendering never parses.
+    /// description unless the same version is already parsed, so rendering
+    /// never parses.
     fn set_selected_index(&mut self, index: Option<usize>) {
         self.selected_index = index;
-        self.description = self
-            .selected_pull_request()
-            .and_then(|pull_request| pull_request.body.as_deref())
-            .map(MarkdownDocument::parse)
-            .filter(|document| !document.is_empty())
-            .map(Arc::new);
+        let Some(pull_request) = self.selected_pull_request() else {
+            self.description = None;
+            return;
+        };
+        let is_current = self
+            .description
+            .as_ref()
+            .is_some_and(|description| description.is_of(pull_request));
+        if !is_current {
+            self.description = Some(ParsedDescription::parse(pull_request));
+        }
     }
 
     pub(super) fn changed_files(&self) -> Option<&ChangedFiles> {

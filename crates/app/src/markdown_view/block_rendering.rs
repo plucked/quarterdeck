@@ -4,7 +4,7 @@ use qc_markdown::{
     MarkdownTable, TaskState,
 };
 
-use super::render_inline_text::render_inline_text;
+use super::selectable_texts::SelectableTexts;
 use crate::theme;
 
 /// Width of the bullet or number column of a list item.
@@ -13,20 +13,19 @@ const BULLET: &str = "•";
 const OPEN_TASK: &str = "☐";
 const DONE_TASK: &str = "☑";
 
-/// Renders `blocks` in order. `next_text_id` hands out the ids clickable
-/// texts need, unique within one `MarkdownView`.
-pub fn render_blocks(blocks: &[MarkdownBlock], next_text_id: &mut usize) -> Vec<AnyElement> {
+/// Renders `blocks` in order; `texts` places and highlights their text.
+pub fn render_blocks(blocks: &[MarkdownBlock], texts: &mut SelectableTexts) -> Vec<AnyElement> {
     blocks
         .iter()
-        .map(|block| render_block(block, next_text_id))
+        .map(|block| render_block(block, texts))
         .collect()
 }
 
-fn render_block(block: &MarkdownBlock, next_text_id: &mut usize) -> AnyElement {
+fn render_block(block: &MarkdownBlock, texts: &mut SelectableTexts) -> AnyElement {
     match block {
-        MarkdownBlock::Paragraph(text) => render_text(text, next_text_id),
-        MarkdownBlock::Heading { level, text } => render_heading(*level, text, next_text_id),
-        MarkdownBlock::CodeBlock { code, .. } => render_code_block(code, next_text_id),
+        MarkdownBlock::Paragraph(text) => texts.render_inline(text),
+        MarkdownBlock::Heading { level, text } => render_heading(*level, text, texts),
+        MarkdownBlock::CodeBlock { code, .. } => render_code_block(code, texts),
         MarkdownBlock::BlockQuote(blocks) => div()
             .flex()
             .flex_col()
@@ -35,26 +34,23 @@ fn render_block(block: &MarkdownBlock, next_text_id: &mut usize) -> AnyElement {
             .border_l_2()
             .border_color(theme::border())
             .text_color(theme::muted())
-            .children(render_blocks(blocks, next_text_id))
+            .children(render_blocks(blocks, texts))
             .into_any_element(),
-        MarkdownBlock::List(list) => render_list(list, next_text_id),
-        MarkdownBlock::Table(table) => render_table(table, next_text_id),
+        MarkdownBlock::List(list) => render_list(list, texts),
+        MarkdownBlock::Table(table) => render_table(table, texts),
         MarkdownBlock::Rule => div().h(px(1.)).bg(theme::border()).into_any_element(),
     }
 }
 
-/// Inline text with the next free id.
-fn render_text(text: &InlineText, next_text_id: &mut usize) -> AnyElement {
-    let id = *next_text_id;
-    *next_text_id += 1;
-    render_inline_text(text, id)
-}
-
 /// A bold heading sized by level; the top two levels get a rule below, as on GitHub.
-fn render_heading(level: HeadingLevel, text: &InlineText, next_text_id: &mut usize) -> AnyElement {
+fn render_heading(
+    level: HeadingLevel,
+    text: &InlineText,
+    texts: &mut SelectableTexts,
+) -> AnyElement {
     let heading = div()
         .font_weight(FontWeight::BOLD)
-        .child(render_text(text, next_text_id));
+        .child(texts.render_inline(text));
     match level {
         HeadingLevel::One => heading
             .text_2xl()
@@ -72,30 +68,24 @@ fn render_heading(level: HeadingLevel, text: &InlineText, next_text_id: &mut usi
     .into_any_element()
 }
 
-/// Monospaced lines on a code background; long lines scroll sideways.
-fn render_code_block(code: &str, next_text_id: &mut usize) -> AnyElement {
-    let id = *next_text_id;
-    *next_text_id += 1;
+/// Monospaced code on a code background, one selectable text; long lines
+/// scroll sideways instead of wrapping.
+fn render_code_block(code: &str, texts: &mut SelectableTexts) -> AnyElement {
     div()
-        .id(("code-block", id))
+        .id(("code-block", texts.next_element_id()))
         .overflow_x_scroll()
         .p_3()
         .rounded_md()
         .bg(theme::code_background())
         .font_family(theme::MONO_FONT)
         .text_xs()
-        .flex()
-        .flex_col()
-        // An empty line still takes a line's height.
-        .children(code.lines().map(|line| {
-            let shown = if line.is_empty() { " " } else { line };
-            div().whitespace_nowrap().child(shown.to_owned())
-        }))
+        .whitespace_nowrap()
+        .child(texts.render_plain(code))
         .into_any_element()
 }
 
 /// Items with a bullet, number or checkbox beside their blocks.
-fn render_list(list: &MarkdownList, next_text_id: &mut usize) -> AnyElement {
+fn render_list(list: &MarkdownList, texts: &mut SelectableTexts) -> AnyElement {
     let mut items = Vec::with_capacity(list.items.len());
     for (offset, item) in (0_u64..).zip(&list.items) {
         let marker = list_marker(list.start.map(|start| start + offset), item);
@@ -116,7 +106,7 @@ fn render_list(list: &MarkdownList, next_text_id: &mut usize) -> AnyElement {
                         .flex()
                         .flex_col()
                         .gap_1()
-                        .children(render_blocks(&item.blocks, next_text_id)),
+                        .children(render_blocks(&item.blocks, texts)),
                 ),
         );
     }
@@ -140,7 +130,7 @@ fn list_marker(number: Option<u64>, item: &ListItem) -> String {
 
 /// A bordered grid: a bold header row, then the body rows. Missing cells
 /// render empty so columns stay aligned.
-fn render_table(table: &MarkdownTable, next_text_id: &mut usize) -> AnyElement {
+fn render_table(table: &MarkdownTable, texts: &mut SelectableTexts) -> AnyElement {
     let column_count = table
         .rows
         .iter()
@@ -149,14 +139,14 @@ fn render_table(table: &MarkdownTable, next_text_id: &mut usize) -> AnyElement {
         .max()
         .unwrap_or_default();
 
-    let header = render_table_row(&table.header, &table.alignments, column_count, next_text_id)
+    let header = render_table_row(&table.header, &table.alignments, column_count, texts)
         .bg(theme::panel())
         .font_weight(FontWeight::SEMIBOLD);
     let rows: Vec<Div> = table
         .rows
         .iter()
         .map(|row| {
-            render_table_row(row, &table.alignments, column_count, next_text_id)
+            render_table_row(row, &table.alignments, column_count, texts)
                 .border_t_1()
                 .border_color(theme::border())
         })
@@ -179,7 +169,7 @@ fn render_table_row(
     cells: &[InlineText],
     alignments: &[ColumnAlignment],
     column_count: usize,
-    next_text_id: &mut usize,
+    texts: &mut SelectableTexts,
 ) -> Div {
     let mut row = div().flex();
     for column in 0..column_count {
@@ -194,7 +184,7 @@ fn render_table_row(
             ColumnAlignment::Left | ColumnAlignment::Unspecified => cell,
         };
         row = row.child(match cells.get(column) {
-            Some(text) => cell.child(render_text(text, next_text_id)),
+            Some(text) => cell.child(texts.render_inline(text)),
             None => cell,
         });
     }

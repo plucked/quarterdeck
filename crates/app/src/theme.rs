@@ -1,7 +1,7 @@
 //! The app's dark palette and fonts. Views take every color and font from
 //! here, so a theme change touches only this file.
 
-use gpui::{Rgba, rgb};
+use gpui::{Rgba, rgb, rgba};
 
 /// Font for code and patches.
 pub const MONO_FONT: &str = "Menlo";
@@ -35,6 +35,10 @@ pub fn muted() -> Rgba {
 /// Links and buttons.
 pub fn accent() -> Rgba {
     rgb(0x54_8a_f7)
+}
+/// Background of selected text.
+pub fn text_selection() -> Rgba {
+    rgba(0x54_8a_f7_59)
 }
 /// Background of code blocks and inline code in rendered Markdown.
 pub fn code_background() -> Rgba {
