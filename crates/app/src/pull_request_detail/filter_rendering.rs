@@ -69,23 +69,22 @@ impl PullRequestDetail {
         render_chip_row("Kind", chips)
     }
 
-    /// The type chips, most files first: the most common, any picked or
-    /// hidden, and a "more" chip for the rest.
+    /// The type chips in alphabetical order: collapsed, the most common
+    /// ones and any picked or hidden; a "more" chip shows the rest.
     fn render_type_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let filter = self.file_tree().filter();
         let counts = self.file_tree().type_counts();
         let is_expanded = self.file_tree().are_types_expanded();
 
         // The most common, plus every chip that is set, so a set chip never hides behind "more".
+        let most_common = most_common_types(counts);
         let shown: Vec<&FacetCount<String>> = counts
             .iter()
-            .enumerate()
-            .filter(|(index, count)| {
+            .filter(|count| {
                 is_expanded
-                    || *index < COLLAPSED_TYPE_CHIPS
+                    || most_common.contains(&count.value.as_str())
                     || filter.file_types.choice_of(&count.value) != FacetChoice::Open
             })
-            .map(|(_, count)| count)
             .collect();
         let hidden_count = counts.len() - shown.len();
         let mut chips: Vec<AnyElement> = shown
@@ -162,6 +161,18 @@ impl PullRequestDetail {
             })
             .into_any_element()
     }
+}
+
+/// The [`COLLAPSED_TYPE_CHIPS`] types with the most files (ties by their
+/// alphabetical place), which the collapsed row shows.
+fn most_common_types(counts: &[FacetCount<String>]) -> Vec<&str> {
+    let mut by_size: Vec<&FacetCount<String>> = counts.iter().collect();
+    by_size.sort_by_key(|count| std::cmp::Reverse(count.total));
+    by_size
+        .into_iter()
+        .take(COLLAPSED_TYPE_CHIPS)
+        .map(|count| count.value.as_str())
+        .collect()
 }
 
 /// A plain click picks; an option-click hides.

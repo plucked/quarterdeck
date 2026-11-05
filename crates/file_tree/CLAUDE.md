@@ -4,7 +4,7 @@
 |---|---|
 | `file_tree` | `FileTree::build(paths)`: folders first, name order ignoring case, single-folder chains compacted; `file_order()`, `files_under(node)`, `visible_rows(collapsed folder paths, is_shown)` |
 | `tree_node` / `node_id` / `tree_row` | `TreeNode` (`name` as shown, full `path`), `TreeNodeKind`, `NodeId`, `TreeRow` |
-| `file_filter` / `filtered_file` | `FileFilter`: `hide_viewed` switch + two chip rows (`kinds`, `file_types`) that must both admit a file; faceted counts (`kind_counts`, `file_type_counts`: each chip's total and what the other row lets through) and `describe()`; `FilteredFile` is what it looks at (path, viewed, unchanged move) |
+| `file_filter` / `filtered_file` | `FileFilter`: `hide_viewed` switch + two chip rows (`kinds`, `file_types`) that must both admit a file; faceted counts (`kind_counts`, `file_type_counts` (alphabetical, ignoring the leading dot and case): each chip's total and what the other row lets through) and `describe()`; `FilteredFile` is what it looks at (path, viewed, unchanged move) |
 | `file_kind` | `FileKind` (Code, Tests, Generated, Moved): one per file, Moved > Generated > Tests > Code |
 | `facet_filter` / `facet_choice` / `facet_count` | `FacetFilter<T>`: picked (`only`) and `hidden` values of one row; nothing picked admits all; `FacetChoice` (Open, Only, Hidden); `FacetCount` |
 | `file_category` | path heuristics: `is_test_path`, `is_generated_path` (lock files, minified, `.pb.go`, `.designer.cs`, Unity `.meta`, generated folders), `extension_of`, `file_type_of` (the extension, else the file name: `Dockerfile`, `.gitignore`) |

@@ -56,9 +56,10 @@ impl FileFilter {
             .collect()
     }
 
-    /// Each file type among `files`, most files first then by name, with
-    /// how many files it has and how many the viewed switch and the kind
-    /// row let through.
+    /// Each file type among `files` in alphabetical order of its name
+    /// without the leading dot, ignoring case (`.cs`, `Dockerfile`,
+    /// `.gitignore`, `.rs`), with how many files it has and how many the
+    /// viewed switch and the kind row let through.
     pub fn file_type_counts(&self, files: &[FilteredFile<'_>]) -> Vec<FacetCount<String>> {
         let mut counts: BTreeMap<String, (usize, usize)> = BTreeMap::new();
         for file in files {
@@ -74,12 +75,7 @@ impl FileFilter {
                 matching,
             })
             .collect();
-        counts.sort_by(|left, right| {
-            right
-                .total
-                .cmp(&left.total)
-                .then_with(|| left.value.cmp(&right.value))
-        });
+        counts.sort_by_cached_key(|count| (sort_name(&count.value), count.value.clone()));
         counts
     }
 
@@ -118,6 +114,14 @@ impl FileFilter {
     }
 }
 
+/// A file type as sorted: without its leading dot, in lower case.
+fn sort_name(file_type: &str) -> String {
+    file_type
+        .strip_prefix('.')
+        .unwrap_or(file_type)
+        .to_lowercase()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,6 +152,24 @@ mod tests {
         assert!(filter.shows(&file("a.schema", true)));
         assert!(!filter.shows(&file("a.cs", true)));
         assert_eq!(filter.describe(), ["Moved", ".schema"]);
+    }
+
+    /// Types sort by name without the dot, ignoring case, whatever their counts.
+    #[test]
+    fn file_types_sort_alphabetically() {
+        let files = [
+            file("a.rs", false),
+            file("b.rs", false),
+            file("Dockerfile", false),
+            file(".gitignore", false),
+            file("c.cs", false),
+        ];
+        let order: Vec<String> = FileFilter::default()
+            .file_type_counts(&files)
+            .into_iter()
+            .map(|count| count.value)
+            .collect();
+        assert_eq!(order, [".cs", "Dockerfile", ".gitignore", ".rs"]);
     }
 
     /// Counts say what each chip would show given the other row.
