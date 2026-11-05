@@ -3506,7 +3506,6 @@ dependencies = [
  "dirs 7.0.0",
  "qc-github",
  "rusqlite",
- "serde_json",
 ]
 
 [[package]]

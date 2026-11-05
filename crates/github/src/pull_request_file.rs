@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// One file changed by a pull request, as `GET /repos/{o}/{r}/pulls/{n}/files` returns it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PullRequestFile {
     pub filename: String,
     /// `added`, `removed`, `modified`, `renamed`, `copied`, `changed` or `unchanged`.

@@ -2,8 +2,8 @@ use anyhow::{Context as _, Result};
 use rusqlite::Connection;
 
 /// The schema history, append-only: entry `n` (0-based) moves `PRAGMA
-/// user_version` from `n` to `n + 1`. Entities are JSON blobs beside a few
-/// indexed columns, so model changes rarely need a new entry.
+/// user_version` from `n` to `n + 1`. Every value has its own typed column,
+/// so a model change is a new entry here.
 const SCHEMA_MIGRATIONS: &[&str] = &[
     r"
     CREATE TABLE pull_requests (
@@ -47,6 +47,58 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         -- No foreign key: the pull request may have left the cache; the app falls back.
         selected_pr_id        INTEGER,
         detail_scroll_offset  REAL    NOT NULL
+    );
+",
+    r"
+    -- Cached GitHub data moves to typed columns. The cache is discarded rather
+    -- than converted: the next refresh fetches it again. UI state is kept.
+    DROP TABLE pr_files;
+    DROP TABLE pr_lists;
+    DROP TABLE pull_requests;
+
+    CREATE TABLE pull_requests (
+        id                 INTEGER PRIMARY KEY,
+        repo_owner         TEXT    NOT NULL,
+        repo_name          TEXT    NOT NULL,
+        number             INTEGER NOT NULL CHECK (number > 0),
+        title              TEXT    NOT NULL,
+        body               TEXT,
+        author_login       TEXT    NOT NULL,
+        author_avatar_url  TEXT    NOT NULL,
+        html_url           TEXT    NOT NULL,
+        draft              INTEGER NOT NULL CHECK (draft IN (0, 1)),
+        created_at         TEXT    NOT NULL,
+        updated_at         TEXT    NOT NULL,
+        fetched_at         INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX pull_requests_repo_number
+        ON pull_requests (repo_owner, repo_name, number);
+
+    -- Ordered membership of pull requests in named lists.
+    CREATE TABLE pr_lists (
+        list_key  TEXT    NOT NULL,
+        pr_id     INTEGER NOT NULL REFERENCES pull_requests (id) ON DELETE CASCADE,
+        position  INTEGER NOT NULL,
+        PRIMARY KEY (list_key, pr_id)
+    );
+
+    -- A pull request's changed files, valid only for the `updated_at` they were fetched at.
+    CREATE TABLE pr_file_sets (
+        pr_id       INTEGER PRIMARY KEY REFERENCES pull_requests (id) ON DELETE CASCADE,
+        updated_at  TEXT    NOT NULL
+    );
+
+    CREATE TABLE pr_files (
+        pr_id      INTEGER NOT NULL REFERENCES pr_file_sets (pr_id) ON DELETE CASCADE,
+        position   INTEGER NOT NULL,
+        filename   TEXT    NOT NULL,
+        -- GitHub's value as sent (added, removed, modified, renamed, ...); not
+        -- checked, so a status GitHub adds later still caches.
+        status     TEXT    NOT NULL,
+        additions  INTEGER NOT NULL CHECK (additions >= 0),
+        deletions  INTEGER NOT NULL CHECK (deletions >= 0),
+        patch      TEXT,
+        PRIMARY KEY (pr_id, position)
     );
 ",
 ];

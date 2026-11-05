@@ -1,7 +1,5 @@
-use serde::{Deserialize, Serialize};
-
 /// A repository identified by owner and name, e.g. `zed-industries/zed`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RepoRef {
     pub owner: String,
     pub name: String,
