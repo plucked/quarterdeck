@@ -13,6 +13,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently. 
 | `quick-check` | `crates/app` | gpui binary: window, views, background tasks, UI state restore |
 | `qc-github` | `crates/github` | blocking GitHub REST client (`ureq`) and its data shapes |
 | `qc-cache` | `crates/cache` | the local SQLite database: cached GitHub data + UI state, with migrations |
+| `qc-markdown` | `crates/markdown` | GitHub-flavored Markdown → typed document (`pulldown-cmark`) |
 
 Only the app depends on gpui. Library crates are blocking and UI-free; the app runs them on `cx.background_executor()`. No tokio.
 

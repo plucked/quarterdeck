@@ -15,7 +15,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 - **A module is named after what it holds**, not after an action or a phase: `review_queue`, `shared_cache`, `schema_migrations`.
 - **Put new code where its concept already lives.** A new concept that fits no module gets its own module, named the same way.
 - **Every crate's `CLAUDE.md` has a module table:** one row per top-level module and what it holds. A new module adds a row.
-- **Crates split by subsystem, not by layer.** `qc-github` talks to GitHub, `qc-cache` persists, `quick-check` (the app) owns gpui. Only the app depends on gpui; library crates stay UI-free so they can be tested without a window.
+- **Crates split by subsystem, not by layer.** `qc-github` talks to GitHub, `qc-cache` persists, `qc-markdown` parses Markdown, `quick-check` (the app) owns gpui. Only the app depends on gpui; library crates stay UI-free so they can be tested without a window.
 
 ## Files
 
@@ -57,7 +57,9 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 - **A dropped view is not an error.** The result of `this.update(cx, ...)` after an await is ignored with `.ok()`: the view was closed while the task ran.
 - **Await events; never poll for them.** No loop that wakes on an interval to recheck a flag; await a channel or a timer set to the next deadline.
 - **State changes call `cx.notify()`** in the same method that changes what `render` reads, never in a caller.
-- **`render` only builds elements.** It reads state and calls rendering helpers; it starts no tasks and changes no state. Long element trees are split into `render_*` methods grouped by area in their own files.
+- **`render` only builds elements.** It reads state and calls rendering helpers; it starts no tasks, changes no state and computes nothing expensive. Derived data (a parsed description) is computed when its source changes and kept in the view (`ReviewQueue::set_selected_index`). Long element trees are split into `render_*` methods grouped by area in their own files.
+- **Reusable pieces of UI are `RenderOnce` components** (`#[derive(IntoElement)]`) that take what they draw and an `id`, in a module of their own (`MarkdownView`); a view places them, it does not copy their rendering.
+- **Content written by other people is untrusted.** Links from GitHub text open only when they are `http(s)://` URLs; nothing from it runs or reads local files.
 - **Colors and fonts come from `theme`,** never a hex literal in a view.
 
 ## Persistence
