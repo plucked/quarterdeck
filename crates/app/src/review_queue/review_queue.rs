@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use gpui::{
-    App, Context, Entity, FocusHandle, ScrollStrategy, SharedString, Subscription, Task,
-    UniformListScrollHandle, Window, div, prelude::*,
+    App, Context, Entity, FocusHandle, ListAlignment, ListOffset, ListState, SharedString,
+    Subscription, Task, Window, div, prelude::*, px,
 };
 use qc_cache::{DetailScrollPosition, PullRequestListKey, QueueTab, ReviewQueueViewState};
 use qc_github::{GitHubClient, PullRequest, PullRequestStack, RepoRef, StackMembership};
@@ -29,6 +29,9 @@ use crate::pull_request_detail::{DetailEvent, LayerRequest, PullRequestDetail};
 use crate::shared_cache::SharedCache;
 use crate::theme;
 use crate::ui_state::UiStateRecorder;
+
+/// How far past the sidebar's edges rows are laid out, so scrolling shows no gaps.
+const QUEUE_LIST_OVERDRAW: f32 = 300.;
 
 /// A selection saved before the last relaunch, not yet matched to the lists.
 struct PendingRestore {
@@ -72,7 +75,8 @@ pub struct ReviewQueue {
     selection_origin: SelectionOrigin,
     refresh_status: RefreshStatus,
     refresh_schedule: RefreshSchedule,
-    queue_list_scroll: UniformListScrollHandle,
+    /// The sidebar list: rows differ in height (a stack layer is one line).
+    queue_list: ListState,
     /// The right pane; it re-renders on its own when it scrolls.
     detail: Entity<PullRequestDetail>,
     /// The saved selection, until the lists it is in have loaded.
@@ -162,7 +166,7 @@ impl ReviewQueue {
             selection_origin: SelectionOrigin::Listed,
             refresh_status,
             refresh_schedule: RefreshSchedule::default(),
-            queue_list_scroll: UniformListScrollHandle::new(),
+            queue_list: ListState::new(0, ListAlignment::Top, px(QUEUE_LIST_OVERDRAW)),
             detail,
             pending_restore,
             refresh_task: None,
@@ -180,8 +184,8 @@ impl ReviewQueue {
         queue
     }
 
-    pub(super) fn queue_list_scroll(&self) -> &UniformListScrollHandle {
-        &self.queue_list_scroll
+    pub(super) fn queue_list(&self) -> &ListState {
+        &self.queue_list
     }
 
     pub(super) fn tab(&self) -> QueueTab {
@@ -229,13 +233,20 @@ impl ReviewQueue {
         cx.notify();
     }
 
-    /// Rebuilds the sidebar rows of the shown tab.
+    /// Rebuilds the sidebar rows of the shown tab, keeping the list's
+    /// scroll position (a list reset alone would jump to the top).
     fn rebuild_rows(&mut self) {
+        let scroll_top = self.queue_list.logical_scroll_top();
         self.rows = QueueRow::build_all(
             self.lists.get(self.tab),
             &self.collapsed_stacks,
             &self.stacks,
         );
+        self.queue_list.reset(self.rows.len());
+        self.queue_list.scroll_to(ListOffset {
+            item_ix: scroll_top.item_ix.min(self.rows.len().saturating_sub(1)),
+            offset_in_item: scroll_top.offset_in_item,
+        });
     }
 
     /// The known layers of stack `key`.
@@ -417,8 +428,7 @@ impl ReviewQueue {
             })
         });
         if let Some(row) = row {
-            self.queue_list_scroll
-                .scroll_to_item(row, ScrollStrategy::Center);
+            self.queue_list.scroll_to_reveal_item(row);
         }
     }
 

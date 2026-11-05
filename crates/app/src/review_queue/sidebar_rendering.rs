@@ -1,9 +1,8 @@
-use std::ops::Range;
 use std::time::Duration;
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, Context, FontWeight, SharedString, Styled, div,
-    prelude::*, pulsating_between, px, uniform_list,
+    Animation, AnimationExt as _, AnyElement, Context, FontWeight, SharedString, Styled, div, list,
+    prelude::*, pulsating_between, px,
 };
 use qc_cache::QueueTab;
 use qc_github::{PullRequest, StackLayer};
@@ -24,6 +23,8 @@ const MAX_SIDEBAR_WIDTH: f32 = 720.;
 const PULSE_PERIOD: Duration = Duration::from_millis(1200);
 /// Width of the column holding a stack layer's position and rail.
 const LAYER_GUTTER_WIDTH: f32 = 28.;
+/// Height of the rail mark beside a layer's position.
+const LAYER_RAIL_HEIGHT: f32 = 16.;
 
 impl ReviewQueue {
     /// The left column: the tabs, refresh button and state, then the rows.
@@ -43,21 +44,17 @@ impl ReviewQueue {
                     .flex_1()
                     .min_h_0()
                     .child(
-                        uniform_list(
-                            "pull-requests",
-                            self.rows().len(),
-                            cx.processor(|queue, range, _window, cx| {
-                                queue.render_queue_rows(range, cx)
+                        list(
+                            self.queue_list().clone(),
+                            cx.processor(|queue, index, _window, cx| {
+                                queue.render_queue_row(index, cx)
                             }),
                         )
-                        .track_scroll(self.queue_list_scroll().clone())
                         .size_full(),
                     )
                     .child(VerticalScrollbar::new(
                         "pull-requests-scrollbar",
-                        ScrollbarTarget::Handle(
-                            self.queue_list_scroll().0.borrow().base_handle.clone(),
-                        ),
+                        ScrollbarTarget::List(self.queue_list().clone()),
                     )),
             )
     }
@@ -147,80 +144,73 @@ impl ReviewQueue {
         }
     }
 
-    /// The visible rows of the list; `range` is what `uniform_list` asks for.
-    fn render_queue_rows(&self, range: Range<usize>, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    /// Row `index` of the list; an empty element when it is gone.
+    fn render_queue_row(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+        self.render_known_queue_row(index, cx)
+            .unwrap_or_else(|| div().into_any_element())
+    }
+
+    /// Row `index`, inset from the sidebar's edges; `None` when the row or
+    /// what it shows is gone.
+    fn render_known_queue_row(&self, index: usize, cx: &mut Context<Self>) -> Option<AnyElement> {
         let selected_id = self.selected_pull_request().map(|selected| selected.id);
-        range
-            .filter_map(|index| {
-                let row = self.rows().get(index)?;
-                let element = match row {
-                    QueueRow::PullRequest(list_index) => {
-                        let pull_request = self.shown_list().get(*list_index)?;
-                        render_pull_request_row(
-                            pull_request,
-                            *list_index,
-                            selected_id == Some(pull_request.id),
-                            cx,
-                        )
-                    }
-                    QueueRow::StackLayer(list_index) => {
-                        let pull_request = self.shown_list().get(*list_index)?;
-                        let list_index = *list_index;
-                        let draft_marker = if pull_request.draft { " · draft" } else { "" };
-                        render_layer_row(
-                            LayerRow {
-                                id: ("stack-layer", list_index).into(),
-                                position: pull_request
-                                    .stack
-                                    .as_ref()
-                                    .map_or(0, |membership| membership.position),
-                                title: pull_request.title.clone().into(),
-                                meta: format!(
-                                    "#{} · {}{draft_marker}",
-                                    pull_request.number, pull_request.author.login
-                                )
-                                .into(),
-                                is_listed: true,
-                                needs_review: self
-                                    .needs_review(&pull_request.repo, pull_request.number),
-                                is_selected: selected_id == Some(pull_request.id),
-                            },
-                            cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)),
-                        )
-                    }
-                    QueueRow::OtherLayer { key, layer } => {
-                        let stack_layer = self.stack(key)?.layers.get(*layer)?;
-                        let (key, layer) = (key.clone(), *layer);
-                        render_layer_row(
-                            LayerRow {
-                                id: ("other-layer", index).into(),
-                                position: u64::try_from(layer + 1).unwrap_or(u64::MAX),
-                                title: stack_layer.title.clone().into(),
-                                meta: format!(
-                                    "#{} · {}{}",
-                                    stack_layer.number,
-                                    stack_layer.author_login,
-                                    layer_state_marker(stack_layer)
-                                )
-                                .into(),
-                                is_listed: false,
-                                needs_review: self.needs_review(&key.repo, stack_layer.number),
-                                is_selected: self.is_selected(&key.repo, stack_layer.number),
-                            },
-                            cx.listener(move |queue, _, _, cx| {
-                                queue.open_other_layer(&key, layer, cx);
-                            }),
-                        )
-                    }
-                    QueueRow::StackHeader(group) => {
-                        let is_reviewed = self.is_stack_reviewed(&group.key, cx);
-                        render_stack_header(index, group, self.tab(), is_reviewed, cx)
-                    }
-                };
-                // Inset from the sidebar's edges; the row keeps the full width inside.
-                Some(div().px_2().pb_0p5().child(element).into_any_element())
-            })
-            .collect()
+        let row = self.rows().get(index)?;
+        let element = match row {
+            QueueRow::PullRequest(list_index) => {
+                let pull_request = self.shown_list().get(*list_index)?;
+                render_pull_request_row(
+                    pull_request,
+                    *list_index,
+                    selected_id == Some(pull_request.id),
+                    cx,
+                )
+            }
+            QueueRow::StackLayer(list_index) => {
+                let pull_request = self.shown_list().get(*list_index)?;
+                let list_index = *list_index;
+                let draft_marker = if pull_request.draft { " · draft" } else { "" };
+                render_layer_row(
+                    LayerRow {
+                        id: ("stack-layer", list_index).into(),
+                        position: pull_request
+                            .stack
+                            .as_ref()
+                            .map_or(0, |membership| membership.position),
+                        title: pull_request.title.clone().into(),
+                        meta: format!("#{}{draft_marker}", pull_request.number).into(),
+                        is_listed: true,
+                        needs_review: self.needs_review(&pull_request.repo, pull_request.number),
+                        is_selected: selected_id == Some(pull_request.id),
+                    },
+                    cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)),
+                )
+            }
+            QueueRow::OtherLayer { key, layer } => {
+                let stack_layer = self.stack(key)?.layers.get(*layer)?;
+                let (key, layer) = (key.clone(), *layer);
+                render_layer_row(
+                    LayerRow {
+                        id: ("other-layer", index).into(),
+                        position: u64::try_from(layer + 1).unwrap_or(u64::MAX),
+                        title: stack_layer.title.clone().into(),
+                        meta: format!("#{}{}", stack_layer.number, layer_state_marker(stack_layer))
+                            .into(),
+                        is_listed: false,
+                        needs_review: self.needs_review(&key.repo, stack_layer.number),
+                        is_selected: self.is_selected(&key.repo, stack_layer.number),
+                    },
+                    cx.listener(move |queue, _, _, cx| {
+                        queue.open_other_layer(&key, layer, cx);
+                    }),
+                )
+            }
+            QueueRow::StackHeader(group) => {
+                let is_reviewed = self.is_stack_reviewed(&group.key, cx);
+                render_stack_header(index, group, self.tab(), is_reviewed, cx)
+            }
+        };
+        // Inset from the sidebar's edges; the row keeps the full width inside.
+        Some(div().px_2().pb_0p5().child(element).into_any_element())
     }
 }
 
@@ -372,9 +362,10 @@ struct LayerRow {
     is_selected: bool,
 }
 
-/// One layer of a stack, under its header: its position on a rail, then
-/// title (with a Review badge when it asks for the viewer's review) and
-/// `#number · author`. Layers the list lacks are muted; clicking any opens it.
+/// One layer of a stack, under its header, on a single line so long stacks
+/// stay compact: its position on a rail, the title, a Review badge when it
+/// asks for the viewer's review, and `#number` (with its state) on the
+/// right. Layers the list lacks are muted; clicking any opens it.
 fn render_layer_row(
     row: LayerRow,
     on_click: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
@@ -386,7 +377,9 @@ fn render_layer_row(
     };
     row_frame(row.id, row.is_selected)
         .pl_1()
+        .py_1()
         .flex()
+        .items_center()
         .gap_2()
         .on_click(on_click)
         .child(
@@ -400,29 +393,30 @@ fn render_layer_row(
                 .text_xs()
                 .text_color(theme::subtle())
                 .child(row.position.to_string())
-                .child(div().w(px(2.)).h_full().rounded_full().bg(rail_color)),
+                .child(
+                    div()
+                        .w(px(2.))
+                        .h(px(LAYER_RAIL_HEIGHT))
+                        .rounded_full()
+                        .bg(rail_color),
+                ),
         )
         .child(
             div()
                 .flex_1()
                 .min_w_0()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1p5()
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_sm()
-                                .truncate()
-                                .when(!row.is_listed, |title| title.text_color(theme::muted()))
-                                .child(row.title),
-                        )
-                        .when(row.needs_review, |line| line.child(render_review_badge())),
-                )
-                .child(render_meta(row.meta)),
+                .text_sm()
+                .truncate()
+                .when(!row.is_listed, |title| title.text_color(theme::muted()))
+                .child(row.title),
+        )
+        .when(row.needs_review, |line| line.child(render_review_badge()))
+        .child(
+            div()
+                .flex_none()
+                .text_xs()
+                .text_color(theme::subtle())
+                .child(row.meta),
         )
         .into_any_element()
 }
