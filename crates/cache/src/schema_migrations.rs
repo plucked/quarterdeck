@@ -135,6 +135,11 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         ADD COLUMN detail_scroll_row_offset REAL NOT NULL DEFAULT 0;
     ALTER TABLE review_queue_view DROP COLUMN detail_scroll_offset;
 ",
+    r"
+    -- The display the window was on, so it reopens there; its bounds are
+    -- relative to that display. NULL for placements saved before this.
+    ALTER TABLE window_placement ADD COLUMN display_uuid TEXT;
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

@@ -10,6 +10,7 @@
 //! - `pull_request_list_key.rs`: `PullRequestListKey`, the name of a cached list.
 //! - `window_placement.rs`: `WindowPlacement`, the main window's saved bounds.
 //! - `window_mode.rs`: `WindowMode`, windowed, maximized or fullscreen.
+//! - `display_uuid.rs`: `DisplayUuid`, the display a window was on.
 //! - `review_queue_view_state.rs`: `ReviewQueueViewState`, the review queue's saved selection and scroll.
 //! - `detail_scroll_position.rs`: `DetailScrollPosition`, the detail pane's scroll as row and offset.
 //! - `diff_view_settings.rs`: `DiffViewSettings`, how file diffs are shown.
@@ -27,6 +28,7 @@ mod diff_layout;
 mod diff_option_sql_text;
 mod diff_view_settings;
 mod diff_view_settings_storage;
+mod display_uuid;
 mod github_cache;
 mod line_wrapping;
 mod patch_fingerprint;
@@ -42,6 +44,7 @@ mod window_placement;
 pub use detail_scroll_position::DetailScrollPosition;
 pub use diff_layout::DiffLayout;
 pub use diff_view_settings::DiffViewSettings;
+pub use display_uuid::DisplayUuid;
 pub use github_cache::GitHubCache;
 pub use line_wrapping::LineWrapping;
 pub use patch_fingerprint::PatchFingerprint;

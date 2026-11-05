@@ -7,7 +7,7 @@
 | `database_connection` | database path and connection setup (WAL, foreign keys, migrations) |
 | `schema_migrations` | append-only `SCHEMA_MIGRATIONS` and their runner (`PRAGMA user_version`) |
 | `pull_request_list_key` | `PullRequestListKey` newtype (`REVIEW_REQUESTED`) |
-| `window_placement` / `window_mode` | `WindowPlacement`, `WindowMode` (SQL text mapping) |
+| `window_placement` / `window_mode` / `display_uuid` | `WindowPlacement` (bounds relative to its display), `WindowMode` (SQL text mapping), `DisplayUuid` |
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset |
 | `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qc-diff` enums |
 | `viewed_file` / `patch_fingerprint` / `viewed_files_storage` | viewed marks per (PR, file) with an FNV-1a patch fingerprint (stable across Rust versions) |

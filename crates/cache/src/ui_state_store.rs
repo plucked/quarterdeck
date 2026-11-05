@@ -4,10 +4,20 @@ use anyhow::{Context as _, Result, anyhow};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::database_connection::{default_database_path, open_database};
-use crate::{DetailScrollPosition, ReviewQueueViewState, WindowMode, WindowPlacement};
+use crate::{DetailScrollPosition, DisplayUuid, ReviewQueueViewState, WindowMode, WindowPlacement};
 
 /// The single row id of the one-row UI state tables.
 pub(crate) const SINGLE_ROW_ID: i64 = 1;
+
+/// The columns of the `window_placement` row, read before decoding.
+struct StoredWindowPlacement {
+    mode: String,
+    display_uuid: Option<String>,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
 
 /// The columns of the `review_queue_view` row, read before decoding.
 struct StoredReviewQueueView {
@@ -59,43 +69,50 @@ impl UiStateStore {
         let row = self
             .connection
             .query_row(
-                "SELECT mode, x, y, width, height FROM window_placement WHERE id = ?1",
+                "SELECT mode, display_uuid, x, y, width, height FROM window_placement WHERE id = ?1",
                 [SINGLE_ROW_ID],
                 |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        WindowPlacement {
-                            mode: WindowMode::Windowed,
-                            x: row.get(1)?,
-                            y: row.get(2)?,
-                            width: row.get(3)?,
-                            height: row.get(4)?,
-                        },
-                    ))
+                    Ok(StoredWindowPlacement {
+                        mode: row.get(0)?,
+                        display_uuid: row.get(1)?,
+                        x: row.get(2)?,
+                        y: row.get(3)?,
+                        width: row.get(4)?,
+                        height: row.get(5)?,
+                    })
                 },
             )
             .optional()?;
-        let Some((mode_text, placement)) = row else {
+        let Some(stored) = row else {
             return Ok(None);
         };
 
         // The CHECK constraint makes an unknown mode impossible short of a hand edit.
-        let mode = WindowMode::from_sql_text(&mode_text)
-            .ok_or_else(|| anyhow!("unknown window mode {mode_text:?}"))?;
-        Ok(Some(WindowPlacement { mode, ..placement }))
+        let mode = WindowMode::from_sql_text(&stored.mode)
+            .ok_or_else(|| anyhow!("unknown window mode {:?}", stored.mode))?;
+        Ok(Some(WindowPlacement {
+            mode,
+            display: stored.display_uuid.map(DisplayUuid::new),
+            x: stored.x,
+            y: stored.y,
+            width: stored.width,
+            height: stored.height,
+        }))
     }
 
     /// Saves the window placement, replacing the previous one.
     pub fn put_window_placement(&self, placement: &WindowPlacement) -> Result<()> {
         self.connection.execute(
-            "INSERT INTO window_placement (id, mode, x, y, width, height)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "INSERT INTO window_placement (id, mode, display_uuid, x, y, width, height)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT (id) DO UPDATE SET
-                mode = excluded.mode, x = excluded.x, y = excluded.y,
+                mode = excluded.mode, display_uuid = excluded.display_uuid,
+                x = excluded.x, y = excluded.y,
                 width = excluded.width, height = excluded.height",
             params![
                 SINGLE_ROW_ID,
                 placement.mode.as_sql_text(),
+                placement.display.as_ref().map(DisplayUuid::as_str),
                 placement.x,
                 placement.y,
                 placement.width,
@@ -184,6 +201,7 @@ mod tests {
         let store = UiStateStore::open_in_memory().unwrap();
         let first = WindowPlacement {
             mode: WindowMode::Windowed,
+            display: Some(DisplayUuid::new("37D8832A-2D66-02CA-B9F7-8F30A301B230")),
             x: 10.,
             y: 20.,
             width: 800.,
@@ -191,7 +209,8 @@ mod tests {
         };
         let second = WindowPlacement {
             mode: WindowMode::Maximized,
-            ..first
+            display: None,
+            ..first.clone()
         };
         store.put_window_placement(&first).unwrap();
         store.put_window_placement(&second).unwrap();
@@ -223,6 +242,7 @@ mod tests {
         let store = UiStateStore::open_in_memory().unwrap();
         let empty = WindowPlacement {
             mode: WindowMode::Windowed,
+            display: None,
             x: 0.,
             y: 0.,
             width: 0.,

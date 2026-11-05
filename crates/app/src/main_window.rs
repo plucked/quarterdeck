@@ -1,5 +1,7 @@
 use gpui::{Context, Entity, Subscription, Window, div, prelude::*};
 
+use qc_cache::DisplayUuid;
+
 use crate::app_services::AppServices;
 use crate::review_queue::ReviewQueue;
 use crate::ui_state::{UiStateRecorder, placement_from_window};
@@ -18,9 +20,13 @@ impl MainWindow {
         let subscriptions = [
             // Record every move, resize or mode change of the window.
             cx.observe_window_bounds(window, |_, window, cx| {
+                let display = window
+                    .display(cx)
+                    .and_then(|display| display.uuid().ok())
+                    .map(|uuid| DisplayUuid::new(uuid.to_string()));
                 UiStateRecorder::record_window_placement(
                     cx,
-                    placement_from_window(window.window_bounds(), window.viewport_size()),
+                    placement_from_window(window.window_bounds(), window.viewport_size(), display),
                 );
             }),
             cx.observe_window_activation(window, Self::on_window_activation_changed),
