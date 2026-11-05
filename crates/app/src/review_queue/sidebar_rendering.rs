@@ -10,10 +10,8 @@ use qc_github::{PullRequest, StackLayer};
 use super::ReviewQueue;
 use super::queue_row::{QueueRow, StackGroup};
 use super::refresh_status::RefreshStatus;
-use crate::button::Button;
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
-use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
 /// How narrow and how wide the sidebar can be dragged.
@@ -36,7 +34,7 @@ impl ReviewQueue {
             .h_full()
             .flex_shrink_0()
             .bg(theme::sidebar())
-            .child(self.render_sidebar_header(cx))
+            .child(self.render_sidebar_header())
             .child(
                 // The list fills the rest of the column, with a scrollbar over its right edge.
                 div()
@@ -76,51 +74,15 @@ impl ReviewQueue {
         )
     }
 
-    /// The tabs with their counts, the refresh button, and what is going on.
-    fn render_sidebar_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let tab = self.tab();
-        let authored = self.lists().authored.len();
-        let review_requested = self.lists().review_requested.len();
-        let queue = cx.entity().downgrade();
-        let show_tab = move |tab: QueueTab| {
-            let queue = queue.clone();
-            move |_: &mut gpui::Window, cx: &mut gpui::App| {
-                queue.update(cx, |queue, cx| queue.show_tab(tab, cx)).ok();
-            }
-        };
-
+    /// What is going on (refreshing, opening a layer, a failure), above
+    /// the rows; nothing while all is quiet.
+    fn render_sidebar_header(&self) -> impl IntoElement {
+        let status = self.render_status_line();
         div()
-            .flex()
-            .flex_col()
-            .gap_1p5()
             .px_3()
-            .pt_3()
-            .pb_2()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        SegmentedControl::new("queue-tabs")
-                            .option(
-                                format!("Mine  {authored}"),
-                                tab == QueueTab::Authored,
-                                show_tab(QueueTab::Authored),
-                            )
-                            .option(
-                                format!("Review  {review_requested}"),
-                                tab == QueueTab::ReviewRequested,
-                                show_tab(QueueTab::ReviewRequested),
-                            ),
-                    )
-                    .child(
-                        Button::new("refresh", "↻ Refresh")
-                            .ghost()
-                            .on_click(cx.listener(|queue, _, _, cx| queue.refresh(cx))),
-                    ),
-            )
-            .children(self.render_status_line())
+            .pt_1()
+            .when(status.is_some(), |header| header.pt_2().pb_1())
+            .children(status)
     }
 
     /// The refresh state, an opening stack layer, or why one did not open.
@@ -168,6 +130,7 @@ impl ReviewQueue {
             QueueRow::StackLayer(list_index) => {
                 let pull_request = self.shown_list().get(*list_index)?;
                 let list_index = *list_index;
+                let (repo, number) = (pull_request.repo.clone(), pull_request.number);
                 let draft_marker = if pull_request.draft { " · draft" } else { "" };
                 render_layer_row(
                     LayerRow {
@@ -182,12 +145,18 @@ impl ReviewQueue {
                         needs_review: self.needs_review(&pull_request.repo, pull_request.number),
                         is_selected: selected_id == Some(pull_request.id),
                     },
-                    cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)),
+                    cx.listener(move |queue, event: &gpui::ClickEvent, _, cx| {
+                        if !(event.modifiers().shift && queue.start_combined_at(&repo, number, cx))
+                        {
+                            queue.select(list_index, cx);
+                        }
+                    }),
                 )
             }
             QueueRow::OtherLayer { key, layer } => {
                 let stack_layer = self.stack(key)?.layers.get(*layer)?;
                 let (key, layer) = (key.clone(), *layer);
+                let number = stack_layer.number;
                 render_layer_row(
                     LayerRow {
                         id: ("other-layer", index).into(),
@@ -199,8 +168,12 @@ impl ReviewQueue {
                         needs_review: self.needs_review(&key.repo, stack_layer.number),
                         is_selected: self.is_selected(&key.repo, stack_layer.number),
                     },
-                    cx.listener(move |queue, _, _, cx| {
-                        queue.open_other_layer(&key, layer, cx);
+                    cx.listener(move |queue, event: &gpui::ClickEvent, _, cx| {
+                        if !(event.modifiers().shift
+                            && queue.start_combined_at(&key.repo, number, cx))
+                        {
+                            queue.open_other_layer(&key, layer, cx);
+                        }
                     }),
                 )
             }
@@ -315,12 +288,13 @@ fn render_stack_header(
                     div()
                         .id(("stack-chevron", row_index))
                         .flex_none()
-                        .w_4()
-                        .text_center()
-                        .rounded_sm()
+                        .size_4()
+                        .flex()
+                        .items_center()
+                        .justify_center()
                         .text_xs()
                         .text_color(theme::subtle())
-                        .hover(|style| style.text_color(theme::text()).bg(theme::hover()))
+                        .hover(|style| style.text_color(theme::text()))
                         .on_click(cx.listener(move |queue, _, _, cx| {
                             cx.stop_propagation();
                             queue.toggle_stack_group(&toggle_key, cx);

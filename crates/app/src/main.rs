@@ -17,6 +17,7 @@
 //! - `button.rs`: `Button`, a small text button.
 //! - `display_date.rs`: `short_date`, a GitHub timestamp as `21 Oct 2026`.
 //! - `checkbox.rs`: `Checkbox`, a drawn checkbox (checked, unchecked or mixed).
+//! - `panel_toggle.rs`: `PanelToggle`, the icon button showing or hiding a side panel.
 //! - `resize_handle.rs`: `ResizeHandle`, a divider dragged to resize the panel beside it.
 //! - `text_area/`: `TextArea`, a multiline text editor (gpui has none).
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
@@ -35,6 +36,7 @@ mod fetch_stack;
 mod launch_app;
 mod main_window;
 mod markdown_view;
+mod panel_toggle;
 mod pull_request_detail;
 mod resize_handle;
 mod review_queue;

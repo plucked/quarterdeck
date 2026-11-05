@@ -320,6 +320,11 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     ALTER TABLE review_layout ADD COLUMN comment_destination TEXT NOT NULL DEFAULT 'github'
         CHECK (comment_destination IN ('local', 'github'));
 ",
+    r"
+    -- Whether the queue sidebar shows (1) or is hidden (0).
+    ALTER TABLE review_queue_view ADD COLUMN sidebar_visible INTEGER NOT NULL DEFAULT 1
+        CHECK (sidebar_visible IN (0, 1));
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

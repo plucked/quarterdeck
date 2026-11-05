@@ -1,6 +1,6 @@
 use gpui::{
     App, Application, Bounds, DisplayId, Pixels, Size, TitlebarOptions, WindowBounds,
-    WindowOptions, prelude::*, px, size,
+    WindowOptions, point, prelude::*, px, size,
 };
 
 use crate::app_commands::install_app_commands;
@@ -14,6 +14,9 @@ const WINDOW_WIDTH: f32 = 1200.;
 const WINDOW_HEIGHT: f32 = 800.;
 const WINDOW_MIN_WIDTH: f32 = 720.;
 const WINDOW_MIN_HEIGHT: f32 = 480.;
+/// Where the traffic lights sit: centered in the top bar's 40 px.
+const TRAFFIC_LIGHTS_X: f32 = 14.;
+const TRAFFIC_LIGHTS_Y: f32 = 13.;
 
 /// Initializes the services, starts gpui and opens the main window where it
 /// was last placed, on the display it was on. Exits the process when the database cannot be opened.
@@ -44,9 +47,11 @@ pub fn launch_app() {
                 window_bounds: Some(restored.bounds),
                 display_id: restored.display_id,
                 window_min_size: Some(min_size),
+                // The app draws the title bar (the queue's top bar); the traffic lights sit in it.
                 titlebar: Some(TitlebarOptions {
                     title: Some(WINDOW_TITLE.into()),
-                    ..Default::default()
+                    appears_transparent: true,
+                    traffic_light_position: Some(point(px(TRAFFIC_LIGHTS_X), px(TRAFFIC_LIGHTS_Y))),
                 }),
                 ..Default::default()
             },

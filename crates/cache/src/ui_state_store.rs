@@ -5,7 +5,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::database_connection::{default_database_path, open_database};
 use crate::{
-    DetailScrollPosition, DisplayUuid, QueueTab, ReviewQueueViewState, WindowMode, WindowPlacement,
+    DetailScrollPosition, DisplayUuid, PanelVisibility, QueueTab, ReviewQueueViewState, WindowMode,
+    WindowPlacement,
 };
 
 /// The single row id of the one-row UI state tables.
@@ -27,6 +28,7 @@ struct StoredReviewQueueView {
     scroll_row: i64,
     scroll_row_offset: f32,
     queue_tab: String,
+    sidebar_visible: i64,
 }
 
 /// A connection to the database for the UI state the app restores after a
@@ -130,7 +132,8 @@ impl UiStateStore {
         let row = self
             .connection
             .query_row(
-                "SELECT selected_pr_id, detail_scroll_row, detail_scroll_row_offset, queue_tab
+                "SELECT selected_pr_id, detail_scroll_row, detail_scroll_row_offset, queue_tab,
+                        sidebar_visible
                  FROM review_queue_view WHERE id = ?1",
                 [SINGLE_ROW_ID],
                 |row| {
@@ -139,6 +142,7 @@ impl UiStateStore {
                         scroll_row: row.get(1)?,
                         scroll_row_offset: row.get(2)?,
                         queue_tab: row.get(3)?,
+                        sidebar_visible: row.get(4)?,
                     })
                 },
             )
@@ -155,8 +159,11 @@ impl UiStateStore {
             .context("negative pull request id")?;
         let tab = QueueTab::from_sql_text(&stored.queue_tab)
             .ok_or_else(|| anyhow!("unknown queue tab {:?}", stored.queue_tab))?;
+        let sidebar = PanelVisibility::from_sql_integer(stored.sidebar_visible)
+            .ok_or_else(|| anyhow!("unknown sidebar visibility {}", stored.sidebar_visible))?;
         Ok(Some(ReviewQueueViewState {
             tab,
+            sidebar,
             selected_pull_request_id,
             detail_scroll: DetailScrollPosition {
                 row: usize::try_from(stored.scroll_row).context("negative scroll row")?,
@@ -173,19 +180,21 @@ impl UiStateStore {
             .transpose()
             .context("pull request id exceeds SQLite's integer range")?;
         self.connection.execute(
-            "INSERT INTO review_queue_view (id, selected_pr_id, detail_scroll_row, detail_scroll_row_offset, queue_tab)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO review_queue_view (id, selected_pr_id, detail_scroll_row, detail_scroll_row_offset, queue_tab, sidebar_visible)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (id) DO UPDATE SET
                 selected_pr_id = excluded.selected_pr_id,
                 detail_scroll_row = excluded.detail_scroll_row,
                 detail_scroll_row_offset = excluded.detail_scroll_row_offset,
-                queue_tab = excluded.queue_tab",
+                queue_tab = excluded.queue_tab,
+                sidebar_visible = excluded.sidebar_visible",
             params![
                 SINGLE_ROW_ID,
                 selected_id,
                 i64::try_from(state.detail_scroll.row)?,
                 state.detail_scroll.offset_in_row,
-                state.tab.as_sql_text()
+                state.tab.as_sql_text(),
+                state.sidebar.as_sql_integer()
             ],
         )?;
         Ok(())
@@ -237,6 +246,7 @@ mod tests {
                 offset_in_row: 6.5,
             },
             tab: QueueTab::ReviewRequested,
+            sidebar: PanelVisibility::Hidden,
         };
         store.put_review_queue_view_state(&selected).unwrap();
         assert_eq!(store.review_queue_view_state().unwrap(), Some(selected));

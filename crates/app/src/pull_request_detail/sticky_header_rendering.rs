@@ -68,8 +68,7 @@ impl PullRequestDetail {
                             cx.open_url(&url);
                         },
                     ))
-                    .children(self.render_action_buttons(cx))
-                    .child(self.render_tree_toggle(cx)),
+                    .children(self.render_action_buttons(cx)),
             );
 
         // The padded content, then the progress line flush with the bottom edge.
@@ -130,15 +129,6 @@ impl PullRequestDetail {
                 short_date(&pull_request.updated_at),
                 self.viewed_progress_text()
             )))
-    }
-
-    /// The button that shows or hides the side panel (cmd-b).
-    fn render_tree_toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let is_shown = self.file_tree().visibility() == qc_cache::PanelVisibility::Shown;
-        Button::new("toggle-file-tree", "Panel")
-            .ghost()
-            .selected(is_shown)
-            .on_click(cx.listener(|detail, _, _, cx| detail.toggle_file_tree(cx)))
     }
 
     /// ` · 3/12 viewed` once files are loaded.

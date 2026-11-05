@@ -1,4 +1,4 @@
-use crate::{DetailScrollPosition, QueueTab};
+use crate::{DetailScrollPosition, PanelVisibility, QueueTab};
 
 /// What the review queue restores after a relaunch.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -8,4 +8,6 @@ pub struct ReviewQueueViewState {
     pub detail_scroll: DetailScrollPosition,
     /// The list the queue shows.
     pub tab: QueueTab,
+    /// Whether the queue sidebar on the left shows.
+    pub sidebar: PanelVisibility,
 }

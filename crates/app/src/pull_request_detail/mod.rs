@@ -1,7 +1,7 @@
 //! The right pane: the shown pull request's header, description and changed
 //! files as one virtualized list, so scrolling costs the same for a
 //! one-line change as for a hundred files. For a stacked pull request it
-//! shows one layer or several layers combined, with the stack map. Owns
+//! shows one layer or several layers combined. Owns
 //! loading the files (with progress), building and coloring their diffs, the
 //! diff settings and each file's viewed and collapsed state.
 //!
@@ -32,7 +32,6 @@
 //! - `review_target.rs`: `ReviewTarget`, one layer or a combined range of stack layers.
 //! - `fetch_combined_files.rs`: gets a combined range's files from the cache or one diff download.
 //! - `stack_bar_rendering.rs`: the header's stack line: layer, neighbours, review mode, range.
-//! - `stack_map_rendering.rs`: the stack map above the file tree: every layer, the range.
 //! - `review_pane.rs`: `ReviewPane`, the detail's review state: comments, cards, editor, tab.
 //! - `review_comments.rs`: `ReviewComments`, GitHub's conversations and the user's notes, as cards.
 //! - `comment_placement.rs`: `CommentPlacement`, which line each card and the composer go under.
@@ -86,7 +85,6 @@ mod row_rendering;
 mod selected_diff_text;
 mod side_panel_tab;
 mod stack_bar_rendering;
-mod stack_map_rendering;
 mod sticky_header_rendering;
 mod viewed_toggle;
 

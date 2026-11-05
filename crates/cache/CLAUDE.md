@@ -12,7 +12,7 @@
 | `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` |
 | `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
 | `sql_integers` / `unix_now` | checked integer conversions; current time |
-| `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset |
+| `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset, tab, sidebar visibility |
 | `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qc-diff` enums |
 | `viewed_file` / `patch_fingerprint` / `viewed_files_storage` / `review_scope` | viewed marks per `ReviewScope` (a PR, or a combined range of stack layers) and file, with an FNV-1a patch fingerprint (stable across Rust versions) |
 | `review_note` / `note_id` / `note_destination` / `note_anchor` / `review_summary` / `review_notes_storage` | the user's review comments: `ReviewNote` (local note or GitHub draft) per `ReviewScope`, on lines (`NoteAnchor::Line`) or replying to a GitHub thread (`NoteAnchor::Reply`); `NoteId` made by the app (time-based, unique per process) so writes can be batched; `ReviewSummary` (verdict + body) per PR |

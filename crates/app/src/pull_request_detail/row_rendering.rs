@@ -62,9 +62,9 @@ impl Render for PullRequestDetail {
 
         // The sticky header above; the file tree beside the diff when shown.
         // `min_w_0` and `min_h_0` let the pane shrink to the window.
-        // The side panel holds the stack map and the file tree; it shows when either has content.
+        // The side panel holds the file tree and the review; it shows once files are loaded.
         let shows_tree = self.file_tree().visibility() == PanelVisibility::Shown
-            && (!self.loaded_files().is_empty() || self.stack().is_some());
+            && !self.loaded_files().is_empty();
         div()
             .flex()
             .flex_col()

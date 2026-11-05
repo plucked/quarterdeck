@@ -22,6 +22,7 @@ actions!(
         PreviousFile,
         MarkViewedAndNext,
         ToggleFileTree,
+        ToggleSidebar,
         NextLayer,
         PreviousLayer,
         ToggleStackReview,
@@ -42,6 +43,7 @@ pub fn install_app_commands(cx: &mut App) {
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-c", Copy, None),
         KeyBinding::new("cmd-b", ToggleFileTree, None),
+        KeyBinding::new("ctrl-cmd-s", ToggleSidebar, None),
         KeyBinding::new("]", NextFile, Some(SINGLE_KEY_CONTEXT)),
         KeyBinding::new("[", PreviousFile, Some(SINGLE_KEY_CONTEXT)),
         KeyBinding::new("v", MarkViewedAndNext, Some(SINGLE_KEY_CONTEXT)),
@@ -76,6 +78,7 @@ pub fn install_app_commands(cx: &mut App) {
             items: vec![
                 MenuItem::action("Refresh", Refresh),
                 MenuItem::separator(),
+                MenuItem::action("Toggle Sidebar", ToggleSidebar),
                 MenuItem::action("Toggle File Tree", ToggleFileTree),
                 MenuItem::action("Next File", NextFile),
                 MenuItem::action("Previous File", PreviousFile),

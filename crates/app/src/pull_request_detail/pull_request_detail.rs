@@ -5,16 +5,17 @@ use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::{
     ClipboardItem, Context, EventEmitter, FocusHandle, ListAlignment, ListOffset, ListState,
-    Pixels, Point, ScrollHandle, ScrollStrategy, ScrollWheelEvent, SharedString, Subscription,
-    Task, UniformListScrollHandle, Window, px,
+    Pixels, Point, ScrollHandle, ScrollWheelEvent, SharedString, Subscription, Task, Window, px,
 };
 use qc_cache::{
-    DetailScrollPosition, DiffViewSettings, LineWrapping, ReviewLayoutState, ReviewScope,
-    StackReviewMode, ViewedFile,
+    DetailScrollPosition, DiffViewSettings, LineWrapping, PanelVisibility, ReviewLayoutState,
+    ReviewScope, StackReviewMode, ViewedFile,
 };
 use qc_diff::FileDiff;
 use qc_file_tree::{FileKind, FileTree, NodeId};
-use qc_github::{GitHubClient, PullRequest, PullRequestFile, PullRequestStack, StackMembership};
+use qc_github::{
+    GitHubClient, PullRequest, PullRequestFile, PullRequestStack, RepoRef, StackMembership,
+};
 use qc_markdown::MarkdownDocument;
 use qc_syntax::DiffSyntax;
 
@@ -162,8 +163,6 @@ pub struct PullRequestDetail {
     stack_task: Option<Task<()>>,
     /// Syntax batches colored of all started, while highlighting runs.
     highlight_progress: Option<(usize, usize)>,
-    /// The scroll of the stack map, kept on the shown layer.
-    stack_map_scroll: UniformListScrollHandle,
     /// The side panel's width, as dragged (and saved).
     side_panel_width: f32,
     /// Review comments, the comment being written, and the review tab.
@@ -227,7 +226,6 @@ impl PullRequestDetail {
             combined_start: None,
             stack_task: None,
             highlight_progress: None,
-            stack_map_scroll: UniformListScrollHandle::new(),
             action_panel: None,
             review: ReviewPane {
                 destination: layout.comment_destination,
@@ -455,18 +453,6 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    pub(super) fn stack_map_scroll(&self) -> &UniformListScrollHandle {
-        &self.stack_map_scroll
-    }
-
-    /// Scrolls the stack map so the shown layer is in view.
-    fn reveal_current_layer(&self) {
-        if let Some(index) = self.current_layer_index() {
-            self.stack_map_scroll
-                .scroll_to_item(index, ScrollStrategy::Center);
-        }
-    }
-
     pub(super) fn is_stack_loading(&self) -> bool {
         self.is_stack_loading
     }
@@ -614,7 +600,6 @@ impl PullRequestDetail {
         self.target = self.decide_target();
         cx.emit(DetailEvent::TargetChanged);
         self.load_changed_files(cx);
-        self.reveal_current_layer();
         self.load_stack(cx);
     }
 
@@ -718,7 +703,6 @@ impl PullRequestDetail {
             return;
         }
         self.stack = Some(stack);
-        self.reveal_current_layer();
         self.retarget(cx);
         cx.notify();
     }
@@ -771,10 +755,40 @@ impl PullRequestDetail {
         }
     }
 
-    /// Starts the combined range at layer `index` (shift-click in the stack
-    /// map), switching to the combined review; a layer above the shown one
-    /// is not a start.
-    pub(super) fn set_combined_start(&mut self, index: usize, cx: &mut Context<Self>) {
+    /// Starts the combined range at layer `number` of `repo` (a shift-click
+    /// on a layer in the sidebar) when this stack is shown; `false` when it
+    /// is another stack's layer, which the caller opens instead.
+    pub fn start_combined_at(
+        &mut self,
+        repo: &RepoRef,
+        number: u64,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let index = self
+            .stack
+            .as_ref()
+            .filter(|stack| stack.repo == *repo)
+            .and_then(|stack| stack.layers.iter().position(|layer| layer.number == number));
+        let Some(index) = index else {
+            return false;
+        };
+        self.set_combined_start(index, cx);
+        true
+    }
+
+    /// Whether a pull request is shown (the side panel can be toggled).
+    pub fn has_pull_request(&self) -> bool {
+        self.pull_request.is_some()
+    }
+
+    /// Whether the side panel (files and review) is set to show.
+    pub fn is_side_panel_shown(&self) -> bool {
+        self.file_tree.visibility() == PanelVisibility::Shown
+    }
+
+    /// Starts the combined range at layer `index`, switching to the combined
+    /// review; a layer above the shown one is not a start.
+    fn set_combined_start(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(number) = self
             .stack
             .as_ref()

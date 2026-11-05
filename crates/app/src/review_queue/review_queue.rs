@@ -5,7 +5,9 @@ use gpui::{
     App, Context, Entity, FocusHandle, ListAlignment, ListOffset, ListState, SharedString,
     Subscription, Task, Window, div, prelude::*, px,
 };
-use qc_cache::{DetailScrollPosition, PullRequestListKey, QueueTab, ReviewQueueViewState};
+use qc_cache::{
+    DetailScrollPosition, PanelVisibility, PullRequestListKey, QueueTab, ReviewQueueViewState,
+};
 use qc_github::{GitHubClient, PullRequest, PullRequestStack, RepoRef, StackMembership};
 
 use super::activation_refresh::ActivationRefresh;
@@ -20,7 +22,7 @@ use super::selection_restore::SelectionRestore;
 use super::stack_key::StackKey;
 use crate::app_commands::{
     MarkViewedAndNext, NextFile, NextLayer, PreviousFile, PreviousLayer, REVIEW_QUEUE_CONTEXT,
-    Refresh, ShowAuthored, ShowReviewRequested, ToggleFileTree, ToggleStackReview,
+    Refresh, ShowAuthored, ShowReviewRequested, ToggleFileTree, ToggleSidebar, ToggleStackReview,
 };
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
@@ -68,6 +70,8 @@ pub struct ReviewQueue {
     focus: FocusHandle,
     lists: QueueLists,
     tab: QueueTab,
+    /// Whether the sidebar (the lists) shows.
+    sidebar_visibility: PanelVisibility,
     /// The sidebar rows of the shown tab.
     rows: Vec<QueueRow>,
     collapsed_stacks: HashSet<StackKey>,
@@ -160,6 +164,7 @@ impl ReviewQueue {
             focus,
             lists,
             tab: saved.tab,
+            sidebar_visibility: saved.sidebar,
             rows: Vec::new(),
             collapsed_stacks: HashSet::new(),
             selected: None,
@@ -190,6 +195,33 @@ impl ReviewQueue {
 
     pub(super) fn tab(&self) -> QueueTab {
         self.tab
+    }
+
+    pub(super) fn sidebar_visibility(&self) -> PanelVisibility {
+        self.sidebar_visibility
+    }
+
+    pub(super) fn detail(&self) -> &Entity<PullRequestDetail> {
+        &self.detail
+    }
+
+    /// Starts the shown stack's combined review at layer `number` of `repo`
+    /// (a shift-click on its row); `false` when another stack is shown.
+    pub(super) fn start_combined_at(
+        &mut self,
+        repo: &RepoRef,
+        number: u64,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        self.detail
+            .update(cx, |detail, cx| detail.start_combined_at(repo, number, cx))
+    }
+
+    /// Shows or hides the sidebar, and saves it.
+    pub(super) fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        self.sidebar_visibility = self.sidebar_visibility.toggled();
+        self.record_view_state(cx);
+        cx.notify();
     }
 
     pub(super) fn lists(&self) -> &QueueLists {
@@ -703,6 +735,7 @@ impl ReviewQueue {
                 selected_pull_request_id,
                 detail_scroll,
                 tab: self.tab,
+                sidebar: self.sidebar_visibility,
             },
         );
     }
@@ -751,6 +784,11 @@ impl ReviewQueue {
     }
 
     /// Handles the `ToggleFileTree` action (cmd-b): shows or hides the file tree.
+    /// Handles the `ToggleSidebar` action (ctrl-cmd-s): shows or hides the lists.
+    fn on_toggle_sidebar(&mut self, _: &ToggleSidebar, _: &mut Window, cx: &mut Context<Self>) {
+        self.toggle_sidebar(cx);
+    }
+
     fn on_toggle_file_tree(&mut self, _: &ToggleFileTree, _: &mut Window, cx: &mut Context<Self>) {
         self.detail.update(cx, PullRequestDetail::toggle_file_tree);
     }
@@ -790,17 +828,29 @@ impl Render for ReviewQueue {
             .on_action(cx.listener(Self::on_previous_file))
             .on_action(cx.listener(Self::on_mark_viewed_and_next))
             .on_action(cx.listener(Self::on_toggle_file_tree))
+            .on_action(cx.listener(Self::on_toggle_sidebar))
             .on_action(cx.listener(Self::on_next_layer))
             .on_action(cx.listener(Self::on_previous_layer))
             .on_action(cx.listener(Self::on_toggle_stack_review))
             .flex()
+            .flex_col()
             .size_full()
             .bg(theme::background())
             .text_color(theme::text())
             .text_sm()
-            .child(self.render_sidebar(cx))
-            .child(self.render_sidebar_handle(cx))
-            .child(self.detail.clone())
+            .child(self.render_top_bar(cx))
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .min_h_0()
+                    .when(self.sidebar_visibility == PanelVisibility::Shown, |panes| {
+                        panes
+                            .child(self.render_sidebar(cx))
+                            .child(self.render_sidebar_handle(cx))
+                    })
+                    .child(self.detail.clone()),
+            )
     }
 }
 
