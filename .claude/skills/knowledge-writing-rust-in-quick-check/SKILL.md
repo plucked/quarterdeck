@@ -15,7 +15,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 - **A module is named after what it holds**, not after an action or a phase: `review_queue`, `shared_cache`, `schema_migrations`.
 - **Put new code where its concept already lives.** A new concept that fits no module gets its own module, named the same way.
 - **Every crate's `CLAUDE.md` has a module table:** one row per top-level module and what it holds. A new module adds a row.
-- **Crates split by subsystem, not by layer.** `qc-github` talks to GitHub, `qc-cache` persists, `qc-markdown` parses Markdown, `qc-diff` builds file diffs, `quick-check` (the app) owns gpui. Only the app depends on gpui; library crates stay UI-free so they can be tested without a window.
+- **Crates split by subsystem, not by layer.** `qc-github` talks to GitHub, `qc-cache` persists, `qc-markdown` parses Markdown, `qc-diff` builds file diffs, `qc-syntax` colors them, `quick-check` (the app) owns gpui. Only the app depends on gpui; library crates stay UI-free so they can be tested without a window.
 
 ## Files
 
@@ -53,6 +53,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 ## gpui and async code
 
 - **Never block the main thread.** Rendering, event handlers and `cx.spawn` futures run on the main thread. Network calls (`ureq`) and SQLite work run inside `cx.background_executor().spawn(...)`; the foreground task awaits that and writes the result back through the `WeakEntity` it was given. A cache read that is small and local may run on the main thread at startup only.
+- **Slow derived data arrives after what it decorates.** Show content as soon as it is usable and add the slow part when ready, in batches spread over the background executor (syntax colors after the diffs), instead of making the first view wait.
 - **No second runtime.** The app uses gpui's executors; library crates expose blocking APIs and do not depend on tokio.
 - **Hold the `Task` you spawn.** A view stores its in-flight `Task<()>` in a field (`refresh_task`), so starting a new one drops and cancels the old one and closing the view cancels both. `detach()` only for work that must outlive the view, with a comment saying why.
 - **A dropped view is not an error.** The result of `this.update(cx, ...)` after an await is ignored with `.ok()`: the view was closed while the task ran.
