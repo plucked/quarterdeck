@@ -36,6 +36,14 @@ pub fn muted() -> Rgba {
 pub fn accent() -> Rgba {
     rgb(0x54_8a_f7)
 }
+/// The scrollbar thumb at rest.
+pub fn scrollbar_thumb() -> Rgba {
+    rgba(0xdf_e1_e5_33)
+}
+/// The scrollbar thumb while dragged.
+pub fn scrollbar_thumb_active() -> Rgba {
+    rgba(0xdf_e1_e5_66)
+}
 /// Background of selected text.
 pub fn text_selection() -> Rgba {
     rgba(0x54_8a_f7_59)

@@ -5,6 +5,7 @@
 //! - `main_window.rs`: `MainWindow`, the root view; records the window placement.
 //! - `app_commands.rs`: app-level actions with their key bindings and menus.
 //! - `app_services.rs`: `AppServices`, the GitHub client and cache handed to views.
+//! - `scrollbar/`: `VerticalScrollbar`, a draggable scrollbar for any scroll container.
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
 //! - `theme.rs`: the color palette and fonts.
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
@@ -17,6 +18,7 @@ mod launch_app;
 mod main_window;
 mod markdown_view;
 mod review_queue;
+mod scrollbar;
 mod shared_cache;
 mod theme;
 mod ui_state;

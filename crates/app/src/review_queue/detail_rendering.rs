@@ -1,25 +1,38 @@
-use gpui::{AnyElement, Context, div, prelude::*};
+use gpui::{AnyElement, Context, Div, Stateful, div, prelude::*};
 use qc_github::PullRequest;
 
 use super::ReviewQueue;
 use super::changed_files::ChangedFiles;
 use super::render_file_diff::render_file_diff;
 use crate::markdown_view::MarkdownView;
+use crate::scrollbar::VerticalScrollbar;
 use crate::theme;
 
 impl ReviewQueue {
     /// The right column: the selected pull request's header, description and
-    /// changed files, scrolling as one.
+    /// changed files, scrolling as one, with a scrollbar on its right edge.
     pub(super) fn render_detail(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        // Scrolling is recorded so a relaunch returns to the same place.
         // `min_w_0` lets the pane shrink to the window, so its text wraps.
+        div()
+            .relative()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .child(self.render_detail_scroll_area(cx))
+            .child(VerticalScrollbar::new(
+                "detail-scrollbar",
+                self.detail_scroll().clone(),
+            ))
+    }
+
+    /// The scrolling content of the right column.
+    fn render_detail_scroll_area(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        // Scrolling is recorded so a relaunch returns to the same place.
         let container = div()
             .id("detail")
             .track_scroll(self.detail_scroll())
             .on_scroll_wheel(cx.listener(|queue, _, _, cx| queue.record_view_state(cx)))
-            .flex_1()
-            .min_w_0()
-            .h_full()
+            .size_full()
             .overflow_y_scroll()
             .p_4()
             .flex()

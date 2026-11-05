@@ -5,6 +5,7 @@ use qc_github::PullRequest;
 
 use super::ReviewQueue;
 use super::refresh_status::RefreshStatus;
+use crate::scrollbar::VerticalScrollbar;
 use crate::theme;
 
 const SIDEBAR_WIDTH: f32 = 380.;
@@ -23,13 +24,26 @@ impl ReviewQueue {
             .border_color(theme::border())
             .child(self.render_sidebar_header(cx))
             .child(
-                uniform_list(
-                    "pull-requests",
-                    self.pull_requests().len(),
-                    cx.processor(|queue, range, _window, cx| queue.render_queue_rows(range, cx)),
-                )
-                .track_scroll(self.queue_list_scroll().clone())
-                .flex_1(),
+                // The list fills the rest of the column, with a scrollbar over its right edge.
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .child(
+                        uniform_list(
+                            "pull-requests",
+                            self.pull_requests().len(),
+                            cx.processor(|queue, range, _window, cx| {
+                                queue.render_queue_rows(range, cx)
+                            }),
+                        )
+                        .track_scroll(self.queue_list_scroll().clone())
+                        .size_full(),
+                    )
+                    .child(VerticalScrollbar::new(
+                        "pull-requests-scrollbar",
+                        self.queue_list_scroll().0.borrow().base_handle.clone(),
+                    )),
             )
     }
 
