@@ -1,0 +1,13 @@
+[package]
+name = "qc-markdown"
+description = "GitHub-flavored Markdown parsed into a typed document for rendering"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pulldown-cmark.workspace = true
+
+[lints]
+workspace = true
