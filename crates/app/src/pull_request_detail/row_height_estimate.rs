@@ -9,7 +9,7 @@ use crate::scrollbar::ListRowTops;
 
 /// Heights of the rows that do not depend on their content, as gpui lays them out.
 const SUMMARY_BAR_HEIGHT: f32 = 53.5;
-const FILE_HEADER_HEIGHT: f32 = 37.5;
+const FILE_HEADER_HEIGHT: f32 = 38.;
 const FILE_NOTE_HEIGHT: f32 = 34.;
 const FILE_END_HEIGHT: f32 = 16.;
 /// Typical heights of rows that do depend on their content.

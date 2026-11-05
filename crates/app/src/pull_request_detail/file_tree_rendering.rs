@@ -12,6 +12,7 @@ use super::pull_request_detail::PullRequestDetail;
 use super::side_panel_tab::SidePanelTab;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::diff_view::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
+use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
@@ -230,14 +231,10 @@ impl PullRequestDetail {
         let counts = summary.map(|summary| summary.lines).unwrap_or_default();
         let folder = row.node;
         base.on_click(cx.listener(move |detail, _, _, cx| detail.toggle_folder(&path, cx)))
-            .child(
-                div()
-                    .flex_none()
-                    .w_3()
-                    .text_xs()
-                    .text_color(theme::subtle())
-                    .child(if is_collapsed { "▸" } else { "▾" }),
-            )
+            .child(FoldChevron::new(
+                ("folder-fold", index),
+                FoldState::of(is_collapsed),
+            ))
             .child(
                 div()
                     .flex_1()
@@ -290,7 +287,7 @@ impl PullRequestDetail {
         };
         base.when(is_current, |row| row.bg(theme::selected()))
             .on_click(cx.listener(move |detail, _, _, cx| detail.reveal_file(file, cx)))
-            .child(div().flex_none().w_3())
+            .child(div().flex_none().w(px(FOLD_CHEVRON_SIZE)))
             .child(
                 div()
                     .flex_1()

@@ -1,12 +1,14 @@
-//! `FoldChevron`: the button that folds or unfolds a group (a repository or
-//! a stack in the sidebar), big enough to see and to hit.
+//! `FoldChevron`: the button that folds or unfolds something (a repository
+//! or stack in the sidebar, a folder in the file tree, a file in the diff,
+//! the description), big enough to see and to hit.
 
 use gpui::{App, ClickEvent, ElementId, IntoElement, RenderOnce, Window, div, prelude::*, px};
 
 use crate::theme;
 
-/// Edge length of the clickable square.
-const BUTTON_SIZE: f32 = 24.;
+/// Edge length of the clickable square; rows without a chevron leave this
+/// much room so names line up.
+pub const FOLD_CHEVRON_SIZE: f32 = 24.;
 /// Size of the triangle glyph.
 const GLYPH_SIZE: f32 = 10.;
 
@@ -69,7 +71,7 @@ impl RenderOnce for FoldChevron {
         let button = div()
             .id(self.id)
             .flex_none()
-            .size(px(BUTTON_SIZE))
+            .size(px(FOLD_CHEVRON_SIZE))
             .flex()
             .items_center()
             .justify_center()

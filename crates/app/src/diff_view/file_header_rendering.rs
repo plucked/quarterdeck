@@ -6,6 +6,7 @@ use qd_github::PullRequestFile;
 use super::FileDiffState;
 use super::file_status_badge::render_file_status_badge;
 use crate::checkbox::{CheckState, Checkbox};
+use crate::fold_chevron::{FoldChevron, FoldState};
 use crate::theme;
 
 /// A click handler shared by several elements of one file.
@@ -22,7 +23,6 @@ pub fn render_file_header(
     on_toggle_collapsed: FileClickHandler,
     on_toggle_viewed: FileClickHandler,
 ) -> Stateful<Div> {
-    let chevron = if state.is_collapsed { "▸" } else { "▾" };
     let (directory, name) = split_path(&file.filename);
     let renamed_from = file
         .previous_filename
@@ -43,14 +43,10 @@ pub fn render_file_header(
         .text_sm()
         .cursor_pointer()
         .on_click(move |event, window, cx| on_toggle_collapsed(event, window, cx))
-        .child(
-            div()
-                .flex_none()
-                .w_3()
-                .text_xs()
-                .text_color(theme::subtle())
-                .child(chevron),
-        )
+        .child(FoldChevron::new(
+            ("file-fold", index),
+            FoldState::of(state.is_collapsed),
+        ))
         .child(render_file_status_badge(&file.status))
         .child(
             div()

@@ -4,6 +4,7 @@ use qd_github::PullRequest;
 use super::pull_request_detail::PullRequestDetail;
 use crate::button::Button;
 use crate::display_date::short_date;
+use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
@@ -22,11 +23,6 @@ impl PullRequestDetail {
         let pull_request = self.pull_request()?;
         let has_description = self.description().is_some();
         let is_expanded = self.is_description_expanded() && has_description;
-        let chevron = match (has_description, is_expanded) {
-            (false, _) => " ",
-            (true, false) => "▸",
-            (true, true) => "▾",
-        };
         let url = pull_request.html_url.clone();
 
         // Title row: clicking it (or the chevron) shows or hides the description.
@@ -39,13 +35,17 @@ impl PullRequestDetail {
                 row.cursor_pointer()
                     .on_click(cx.listener(|detail, _, _, cx| detail.toggle_description(cx)))
             })
+            // The chevron's slot stays without a description, so the title keeps its place.
             .child(
                 div()
                     .flex_none()
-                    .w_3()
-                    .text_xs()
-                    .text_color(theme::subtle())
-                    .child(chevron),
+                    .w(px(FOLD_CHEVRON_SIZE))
+                    .when(has_description, |slot| {
+                        slot.child(FoldChevron::new(
+                            "description-fold",
+                            FoldState::of(!is_expanded),
+                        ))
+                    }),
             )
             .child(
                 div()
@@ -104,7 +104,7 @@ impl PullRequestDetail {
     /// the review is.
     fn render_meta_line(&self, pull_request: &PullRequest) -> impl IntoElement {
         div()
-            .pl_5()
+            .pl_8()
             .flex()
             .items_center()
             .gap_2()
@@ -149,7 +149,7 @@ impl PullRequestDetail {
         div()
             .relative()
             .mt_1()
-            .ml_5()
+            .ml_8()
             .child(
                 div()
                     .id("description")

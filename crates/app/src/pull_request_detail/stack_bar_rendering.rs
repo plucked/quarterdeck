@@ -36,7 +36,7 @@ impl PullRequestDetail {
                 .flex()
                 .items_center()
                 .gap_2()
-                .pl_5()
+                .pl_8()
                 .text_xs()
                 .child(
                     div()

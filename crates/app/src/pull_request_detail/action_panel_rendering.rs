@@ -60,7 +60,7 @@ impl PullRequestDetail {
         Some(
             div()
                 .mt_1()
-                .ml_5()
+                .ml_8()
                 .px_4()
                 .py_3()
                 .flex()

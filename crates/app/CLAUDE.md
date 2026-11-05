@@ -17,7 +17,7 @@
 | `text_area` | `TextArea`: multiline text editor entity (gpui has none): typing through the system input handler (IME), selection, word/line moves, copy/cut/paste, cmd-enter → `TextAreaEvent::Submit`, escape → `Cancel`; key context `TextArea` |
 | `panel_toggle` | `PanelToggle` + `PanelEdge`: icon button drawn as a window outline with the panel's strip (filled while shown), for the top bar |
 | `button` | `Button`: small text button (plain, ghost, primary, danger; selected, disabled) |
-| `fold_chevron` | `FoldChevron` + `FoldState`: the 24 px fold button (▶ / ▼, tints on hover; its own click or the row's) |
+| `fold_chevron` | `FoldChevron` + `FoldState`: the 24 px fold button (▶ / ▼, tints on hover; its own click or the row's), used for every fold: sidebar repositories and stacks, tree folders, diff file headers, the description; rows without one leave `FOLD_CHEVRON_SIZE` of room |
 | `checkbox` | `Checkbox` + `CheckState` (unchecked, checked, mixed): a drawn checkbox, used for viewed marks and options |
 | `display_date` | `short_date`: a GitHub timestamp as `21 Oct 2026` |
 | `display_size` | `byte_size`: a byte count as `151.7 MB` |
