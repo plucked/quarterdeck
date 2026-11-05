@@ -164,13 +164,13 @@ fn copy_bgra_pixels(pixel_buffer: &CVPixelBuffer) -> Result<(u32, u32, Vec<u8>)>
         // SAFETY: while locked, `base` points at `height` rows of
         // `bytes_per_row` bytes each, and the buffer outlives this borrow.
         let pixels = unsafe { std::slice::from_raw_parts(base, bytes_per_row * height) };
-        Some(
-            pixels
-                .chunks_exact(bytes_per_row)
-                .flat_map(|row| &row[..packed_row])
-                .copied()
-                .collect::<Vec<u8>>(),
-        )
+        // One copy per row (a memcpy), never per byte: a frame is over a
+        // megabyte, and a byte-wise copy is far too slow in a debug build.
+        let mut packed = Vec::with_capacity(packed_row * height);
+        for row in pixels.chunks_exact(bytes_per_row) {
+            packed.extend_from_slice(&row[..packed_row]);
+        }
+        Some(packed)
     };
     // SAFETY: balances the lock above with the same flags.
     unsafe { CVPixelBufferUnlockBaseAddress(pixel_buffer, CVPixelBufferLockFlags::ReadOnly) };
