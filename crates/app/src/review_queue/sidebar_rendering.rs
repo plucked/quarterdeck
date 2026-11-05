@@ -260,7 +260,7 @@ impl PullRequestState {
     /// The ring before the title: green when open, grey for a draft.
     fn ring_color(self) -> gpui::Rgba {
         match self {
-            Self::Open => theme::added(),
+            Self::Open => theme::success(),
             Self::Draft => theme::subtle(),
         }
     }

@@ -15,7 +15,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: 
 | `qd-github` | `crates/github` | blocking GitHub client (`ureq`): REST, plus GraphQL for stacks and reviews (threads, submit, edit, resolve); its data shapes |
 | `qd-cache` | `crates/cache` | the local SQLite database: cached GitHub data + UI state, with migrations |
 | `qd-markdown` | `crates/markdown` | GitHub-flavored Markdown → typed document (`pulldown-cmark`) |
-| `qd-syntax` | `crates/syntax` | syntax colors for diff hunks (`syntect` + bat's grammars via `two-face`, `TwoDark` theme) |
+| `qd-syntax` | `crates/syntax` | syntax colors for diff hunks (`syntect` + bat's grammars via `two-face`, Graphite theme) |
 | `qd-diff` | `crates/diff` | per-file patch → hunks, side-by-side rows, inline word/char changes, whitespace folding (`similar`) |
 | `qd-file-tree` | `crates/file_tree` | changed files as a folder tree (shared file order), test/generated detection, file filters |
 | `qd-video` | `crates/video` | movie frames decoded by macOS AVFoundation into BGRA (the startup splash) |

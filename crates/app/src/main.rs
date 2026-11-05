@@ -11,7 +11,8 @@
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
 //! - `fetch_stack.rs`: gets a stack's layers from the cache, and checks them with GitHub.
 //! - `word_range_at.rs`: the word around an offset, for double-click selection.
-//! - `theme.rs`: the color palette and fonts.
+//! - `theme.rs`: the color palette (Graphite) and fonts.
+//! - `bundled_fonts.rs`: registers the fonts built into the binary (`Schibsted Grotesk`, `JetBrains Mono`).
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
@@ -31,6 +32,7 @@
 mod app_commands;
 mod app_services;
 mod app_settings;
+mod bundled_fonts;
 mod button;
 mod checkbox;
 mod diff_view;

@@ -1,111 +1,125 @@
-//! The app's dark palette and fonts. Views take every color and font from
-//! here, so a theme change touches only this file.
+//! The app's palette and fonts: Graphite, a dark theme built for reading
+//! code. A neutral dark grey ground (not black) with off-white text
+//! (13:1, APCA Lc −88), secondary text at 4.5:1 or more, and diffs in blue
+//! (added) and orange (removed), which stay apart for red-green colour
+//! blindness; green and red only mark success and danger. Views take every
+//! color and font from here, so a theme change touches only this file.
 
 use gpui::{Rgba, rgb, rgba};
 
-/// Font for the interface: the system font.
-pub const UI_FONT: &str = ".SystemUIFont";
-/// Font for code and patches.
-pub const MONO_FONT: &str = "Menlo";
+/// Font for the interface: `Schibsted Grotesk`, built into the app
+/// (`bundled_fonts`).
+pub const UI_FONT: &str = "Schibsted Grotesk";
+/// Font for code and patches: `JetBrains Mono`, built into the app; its
+/// tall lower case and distinct `l`, `1`, `I`, `0`, `O` suit reading diffs.
+pub const MONO_FONT: &str = "JetBrains Mono";
 
 /// The diff's canvas, behind the file cards.
 pub fn background() -> Rgba {
-    rgb(0x1b_1c_1f)
+    rgb(0x1c_1e_21)
 }
 /// The queue sidebar: a step darker than the content.
 pub fn sidebar() -> Rgba {
-    rgb(0x17_18_1a)
+    rgb(0x17_19_1c)
 }
 /// Headers and the side panel.
 pub fn panel() -> Rgba {
-    rgb(0x20_21_24)
+    rgb(0x20_22_26)
 }
 /// Cards and controls raised above a panel: file headers, chips, buttons.
 pub fn surface() -> Rgba {
-    rgb(0x27_29_2d)
+    rgb(0x26_29_2e)
 }
 /// Quiet dividers and card edges.
 pub fn border() -> Rgba {
-    rgb(0x2e_30_35)
+    rgb(0x30_32_35)
 }
 /// Edges that must stand out: inputs, outlined buttons.
 pub fn border_strong() -> Rgba {
-    rgb(0x3d_40_46)
+    rgb(0x40_43_47)
 }
 /// A hovered row or control.
 pub fn hover() -> Rgba {
-    rgb(0x2c_2e_33)
+    rgb(0x2a_2d_33)
 }
 /// The selected row, chip or segment.
 pub fn selected() -> Rgba {
-    rgb(0x26_35_52)
+    rgb(0x24_3b_52)
 }
 pub fn text() -> Rgba {
-    rgb(0xe6_e7_ea)
+    rgb(0xe5_e3_df)
 }
 /// Secondary text: metadata, placeholders, hunk headers.
 pub fn muted() -> Rgba {
-    rgb(0x9a_9d_a4)
+    rgb(0x9d_99_8e)
 }
 /// Tertiary text: hints, counts, separators.
 pub fn subtle() -> Rgba {
-    rgb(0x6a_6e_76)
+    rgb(0x8b_88_7f)
 }
 /// Links, primary buttons, focus and progress.
 pub fn accent() -> Rgba {
-    rgb(0x5b_8d_ef)
+    rgb(0x95_cb_fe)
 }
 /// Text on an accent background.
 pub fn on_accent() -> Rgba {
-    rgb(0xff_ff_ff)
+    rgb(0x17_19_1c)
 }
 /// The scrollbar thumb at rest.
 pub fn scrollbar_thumb() -> Rgba {
-    rgba(0xdf_e1_e5_33)
+    rgba(0xe5_e3_df_33)
 }
 /// The scrollbar thumb while dragged.
 pub fn scrollbar_thumb_active() -> Rgba {
-    rgba(0xdf_e1_e5_66)
+    rgba(0xe5_e3_df_66)
 }
 /// Background of selected text.
 pub fn text_selection() -> Rgba {
-    rgba(0x5b_8d_ef_59)
+    rgba(0x3b_6a_9c_99)
 }
 /// Tint over the diff lines a comment being written is about.
 pub fn comment_range() -> Rgba {
-    rgba(0x5b_8d_ef_2a)
+    rgba(0x95_cb_fe_1f)
 }
 /// Background of code blocks and inline code in rendered Markdown.
 pub fn code_background() -> Rgba {
-    rgb(0x1b_1c_1f)
+    rgb(0x17_19_1c)
 }
-/// Added-line count.
+/// Something that worked or is ready: an open pull request, a done review.
+pub fn success() -> Rgba {
+    rgb(0x8c_e1_99)
+}
+/// Destructive actions and blockers: delete, close, unmet requirements.
+pub fn danger() -> Rgba {
+    rgb(0xfe_bf_b7)
+}
+/// Added lines: counts, the added badge, the gutter mark (blue).
 pub fn added() -> Rgba {
-    rgb(0x5f_b8_65)
+    rgb(0x95_cb_fe)
 }
-/// Removed-line count.
+/// Removed lines: counts, the removed badge, the gutter mark (orange).
 pub fn removed() -> Rgba {
-    rgb(0xe0_6c_75)
+    rgb(0xff_b5_89)
 }
 /// Background of an added patch line.
 pub fn added_background() -> Rgba {
-    rgb(0x1f_33_24)
+    rgb(0x18_28_37)
 }
 /// Background of a removed patch line.
 pub fn removed_background() -> Rgba {
-    rgb(0x3b_23_26)
+    rgb(0x34_22_17)
 }
 /// Background of the changed words inside an added line.
 pub fn added_emphasis() -> Rgba {
-    rgb(0x2e_5a_37)
+    rgb(0x14_39_59)
 }
 /// Background of the changed words inside a removed line.
 pub fn removed_emphasis() -> Rgba {
-    rgb(0x6b_32_38)
+    rgb(0x52_2b_10)
 }
 /// Background of a hunk header row and of the empty side of a split row.
 pub fn diff_filler() -> Rgba {
-    rgb(0x22_24_28)
+    rgb(0x19_1b_1e)
 }
 
 /// Muted hues that tell repositories apart (each repository keeps one,
@@ -125,13 +139,13 @@ pub fn label_colors() -> [Rgba; 8] {
 
 /// Background of a hunk's `@@ … @@` row.
 pub fn hunk_background() -> Rgba {
-    rgb(0x1e_24_31)
+    rgb(0x17_19_1c)
 }
 /// File status badge for a renamed file.
 pub fn renamed() -> Rgba {
-    rgb(0xd1_9a_66)
+    rgb(0xde_c3_ff)
 }
 /// Error messages.
 pub fn error() -> Rgba {
-    rgb(0xf0_71_78)
+    rgb(0xfe_bf_b7)
 }

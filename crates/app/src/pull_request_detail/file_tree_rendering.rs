@@ -343,7 +343,7 @@ fn render_progress_bar(viewed: usize, total: usize) -> impl IntoElement {
                 .h_full()
                 .w(relative(fraction.min(1.)))
                 .rounded_md()
-                .bg(theme::added()),
+                .bg(theme::success()),
         )
 }
 

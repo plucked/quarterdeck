@@ -87,9 +87,9 @@ impl PullRequestDetail {
     ) -> AnyElement {
         let readiness = options.readiness;
         let readiness_color = if readiness.allows_merge() {
-            theme::added()
+            theme::success()
         } else {
-            theme::removed()
+            theme::danger()
         };
         let mut body = div()
             .flex()
@@ -429,7 +429,7 @@ fn render_progress(progress: &ActionProgress) -> Option<AnyElement> {
     let (text, color) = match progress {
         ActionProgress::Idle => return None,
         ActionProgress::Working(text) => (text.clone(), theme::accent()),
-        ActionProgress::Done(text) => (text.clone(), theme::added()),
+        ActionProgress::Done(text) => (text.clone(), theme::success()),
         ActionProgress::Failed(text) => (text.clone(), theme::error()),
     };
     Some(render_line(text, color))

@@ -3,7 +3,8 @@
 | Module | Holds |
 |---|---|
 | `diff_syntax` | `DiffSyntax::highlight(diff, path)`, the entry point; spans per (hunk, line) |
-| `syntax_highlighter` | shared `SyntaxSet` (bat's grammars via `two-face`, newline mode) + `TwoDark` theme in a `OnceLock`; language detection; per-line highlighting |
+| `syntax_highlighter` | shared `SyntaxSet` (bat's grammars via `two-face`, newline mode) + Graphite theme in a `OnceLock`; language detection; per-line highlighting |
+| `graphite_theme` | `graphite_theme()`: syntect theme built in code; comments, keywords/storage, strings, constants, definitions (functions), types, invalid; everything else the foreground (spans in it are omitted) |
 | `syntax_span` / `syntax_color` | colored byte range of a line; RGB |
 
 - syntect uses the pure-Rust `regex-fancy` backend (no oniguruma C build).

@@ -1,18 +1,15 @@
 use std::path::Path;
 use std::sync::OnceLock;
 
+use crate::graphite_theme::graphite_theme;
+use crate::{SyntaxColor, SyntaxSpan};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Color, FontStyle, Style, Theme};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
-use two_face::theme::EmbeddedThemeName;
-
-use crate::{SyntaxColor, SyntaxSpan};
 
 /// Lines longer than this (minified code, data) are left plain: they are
 /// slow to highlight and unreadable either way.
 const MAX_HIGHLIGHTED_LINE_LENGTH: usize = 2_000;
-/// The theme; Atom's One Dark, close to the app's own dark palette.
-const THEME: EmbeddedThemeName = EmbeddedThemeName::TwoDark;
 
 /// bat's grammars and the theme, loaded once on first use (it takes a
 /// moment, so first use should be on the background executor).
@@ -27,7 +24,7 @@ impl SyntaxHighlighter {
         static SHARED: OnceLock<SyntaxHighlighter> = OnceLock::new();
         SHARED.get_or_init(|| Self {
             syntaxes: two_face::syntax::extra_newlines(),
-            theme: two_face::theme::extra().get(THEME).clone(),
+            theme: graphite_theme(),
         })
     }
 

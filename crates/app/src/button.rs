@@ -100,7 +100,7 @@ impl RenderOnce for Button {
             }
             (ButtonKind::Danger, _) => (
                 Some(theme::surface()),
-                theme::removed(),
+                theme::danger(),
                 theme::border_strong(),
             ),
             (ButtonKind::Plain | ButtonKind::Ghost, true) => {

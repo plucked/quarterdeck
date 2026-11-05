@@ -18,6 +18,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Step through layers with `{` and `}`, switch between layer and combined with `c`, and ⇧-click a layer in the sidebar to start the combined range there.
 
 **Reading diffs**
+- Graphite, a dark theme tuned for reading code: off-white text on dark grey (not black), every color readable against its background, and diffs in blue (added) and orange (removed), which stay distinct with red-green colour blindness. Interface in Schibsted Grotesk, code in JetBrains Mono (both built in).
 - Unified or side-by-side diffs, syntax highlighting, changed words highlighted inside lines, wrapping or sideways scrolling, and whitespace changes folded away (all in Settings).
 - A file tree beside the diff with added and removed lines per file and folder, and a badge for added, removed and moved files.
 - Filters by kind (code, tests, generated, moved) and by file type, with live counts, and a switch to hide viewed files.

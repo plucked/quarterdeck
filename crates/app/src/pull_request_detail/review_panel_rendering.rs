@@ -126,7 +126,7 @@ impl PullRequestDetail {
         let (text, color) = match &self.review().status {
             ReviewStatus::Idle => return None,
             ReviewStatus::Working(text) => (text.clone(), theme::accent()),
-            ReviewStatus::Done(text) => (text.clone(), theme::added()),
+            ReviewStatus::Done(text) => (text.clone(), theme::success()),
             ReviewStatus::Failed(text) => (text.clone(), theme::error()),
         };
         Some(
@@ -333,7 +333,7 @@ impl PullRequestDetail {
                             .id(element_id("note-delete", &key))
                             .flex_none()
                             .text_color(theme::subtle())
-                            .hover(|style| style.text_color(theme::removed()))
+                            .hover(|style| style.text_color(theme::danger()))
                             .on_click(cx.listener(move |detail, _, _, cx| {
                                 cx.stop_propagation();
                                 detail.delete_note(id, cx);

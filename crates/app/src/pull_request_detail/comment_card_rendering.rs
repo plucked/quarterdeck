@@ -137,7 +137,7 @@ impl PullRequestDetail {
             .text_color(theme::muted())
             .child(div().font_weight(FontWeight::MEDIUM).child("Conversation"));
         if thread.is_resolved {
-            header = header.child(render_badge("Resolved", theme::added()));
+            header = header.child(render_badge("Resolved", theme::success()));
         }
         if thread.is_outdated {
             let original = thread
