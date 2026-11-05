@@ -158,6 +158,16 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         ttl_hours  INTEGER NOT NULL CHECK (ttl_hours IN (6, 24, 72, 168))
     );
 ",
+    r"
+    -- How the review pane is laid out and filtered. One row (id = 1).
+    CREATE TABLE review_layout (
+        id                 INTEGER PRIMARY KEY CHECK (id = 1),
+        file_tree_visible  INTEGER NOT NULL CHECK (file_tree_visible IN (0, 1)),
+        hide_viewed        INTEGER NOT NULL CHECK (hide_viewed IN (0, 1)),
+        hide_tests         INTEGER NOT NULL CHECK (hide_tests IN (0, 1)),
+        hide_generated     INTEGER NOT NULL CHECK (hide_generated IN (0, 1))
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

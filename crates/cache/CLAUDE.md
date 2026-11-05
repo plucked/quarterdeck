@@ -14,6 +14,7 @@
 | `sql_integers` / `unix_now` | checked integer conversions; current time |
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset |
 | `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qc-diff` enums |
+| `review_layout_state` / `panel_visibility` / `review_layout_storage` | `ReviewLayoutState` (file tree `PanelVisibility`, hide viewed/tests/generated), one row |
 | `viewed_file` / `patch_fingerprint` / `viewed_files_storage` | viewed marks per (PR, file) with an FNV-1a patch fingerprint (stable across Rust versions) |
 
 - One database file; each store opens its own connection.

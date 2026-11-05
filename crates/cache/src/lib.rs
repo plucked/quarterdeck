@@ -20,6 +20,9 @@
 //! - `window_placement.rs`: `WindowPlacement`, the main window's saved bounds.
 //! - `window_mode.rs`: `WindowMode`, windowed, maximized or fullscreen.
 //! - `display_uuid.rs`: `DisplayUuid`, the display a window was on.
+//! - `review_layout_state.rs`: `ReviewLayoutState`, the review pane's layout and filter toggles.
+//! - `panel_visibility.rs`: `PanelVisibility`, shown or hidden.
+//! - `review_layout_storage.rs`: reads and writes of the review layout.
 //! - `review_queue_view_state.rs`: `ReviewQueueViewState`, the review queue's saved selection and scroll.
 //! - `detail_scroll_position.rs`: `DetailScrollPosition`, the detail pane's scroll as row and offset.
 //! - `diff_view_settings.rs`: `DiffViewSettings`, how file diffs are shown.
@@ -47,8 +50,11 @@ mod file_set_revision;
 mod file_set_storage;
 mod github_cache;
 mod line_wrapping;
+mod panel_visibility;
 mod patch_fingerprint;
 mod pull_request_list_key;
+mod review_layout_state;
+mod review_layout_storage;
 mod review_queue_view_state;
 mod schema_migrations;
 mod sql_integers;
@@ -69,8 +75,10 @@ pub use display_uuid::DisplayUuid;
 pub use file_set_revision::FileSetRevision;
 pub use github_cache::GitHubCache;
 pub use line_wrapping::LineWrapping;
+pub use panel_visibility::PanelVisibility;
 pub use patch_fingerprint::PatchFingerprint;
 pub use pull_request_list_key::PullRequestListKey;
+pub use review_layout_state::ReviewLayoutState;
 pub use review_queue_view_state::ReviewQueueViewState;
 pub use ui_state_store::UiStateStore;
 pub use viewed_file::ViewedFile;
