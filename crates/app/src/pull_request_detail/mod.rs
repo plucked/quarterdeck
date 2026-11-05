@@ -18,6 +18,7 @@
 //! - `diff_selection.rs`: `DiffSelection`, a text selection in one code column of the diff.
 //! - `selected_diff_text.rs`: the code a selection covers, as copied.
 //! - `parsed_description.rs`: `ParsedDescription`, the description of one version, parsed once.
+//! - `changed_rows.rs`: `ChangedRows`, the part of a file's rows a rebuild changed.
 //! - `changed_files.rs`: `ChangedFiles`, the load state of the files.
 //! - `fetch_changed_files.rs`: gets a pull request's files from the cache, asking GitHub as little as possible.
 //! - `file_set_update.rs`: `FileSetUpdate`, whether cached files are confirmed or refetched.
@@ -46,6 +47,7 @@
 
 mod activity_rendering;
 mod changed_files;
+mod changed_rows;
 mod chip_click;
 mod comment_card_rendering;
 mod comment_editor;

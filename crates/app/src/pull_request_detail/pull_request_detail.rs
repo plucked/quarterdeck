@@ -19,6 +19,7 @@ use qc_markdown::MarkdownDocument;
 use qc_syntax::DiffSyntax;
 
 use super::changed_files::ChangedFiles;
+use super::changed_rows::ChangedRows;
 use super::chip_click::ChipClick;
 use super::detail_content::DetailContent;
 use super::detail_event::{DetailEvent, LayerRequest};
@@ -900,10 +901,46 @@ impl PullRequestDetail {
         } else {
             Vec::new()
         };
-        let new_length = rows.len();
+        // Splice only the rows that changed, so the scroll position stays.
+        let old_rows = self
+            .rows
+            .file_range(file)
+            .map(|range| self.rows.rows_in(range).to_vec())
+            .unwrap_or_default();
+        let change = ChangedRows::between(&old_rows, &rows);
+        let top = self.list.logical_scroll_top();
         self.diff_selection = None;
+        let new_rows = rows.clone();
         if let Some(old_range) = self.rows.replace_file(file, rows) {
-            self.list.splice(old_range, new_length);
+            let start = old_range.start + change.start;
+            if change.old_len > 0 || change.new_len > 0 {
+                self.list
+                    .splice(start..start + change.old_len, change.new_len);
+
+                // Keep the row that was at the top there, wherever it moved.
+                let old_end = start + change.old_len;
+                let kept_top = match (top.item_ix < start, top.item_ix >= old_end) {
+                    (true, _) => Some(top),
+                    (false, true) => Some(ListOffset {
+                        item_ix: top.item_ix - change.old_len + change.new_len,
+                        ..top
+                    }),
+                    (false, false) => old_rows
+                        .get(top.item_ix - old_range.start)
+                        .and_then(|row| {
+                            new_rows[change.start..change.start + change.new_len]
+                                .iter()
+                                .position(|candidate| candidate == row)
+                        })
+                        .map(|position| ListOffset {
+                            item_ix: start + position,
+                            ..top
+                        }),
+                };
+                if let Some(kept_top) = kept_top {
+                    self.list.scroll_to(kept_top);
+                }
+            }
         }
         self.refresh_tree_rows();
     }
