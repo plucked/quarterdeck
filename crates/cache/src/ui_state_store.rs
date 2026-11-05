@@ -7,10 +7,12 @@ use crate::database_connection::{default_database_path, open_database};
 use crate::{ReviewQueueViewState, WindowMode, WindowPlacement};
 
 /// The single row id of the one-row UI state tables.
-const SINGLE_ROW_ID: i64 = 1;
+pub(crate) const SINGLE_ROW_ID: i64 = 1;
 
 /// A connection to the database for the UI state the app restores after a
-/// relaunch. Separate from [`crate::GitHubCache`]'s connection so UI writes
+/// relaunch: window placement and review queue state here, diff view
+/// settings and viewed files in `diff_view_settings_storage.rs` and
+/// `viewed_files_storage.rs`. Separate from [`crate::GitHubCache`]'s connection so UI writes
 /// never wait behind a cache write; WAL lets both share the file.
 ///
 /// Reads return `Ok(None)` when nothing was saved yet; every write is one
@@ -38,6 +40,11 @@ impl UiStateStore {
         Ok(Self {
             connection: crate::database_connection::open_in_memory_database()?,
         })
+    }
+
+    /// The connection, for the storage of other UI state topics in sibling files.
+    pub(crate) fn connection(&self) -> &Connection {
+        &self.connection
     }
 
     /// The last saved window placement.

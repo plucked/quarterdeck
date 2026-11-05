@@ -101,6 +101,30 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         PRIMARY KEY (pr_id, position)
     );
 ",
+    r"
+    -- The path before a rename, for files GitHub reports as renamed.
+    ALTER TABLE pr_files ADD COLUMN previous_filename TEXT;
+
+    -- How file diffs are shown. One row (id = 1).
+    CREATE TABLE diff_view_settings (
+        id          INTEGER PRIMARY KEY CHECK (id = 1),
+        layout      TEXT    NOT NULL CHECK (layout IN ('unified', 'split')),
+        highlight   TEXT    NOT NULL CHECK (highlight IN ('lines', 'words', 'characters')),
+        whitespace  TEXT    NOT NULL CHECK (whitespace IN ('show', 'ignore')),
+        wrapping    TEXT    NOT NULL CHECK (wrapping IN ('wrap', 'scroll'))
+    );
+
+    -- Files the user marked as viewed, per pull request. The fingerprint is
+    -- of the file's patch when marked: a different patch means the file
+    -- changed and is no longer viewed. No foreign key: the cached pull
+    -- request may be refetched or dropped; the mark is the user's.
+    CREATE TABLE viewed_files (
+        pr_id              INTEGER NOT NULL,
+        filename           TEXT    NOT NULL,
+        patch_fingerprint  INTEGER NOT NULL,
+        PRIMARY KEY (pr_id, filename)
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

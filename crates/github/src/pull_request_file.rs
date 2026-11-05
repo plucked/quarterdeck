@@ -4,6 +4,9 @@ use serde::Deserialize;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PullRequestFile {
     pub filename: String,
+    /// The path before a rename; set only when `status` is `renamed`.
+    #[serde(default)]
+    pub previous_filename: Option<String>,
     /// `added`, `removed`, `modified`, `renamed`, `copied`, `changed` or `unchanged`.
     pub status: String,
     pub additions: u64,

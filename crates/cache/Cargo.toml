@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 dirs.workspace = true
+qc-diff.workspace = true
 qc-github.workspace = true
 rusqlite.workspace = true
 

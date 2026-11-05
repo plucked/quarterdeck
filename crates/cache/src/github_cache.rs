@@ -134,12 +134,14 @@ impl GitHubCache {
         // Insert the files in GitHub's order.
         for (position, file) in files.iter().enumerate() {
             transaction.execute(
-                "INSERT INTO pr_files (pr_id, position, filename, status, additions, deletions, patch)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO pr_files (
+                    pr_id, position, filename, previous_filename, status, additions, deletions, patch)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     pr_id,
                     i64::try_from(position)?,
                     file.filename,
+                    file.previous_filename,
                     file.status,
                     sql_integer(file.additions)?,
                     sql_integer(file.deletions)?,
@@ -171,7 +173,7 @@ impl GitHubCache {
         }
 
         let mut statement = self.connection.prepare(
-            "SELECT filename, status, additions, deletions, patch
+            "SELECT filename, previous_filename, status, additions, deletions, patch
              FROM pr_files WHERE pr_id = ?1 ORDER BY position",
         )?;
         let rows = statement.query_map([pr_id], pull_request_file_from_row)?;
@@ -205,10 +207,11 @@ fn pull_request_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequest> {
 fn pull_request_file_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequestFile> {
     Ok(PullRequestFile {
         filename: row.get(0)?,
-        status: row.get(1)?,
-        additions: read_u64(row, 2)?,
-        deletions: read_u64(row, 3)?,
-        patch: row.get(4)?,
+        previous_filename: row.get(1)?,
+        status: row.get(2)?,
+        additions: read_u64(row, 3)?,
+        deletions: read_u64(row, 4)?,
+        patch: row.get(5)?,
     })
 }
 
@@ -302,6 +305,7 @@ mod tests {
             .unwrap();
         let file = |filename: &str, patch: Option<&str>| PullRequestFile {
             filename: filename.into(),
+            previous_filename: Some("old/".to_owned() + filename),
             status: "modified".into(),
             additions: 3,
             deletions: 1,
@@ -337,6 +341,7 @@ mod tests {
             .unwrap();
         let file = PullRequestFile {
             filename: "a.rs".into(),
+            previous_filename: None,
             status: "modified".into(),
             additions: 1,
             deletions: 0,
