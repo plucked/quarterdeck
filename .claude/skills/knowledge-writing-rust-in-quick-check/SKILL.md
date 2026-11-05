@@ -15,7 +15,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 - **A module is named after what it holds**, not after an action or a phase: `review_queue`, `shared_cache`, `schema_migrations`.
 - **Put new code where its concept already lives.** A new concept that fits no module gets its own module, named the same way.
 - **Every crate's `CLAUDE.md` has a module table:** one row per top-level module and what it holds. A new module adds a row.
-- **Crates split by subsystem, not by layer.** `qc-github` talks to GitHub, `qc-cache` persists, `qc-markdown` parses Markdown, `quick-check` (the app) owns gpui. Only the app depends on gpui; library crates stay UI-free so they can be tested without a window.
+- **Crates split by subsystem, not by layer.** `qc-github` talks to GitHub, `qc-cache` persists, `qc-markdown` parses Markdown, `qc-diff` builds file diffs, `quick-check` (the app) owns gpui. Only the app depends on gpui; library crates stay UI-free so they can be tested without a window.
 
 ## Files
 
@@ -47,6 +47,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 - **Name the parts of what you pass around.** Values that travel together and are read by position (`(u64, String)`, `.0`/`.1`, a returned tuple) get a small struct with named fields.
 - **Malformed input is an error, never a panic.** Input from outside the process (an API response, a cache row, a file) is checked; integer conversions use `try_from`, not `as`.
 - **`Arc` only for real shared ownership:** tasks or threads that end independently own the same value. Only the owners hold the `Arc` (views, spawned tasks); every function below them borrows. An `Arc` cloned only to get past the borrow checker is restructured first, and when that is not worth it, a comment at the clone says why.
+- **A lock guard never lives across a second lock of the same mutex.** A guard taken in a `match` or `if let` scrutinee (`match cache.lock().files(..)?`) lives until the whole expression ends, so locking again in an arm deadlocks: bind the result in its own statement first (`let cached = cache.lock().files(..)?;`).
 - **Lock helpers say what a poisoned lock means.** When a poisoned `Mutex` is used as is (`unwrap_or_else(PoisonError::into_inner)`), the helper's doc says why the data stays consistent (`SharedCache::lock`).
 
 ## gpui and async code
@@ -65,7 +66,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 
 ## Persistence
 
-- **Everything stored lives in typed SQLite columns, never in JSON** (or any other self-described format), cached GitHub data included: the schema is our local contract, and SQLite checks it on every write. One table per concept, one column per field (`pull_requests`, `pr_files`); a list is a child table with a `position` column; an enum is a `TEXT` column with a `CHECK` listing its values, mapped by `as_sql_text`/`from_sql_text` beside the enum (`WindowMode`); one-row state uses `id INTEGER PRIMARY KEY CHECK (id = 1)` (`window_placement`). A value GitHub owns and may extend (a file's `status`) stays unchecked `TEXT`. JSON is only for talking to GitHub: `qc-github` types derive `Deserialize` where they are decoded from a response, and nothing derives `Serialize`.
+- **Everything stored lives in typed SQLite columns, never in JSON** (or any other self-described format), cached GitHub data included: the schema is our local contract, and SQLite checks it on every write. One table per concept, one column per field (`pull_requests`, `pr_files`); a list is a child table with a `position` column; an enum is a `TEXT` column with a `CHECK` listing its values, mapped by `as_sql_text`/`from_sql_text` beside the enum (`WindowMode`), or beside its store when another crate owns the enum (`diff_option_sql_text.rs` for `qc-diff`'s); one-row state uses `id INTEGER PRIMARY KEY CHECK (id = 1)` (`window_placement`). A value GitHub owns and may extend (a file's `status`) stays unchecked `TEXT`. JSON is only for talking to GitHub: `qc-github` types derive `Deserialize` where they are decoded from a response, and nothing derives `Serialize`.
 - **All persistence goes through `qc-cache`,** in the one database file. Each store type opens its own connection (`GitHubCache`, `UiStateStore`); WAL lets them share the file without waiting on each other.
 - **A schema change is a new entry in `SCHEMA_MIGRATIONS`,** never an edit of an existing one. Cached GitHub data may be dropped and refetched by a migration; UI state is migrated, not dropped.
 - **Restoring never fails the app.** Nothing saved, a row that no longer reads, or a value that no longer fits (a window off every display, a pull request that left the queue) restores nothing for that part and is reported on stderr at most (`window_bounds_from_placement`, `SelectionRestore`).
