@@ -16,6 +16,7 @@
 //! - `restore_phase.rs`: `RestorePhase`, which queue a saved selection is matched against.
 //! - `queue_lists.rs`: `QueueLists`, the authored and review-requested lists.
 //! - `queue_row.rs`: `QueueRow`, a sidebar row (repository header, pull request, stack header, stack layer), and grouping.
+//! - `repo_monogram.rs`: `RepoMonogram`, a repository's colored letter in the sidebar.
 //! - `collapsed_groups.rs`: `CollapsedGroups`, the repositories and stacks folded in the sidebar.
 //! - `stack_key.rs`: `StackKey`, a stack's repository and number.
 //! - `selection_origin.rs`: `SelectionOrigin`, picked from a list or opened from a stack.
@@ -26,6 +27,7 @@ mod queue_lists;
 mod queue_row;
 mod refresh_schedule;
 mod refresh_status;
+mod repo_monogram;
 mod restore_phase;
 mod review_queue;
 mod selection_after_refresh;

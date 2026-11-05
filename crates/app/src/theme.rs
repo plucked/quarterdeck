@@ -108,6 +108,21 @@ pub fn diff_filler() -> Rgba {
     rgb(0x22_24_28)
 }
 
+/// Muted hues that tell repositories apart (each repository keeps one,
+/// picked from its name), dark enough for light text on them.
+pub fn label_colors() -> [Rgba; 8] {
+    [
+        rgb(0x3f_6f_c4),
+        rgb(0x7d_5b_c2),
+        rgb(0x2f_8a_80),
+        rgb(0xb0_6a_30),
+        rgb(0xb0_4f_83),
+        rgb(0x4f_8f_47),
+        rgb(0x9a_84_2c),
+        rgb(0xb0_51_51),
+    ]
+}
+
 /// Background of a hunk's `@@ … @@` row.
 pub fn hunk_background() -> Rgba {
     rgb(0x1e_24_31)

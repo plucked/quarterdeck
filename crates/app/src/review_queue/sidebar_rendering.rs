@@ -10,6 +10,8 @@ use qd_github::{PullRequest, StackLayer};
 use super::ReviewQueue;
 use super::queue_row::{QueueRow, RepoGroup, StackGroup};
 use super::refresh_status::RefreshStatus;
+use super::repo_monogram::RepoMonogram;
+use crate::display_date::{relative_age, unix_now};
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::segmented_control::SegmentedControl;
@@ -22,6 +24,10 @@ const MAX_SIDEBAR_WIDTH: f32 = 720.;
 const PULSE_PERIOD: Duration = Duration::from_millis(1200);
 /// Width of the column holding a stack layer's position and rail.
 const LAYER_GUTTER_WIDTH: f32 = 28.;
+/// The open / draft ring before a pull request's title.
+const STATE_RING_SIZE: f32 = 10.;
+/// The stack glyph beside a stack's header.
+const STACK_GLYPH_SIZE: f32 = 16.;
 /// Height of the rail mark beside a layer's position.
 const LAYER_RAIL_HEIGHT: f32 = 16.;
 
@@ -147,6 +153,7 @@ impl ReviewQueue {
     /// what it shows is gone.
     fn render_known_queue_row(&self, index: usize, cx: &mut Context<Self>) -> Option<AnyElement> {
         let selected_id = self.selected_pull_request().map(|selected| selected.id);
+        let now = unix_now();
         let row = self.rows().get(index)?;
         let element = match row {
             QueueRow::RepoHeader(group) => render_repo_header(index, group, cx),
@@ -156,6 +163,7 @@ impl ReviewQueue {
                     pull_request,
                     *list_index,
                     selected_id == Some(pull_request.id),
+                    now,
                     cx,
                 )
             }
@@ -215,16 +223,53 @@ impl ReviewQueue {
             }
         };
         // Inset from the sidebar's edges; the row keeps the full width inside.
-        // A repository after the first gets room above it.
+        // A repository after the first starts below a divider.
         let starts_later_group = index > 0 && matches!(row, QueueRow::RepoHeader(_));
         Some(
             div()
                 .px_2()
                 .pb_0p5()
-                .when(starts_later_group, Styled::pt_3)
+                .when(starts_later_group, |row| {
+                    row.pt_2()
+                        .child(div().mx_2().mb_2().h(px(1.)).bg(theme::border()))
+                })
                 .child(element)
                 .into_any_element(),
         )
+    }
+}
+
+/// Whether a pull request is ready for review or still a draft, as its
+/// sidebar row shows it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PullRequestState {
+    Open,
+    Draft,
+}
+
+impl PullRequestState {
+    fn of(pull_request: &PullRequest) -> Self {
+        if pull_request.draft {
+            Self::Draft
+        } else {
+            Self::Open
+        }
+    }
+
+    /// The ring before the title: green when open, grey for a draft.
+    fn ring_color(self) -> gpui::Rgba {
+        match self {
+            Self::Open => theme::added(),
+            Self::Draft => theme::subtle(),
+        }
+    }
+
+    /// A draft's title reads quieter.
+    fn title_color(self) -> gpui::Rgba {
+        match self {
+            Self::Open => theme::text(),
+            Self::Draft => theme::muted(),
+        }
     }
 }
 
@@ -258,9 +303,9 @@ fn render_error_status(text: SharedString) -> AnyElement {
 fn row_frame(id: impl Into<gpui::ElementId>, is_selected: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .px_2p5()
-        .py_1p5()
-        .rounded_md()
+        .px_2()
+        .py_2()
+        .rounded_lg()
         .cursor_pointer()
         .when(is_selected, |row| row.bg(theme::selected()))
         .when(!is_selected, |row| {
@@ -277,27 +322,80 @@ fn render_meta(text: impl Into<SharedString>) -> impl IntoElement {
         .child(text.into())
 }
 
-/// One standalone pull request: title, then `owner/repo#number · author`;
+/// One standalone pull request: a state ring (open or draft), its title on
+/// up to two lines, then `#number · author · age` and a Draft pill;
 /// clicking selects it.
 fn render_pull_request_row(
     pull_request: &PullRequest,
     list_index: usize,
     is_selected: bool,
+    now: i64,
     cx: &mut Context<ReviewQueue>,
 ) -> AnyElement {
-    let draft_marker = if pull_request.draft { " · draft" } else { "" };
+    let state = PullRequestState::of(pull_request);
     row_frame(("pull-request", list_index), is_selected)
+        .flex()
+        .gap_2p5()
         .on_click(cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)))
-        .child(div().text_sm().truncate().child(pull_request.title.clone()))
-        .child(render_meta(format!(
-            "#{} · {}{draft_marker}",
-            pull_request.number, pull_request.author.login,
-        )))
+        .child(
+            div().flex_none().pt(px(4.)).child(
+                div()
+                    .size(px(STATE_RING_SIZE))
+                    .rounded_full()
+                    .border_2()
+                    .border_color(state.ring_color()),
+            ),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap_0p5()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(state.title_color())
+                        .line_clamp(2)
+                        .child(pull_request.title.clone()),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1p5()
+                        .child(render_meta(format!(
+                            "#{} · {} · {}",
+                            pull_request.number,
+                            pull_request.author.login,
+                            relative_age(&pull_request.updated_at, now)
+                        )))
+                        .when(state == PullRequestState::Draft, |meta| {
+                            meta.child(render_draft_pill())
+                        }),
+                ),
+        )
         .into_any_element()
 }
 
-/// A repository's header: chevron, name, owner and how many pull requests
-/// it has here. Clicking it folds or unfolds the repository's group.
+/// The pill marking a draft.
+fn render_draft_pill() -> impl IntoElement {
+    div()
+        .flex_none()
+        .px_1p5()
+        .rounded_full()
+        .border_1()
+        .border_color(theme::border_strong())
+        .text_size(px(10.))
+        .text_color(theme::muted())
+        .child("Draft")
+}
+
+/// A repository's header: its monogram, name and owner, a pill with how
+/// many pull requests it has here, and a chevron. Clicking it folds or
+/// unfolds the repository's group.
 fn render_repo_header(
     row_index: usize,
     group: &RepoGroup,
@@ -307,53 +405,66 @@ fn render_repo_header(
     let repo = group.repo.clone();
     div()
         .id(("repo-header", row_index))
+        .group("repo-header")
         .flex()
         .items_center()
-        .gap_1p5()
-        .px_1()
-        .py_1()
-        .rounded_md()
+        .gap_2()
+        .px_2()
+        .py_1p5()
+        .rounded_lg()
         .cursor_pointer()
-        .text_xs()
         .hover(|style| style.bg(theme::hover()))
         .on_click(cx.listener(move |queue, _, _, cx| queue.toggle_repository_group(&repo, cx)))
-        .child(
-            div()
-                .flex_none()
-                .size_4()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_color(theme::subtle())
-                .child(chevron),
-        )
-        .child(
-            div()
-                .flex_none()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::muted())
-                .child(group.repo.name.clone()),
-        )
+        .child(RepoMonogram::new(group.repo.name.clone()))
         .child(
             div()
                 .flex_1()
                 .min_w_0()
-                .truncate()
-                .text_color(theme::subtle())
-                .child(group.repo.owner.clone()),
+                .flex()
+                .items_baseline()
+                .gap_1p5()
+                .child(
+                    div()
+                        .flex_none()
+                        .text_sm()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(group.repo.name.clone()),
+                )
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_xs()
+                        .text_color(theme::subtle())
+                        .child(group.repo.owner.clone()),
+                ),
         )
         .child(
             div()
                 .flex_none()
-                .text_color(theme::subtle())
+                .px_1p5()
+                .rounded_full()
+                .bg(theme::surface())
+                .text_xs()
+                .text_color(theme::muted())
                 .child(group.pull_requests.to_string()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .w_3()
+                .text_xs()
+                .text_color(theme::subtle())
+                .group_hover("repo-header", |style| style.text_color(theme::text()))
+                .child(chevron),
         )
         .into_any_element()
 }
 
-/// The header of a stack's group: its number, size and trunk, and how many
-/// of its layers this list has. Clicking opens the stack's combined review
-/// (highlighted while shown); the chevron collapses or expands the group.
+/// The header of a stack's group: a stack glyph, its number and trunk,
+/// how many layers it has and how many of them this list has, and a
+/// chevron. Clicking opens the stack's combined review (highlighted while
+/// shown); the chevron folds or unfolds the group.
 fn render_stack_header(
     row_index: usize,
     group: &StackGroup,
@@ -366,57 +477,93 @@ fn render_stack_header(
     let toggle_key = group.key.clone();
     let is_all = u64::try_from(group.listed).is_ok_and(|listed| listed == group.size);
     let listed = match (tab, is_all) {
-        (QueueTab::Authored, true) => "all layers yours".to_owned(),
+        (QueueTab::Authored, true) => "all yours".to_owned(),
         (QueueTab::Authored, false) => format!("{} yours", group.listed),
-        (QueueTab::ReviewRequested, true) => "all layers to review".to_owned(),
+        (QueueTab::ReviewRequested, true) => "all to review".to_owned(),
         (QueueTab::ReviewRequested, false) => format!("{} to review", group.listed),
     };
     row_frame(("stack-header", row_index), is_reviewed)
-        .mt_1()
+        .flex()
+        .items_center()
+        .gap_2p5()
         .on_click(cx.listener(move |queue, _, _, cx| queue.open_stack(&open_key, cx)))
+        .child(render_stack_glyph())
         .child(
             div()
+                .flex_1()
+                .min_w_0()
                 .flex()
-                .items_center()
-                .gap_1p5()
-                .text_sm()
+                .flex_col()
+                .gap_0p5()
                 .child(
                     div()
-                        .id(("stack-chevron", row_index))
-                        .flex_none()
-                        .size_4()
                         .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_xs()
-                        .text_color(theme::subtle())
-                        .hover(|style| style.text_color(theme::text()))
-                        .on_click(cx.listener(move |queue, _, _, cx| {
-                            cx.stop_propagation();
-                            queue.toggle_stack_group(&toggle_key, cx);
-                        }))
-                        .child(chevron),
+                        .items_baseline()
+                        .gap_1p5()
+                        .text_sm()
+                        .child(
+                            div()
+                                .flex_none()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(format!("Stack #{}", group.key.number)),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .truncate()
+                                .text_xs()
+                                .text_color(theme::muted())
+                                .child(format!("→ {}", group.base_ref)),
+                        ),
                 )
-                .child(
-                    div()
-                        .flex_none()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(format!("Stack #{}", group.key.number)),
-                )
-                .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .text_color(theme::muted())
-                        .child(format!("→ {}", group.base_ref)),
-                ),
-        )
-        .child(
-            div()
-                .pl(px(22.))
                 .child(render_meta(format!("{} layers · {listed}", group.size))),
         )
+        .child(
+            div()
+                .id(("stack-chevron", row_index))
+                .flex_none()
+                .size_5()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_md()
+                .text_xs()
+                .text_color(theme::subtle())
+                .hover(|style| style.text_color(theme::text()))
+                .on_click(cx.listener(move |queue, _, _, cx| {
+                    cx.stop_propagation();
+                    queue.toggle_stack_group(&toggle_key, cx);
+                }))
+                .child(chevron),
+        )
         .into_any_element()
+}
+
+/// Two overlapping rounded squares: the mark of a stack.
+fn render_stack_glyph() -> impl IntoElement {
+    div()
+        .flex_none()
+        .relative()
+        .size(px(STACK_GLYPH_SIZE))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .size(px(STACK_GLYPH_SIZE - 5.))
+                .rounded(px(3.))
+                .border_1()
+                .border_color(theme::accent()),
+        )
+        .child(
+            div()
+                .absolute()
+                .bottom_0()
+                .right_0()
+                .size(px(STACK_GLYPH_SIZE - 5.))
+                .rounded(px(3.))
+                .bg(theme::accent()),
+        )
 }
 
 /// What one layer row under a stack's header shows.
