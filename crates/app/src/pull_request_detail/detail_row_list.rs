@@ -156,11 +156,15 @@ impl DetailRowList {
             .map(|range| range.start)
     }
 
-    /// The file whose rows include row `row`; `None` above the files.
+    /// The file whose rows include row `row`; `None` above the files. The
+    /// ranges follow each other in order, so this is a binary search (the
+    /// tree asks on every frame, and a pull request can have 17k files).
     pub fn file_at_row(&self, row: usize) -> Option<usize> {
+        let file = self.file_ranges.partition_point(|range| range.end <= row);
         self.file_ranges
-            .iter()
-            .position(|range| range.contains(&row))
+            .get(file)
+            .filter(|range| range.contains(&row))
+            .map(|_| file)
     }
 
     /// Replaces the rows of file `file` with `rows`, moving the later files'
@@ -312,6 +316,22 @@ mod tests {
         );
         assert_eq!(list.file_at_row(3), Some(0));
         assert_eq!(list.file_at_row(0), None);
+    }
+
+    /// The file at a row is found past hidden files' empty ranges, and
+    /// nothing above the files or past the end.
+    #[test]
+    fn finds_the_file_at_a_row_past_hidden_files() {
+        let list = DetailRowList {
+            rows: vec![DetailRow::SummaryBar; 9],
+            file_ranges: vec![1..5, 5..5, 5..9],
+        };
+        assert_eq!(list.file_at_row(0), None);
+        assert_eq!(list.file_at_row(1), Some(0));
+        assert_eq!(list.file_at_row(4), Some(0));
+        assert_eq!(list.file_at_row(5), Some(2));
+        assert_eq!(list.file_at_row(8), Some(2));
+        assert_eq!(list.file_at_row(9), None);
     }
 
     /// Split rows pair the removed and added line into one row.

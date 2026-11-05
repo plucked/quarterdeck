@@ -37,6 +37,14 @@ struct CountColumns {
     deletions_width: f32,
 }
 
+/// What every tree row of one frame shares: the count columns' widths and
+/// the file at the top of the diff (highlighted), found once per frame.
+#[derive(Clone, Copy)]
+struct TreeFrame {
+    columns: CountColumns,
+    current_file: Option<usize>,
+}
+
 impl CountColumns {
     /// Columns that fit `largest` with its sign.
     fn fitting(largest: LineCounts) -> Self {
@@ -92,10 +100,7 @@ impl PullRequestDetail {
     /// Title, viewed progress and the filter controls.
     fn render_tree_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let files = self.loaded_files();
-        let viewed = files
-            .iter()
-            .filter(|loaded| self.file_review().is_viewed(loaded.filename()))
-            .count();
+        let viewed = self.file_review().viewed_count();
         div()
             .flex()
             .flex_col()
@@ -160,11 +165,14 @@ impl PullRequestDetail {
     /// The visible tree rows in `range`, their count columns sized for the
     /// largest counts any row shows so every row's numbers line up.
     fn render_tree_rows(&self, range: Range<usize>, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let columns = CountColumns::fitting(self.file_tree().widest_line_counts());
+        let frame = TreeFrame {
+            columns: CountColumns::fitting(self.file_tree().widest_line_counts()),
+            current_file: self.current_file(),
+        };
         range
             .filter_map(|index| {
                 let row = *self.file_tree().rows().get(index)?;
-                Some(self.render_tree_row(index, row, columns, cx))
+                Some(self.render_tree_row(index, row, frame, cx))
             })
             .collect()
     }
@@ -177,7 +185,7 @@ impl PullRequestDetail {
         &self,
         index: usize,
         row: TreeRow,
-        columns: CountColumns,
+        frame: TreeFrame,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let base = div()
@@ -195,10 +203,10 @@ impl PullRequestDetail {
             .cursor_pointer()
             .hover(|style| style.bg(theme::hover()));
         match &self.file_tree().tree().node(row.node).kind {
-            TreeNodeKind::Folder { .. } => self.render_folder_row(base, index, row, columns, cx),
-            TreeNodeKind::File { file } => {
-                self.render_file_row(base, index, *file, row, columns, cx)
+            TreeNodeKind::Folder { .. } => {
+                self.render_folder_row(base, index, row, frame.columns, cx)
             }
+            TreeNodeKind::File { file } => self.render_file_row(base, index, *file, row, frame, cx),
         }
     }
 
@@ -261,15 +269,16 @@ impl PullRequestDetail {
         index: usize,
         file: usize,
         row: TreeRow,
-        columns: CountColumns,
+        frame: TreeFrame,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(loaded) = self.loaded_files().get(file) else {
             return base.into_any_element();
         };
+        let is_current = frame.current_file == Some(file);
+        let columns = frame.columns;
         let name = self.file_tree().tree().node(row.node).name.clone();
         let is_viewed = self.file_review().is_viewed(loaded.filename());
-        let is_current = self.current_file() == Some(file);
         let counts = LineCounts {
             additions: loaded.file.additions,
             deletions: loaded.file.deletions,

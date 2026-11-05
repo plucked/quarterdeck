@@ -137,10 +137,7 @@ impl PullRequestDetail {
         if files.is_empty() {
             return String::new();
         }
-        let viewed = files
-            .iter()
-            .filter(|loaded| self.file_review().is_viewed(loaded.filename()))
-            .count();
+        let viewed = self.file_review().viewed_count();
         format!("  ·  {viewed}/{} viewed", files.len())
     }
 

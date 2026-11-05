@@ -22,7 +22,7 @@ impl FileFilter {
     /// Whether `file` passes the kind and type rows; a folder's viewed
     /// checkbox covers these files, viewed or not.
     pub fn shows_ignoring_viewed(&self, file: &FilteredFile<'_>) -> bool {
-        self.kinds.admits(&file.kind()) && self.file_types.admits(&file.file_type())
+        self.kinds.admits(&file.kind()) && self.file_types.admits(file.file_type())
     }
 
     /// Whether the chip rows narrow anything (the viewed switch aside).
@@ -61,7 +61,7 @@ impl FileFilter {
     /// `.gitignore`, `.rs`), with how many files it has and how many the
     /// viewed switch and the kind row let through.
     pub fn file_type_counts(&self, files: &[FilteredFile<'_>]) -> Vec<FacetCount<String>> {
-        let mut counts: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+        let mut counts: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
         for file in files {
             let entry = counts.entry(file.file_type()).or_default();
             entry.0 += 1;
@@ -70,7 +70,7 @@ impl FileFilter {
         let mut counts: Vec<FacetCount<String>> = counts
             .into_iter()
             .map(|(value, (total, matching))| FacetCount {
-                value,
+                value: value.to_owned(),
                 total,
                 matching,
             })
@@ -105,7 +105,7 @@ impl FileFilter {
 
     /// Whether `file` passes everything but the kind row.
     fn passes_other_than_kind(&self, file: &FilteredFile<'_>) -> bool {
-        !(self.hide_viewed && file.is_viewed) && self.file_types.admits(&file.file_type())
+        !(self.hide_viewed && file.is_viewed) && self.file_types.admits(file.file_type())
     }
 
     /// Whether `file` passes everything but the type row.
@@ -125,12 +125,16 @@ fn sort_name(file_type: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::FileFacets;
 
-    fn file(path: &str, is_unchanged_move: bool) -> FilteredFile<'_> {
+    fn facets(path: &str, is_unchanged_move: bool) -> FileFacets {
+        FileFacets::of(path, is_unchanged_move)
+    }
+
+    fn file(facets: &FileFacets) -> FilteredFile<'_> {
         FilteredFile {
-            path,
+            facets,
             is_viewed: false,
-            is_unchanged_move,
         }
     }
 
@@ -139,8 +143,8 @@ mod tests {
     fn picking_a_kind_ignores_other_types() {
         let mut filter = FileFilter::default();
         filter.kinds.toggle_only(&FileKind::Moved);
-        assert!(filter.shows(&file("contracts/a.schema", true)));
-        assert!(!filter.shows(&file("src/a.rs", false)));
+        assert!(filter.shows(&file(&facets("contracts/a.schema", true))));
+        assert!(!filter.shows(&file(&facets("src/a.rs", false))));
     }
 
     /// The rows narrow together: Moved and `.schema` together show moved schemas only.
@@ -149,21 +153,22 @@ mod tests {
         let mut filter = FileFilter::default();
         filter.kinds.toggle_only(&FileKind::Moved);
         filter.file_types.toggle_only(&".schema".to_owned());
-        assert!(filter.shows(&file("a.schema", true)));
-        assert!(!filter.shows(&file("a.cs", true)));
+        assert!(filter.shows(&file(&facets("a.schema", true))));
+        assert!(!filter.shows(&file(&facets("a.cs", true))));
         assert_eq!(filter.describe(), ["Moved", ".schema"]);
     }
 
     /// Types sort by name without the dot, ignoring case, whatever their counts.
     #[test]
     fn file_types_sort_alphabetically() {
-        let files = [
-            file("a.rs", false),
-            file("b.rs", false),
-            file("Dockerfile", false),
-            file(".gitignore", false),
-            file("c.cs", false),
+        let all_facets = [
+            facets("a.rs", false),
+            facets("b.rs", false),
+            facets("Dockerfile", false),
+            facets(".gitignore", false),
+            facets("c.cs", false),
         ];
+        let files: Vec<FilteredFile<'_>> = all_facets.iter().map(file).collect();
         let order: Vec<String> = FileFilter::default()
             .file_type_counts(&files)
             .into_iter()
@@ -175,12 +180,13 @@ mod tests {
     /// Counts say what each chip would show given the other row.
     #[test]
     fn counts_follow_the_other_row() {
-        let files = [
-            file("a.schema", true),
-            file("b.schema", true),
-            file("c.cs", true),
-            file("d.cs", false),
+        let all_facets = [
+            facets("a.schema", true),
+            facets("b.schema", true),
+            facets("c.cs", true),
+            facets("d.cs", false),
         ];
+        let files: Vec<FilteredFile<'_>> = all_facets.iter().map(file).collect();
         let mut filter = FileFilter::default();
         filter.kinds.toggle_only(&FileKind::Moved);
         let types = filter.file_type_counts(&files);
@@ -216,9 +222,10 @@ mod tests {
             hide_viewed: true,
             ..FileFilter::default()
         };
+        let rust = facets("a.rs", false);
         let viewed = FilteredFile {
             is_viewed: true,
-            ..file("a.rs", false)
+            ..file(&rust)
         };
         assert!(!filter.shows(&viewed));
         assert!(filter.shows_ignoring_viewed(&viewed));

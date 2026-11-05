@@ -334,8 +334,7 @@ fn filtered_file<'file>(
     review: &FileReviewState,
 ) -> FilteredFile<'file> {
     FilteredFile {
-        path: loaded.filename(),
+        facets: &loaded.facets,
         is_viewed: review.is_viewed(loaded.filename()),
-        is_unchanged_move: loaded.is_unchanged_move(),
     }
 }

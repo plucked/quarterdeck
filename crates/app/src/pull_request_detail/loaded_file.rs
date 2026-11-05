@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use qc_cache::PatchFingerprint;
 use qc_diff::{DiffOptions, FileDiff};
+use qc_file_tree::FileFacets;
 use qc_github::PullRequestFile;
 use qc_syntax::DiffSyntax;
 
@@ -26,6 +27,9 @@ pub struct LoadedFile {
     pub gutter_width: f32,
     /// Estimated width of the longest line, which bounds sideways scrolling.
     pub longest_line_width: f32,
+    /// The file's kind and type for the filter, worked out once here (on the
+    /// background executor) rather than on every filter refresh.
+    pub facets: Arc<FileFacets>,
 }
 
 impl LoadedFile {
@@ -33,7 +37,9 @@ impl LoadedFile {
     pub fn build(file: PullRequestFile, options: DiffOptions) -> Self {
         let file = Arc::new(file);
         let diff = build_diff(&file, options);
+        let facets = Arc::new(FileFacets::of(&file.filename, is_unchanged_move(&file)));
         Self {
+            facets,
             gutter_width: gutter_width(diff.max_line_number()),
             longest_line_width: longest_line_width(&diff),
             diff: Arc::new(diff),
@@ -54,6 +60,7 @@ impl LoadedFile {
             diff: Arc::new(diff),
             fingerprint: self.fingerprint,
             syntax: None,
+            facets: self.facets.clone(),
         }
     }
 
@@ -69,8 +76,7 @@ impl LoadedFile {
     /// Whether the file was moved or copied with its content unchanged:
     /// GitHub sends no patch and counts no changed lines for it.
     pub fn is_unchanged_move(&self) -> bool {
-        let is_move = matches!(self.file.status.as_str(), "renamed" | "copied");
-        is_move && self.file.patch.is_none() && self.file.additions == 0 && self.file.deletions == 0
+        is_unchanged_move(&self.file)
     }
 
     /// Whether the file is big enough to start collapsed.
@@ -97,4 +103,10 @@ fn build_diff(file: &PullRequestFile, options: DiffOptions) -> FileDiff {
         .as_deref()
         .map(|patch| FileDiff::build(patch, options))
         .unwrap_or_default()
+}
+
+/// Whether `file` was moved or copied with its content unchanged.
+fn is_unchanged_move(file: &PullRequestFile) -> bool {
+    let is_move = matches!(file.status.as_str(), "renamed" | "copied");
+    is_move && file.patch.is_none() && file.additions == 0 && file.deletions == 0
 }

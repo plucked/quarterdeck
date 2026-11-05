@@ -18,7 +18,8 @@ pub enum LoadProgress {
     CheckingCommits,
     /// Fetching the pull request's files, page by page.
     FetchingFiles { fetched: usize, total: Option<u64> },
-    /// Downloading the combined diff of several layers.
+    /// Downloading a whole diff: a combined range of layers, or a pull
+    /// request with more files than GitHub lists.
     DownloadingDiff(DownloadProgress),
     /// Building the diffs of this many files.
     BuildingDiffs { files: usize },
@@ -40,7 +41,7 @@ impl LoadProgress {
                 total: None,
             } => format!("Fetching files from GitHub… {fetched}").into(),
             Self::DownloadingDiff(download) => format!(
-                "Downloading the combined diff… {:.1} MB",
+                "Downloading the diff… {:.1} MB",
                 megabytes(download.received_bytes)
             )
             .into(),

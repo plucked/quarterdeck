@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::BTreeSet;
 
 use crate::FacetChoice;
@@ -21,8 +22,13 @@ impl<T: Ord> Default for FacetFilter<T> {
 }
 
 impl<T: Ord + Clone> FacetFilter<T> {
-    /// Whether a file with `value` passes this row.
-    pub fn admits(&self, value: &T) -> bool {
+    /// Whether a file with `value` passes this row (`value` may be borrowed,
+    /// such as a `&str` for a row of `String`s).
+    pub fn admits<Q>(&self, value: &Q) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
         !self.hidden.contains(value) && (self.only.is_empty() || self.only.contains(value))
     }
 

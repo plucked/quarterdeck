@@ -10,6 +10,7 @@
 //! - `tree_row.rs`: `TreeRow`, one visible row with its depth.
 //! - `file_filter.rs`: `FileFilter`, which files show, and the chips' counts.
 //! - `filtered_file.rs`: `FilteredFile`, what the filter looks at in a file.
+//! - `file_facets.rs`: `FileFacets`, a file's kind and type, worked out once from its path.
 //! - `file_kind.rs`: `FileKind`, a file's one kind (code, tests, generated, moved).
 //! - `facet_filter.rs`: `FacetFilter`, one chip row: picked and hidden values.
 //! - `facet_choice.rs`: `FacetChoice`, what one chip is set to.
@@ -20,6 +21,7 @@ mod facet_choice;
 mod facet_count;
 mod facet_filter;
 mod file_category;
+mod file_facets;
 mod file_filter;
 mod file_kind;
 mod file_tree;
@@ -32,6 +34,7 @@ pub use facet_choice::FacetChoice;
 pub use facet_count::FacetCount;
 pub use facet_filter::FacetFilter;
 pub use file_category::{extension_of, file_type_of, is_generated_path, is_test_path};
+pub use file_facets::FileFacets;
 pub use file_filter::FileFilter;
 pub use file_kind::FileKind;
 pub use file_tree::FileTree;

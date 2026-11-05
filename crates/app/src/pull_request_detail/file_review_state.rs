@@ -1,6 +1,6 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use qc_cache::ViewedFile;
+use qc_cache::{PatchFingerprint, ViewedFile};
 
 use super::loaded_file::LoadedFile;
 use super::viewed_toggle::ViewedToggle;
@@ -18,13 +18,14 @@ impl FileReviewState {
     /// The state for freshly loaded `files`: a saved mark counts only when
     /// its fingerprint matches the file's current patch.
     pub fn for_loaded(files: &[LoadedFile], viewed_marks: &[ViewedFile]) -> Self {
+        // The marks by file name, so matching stays linear for 17k files.
+        let marks: HashMap<&str, PatchFingerprint> = viewed_marks
+            .iter()
+            .map(|mark| (mark.filename.as_str(), mark.fingerprint))
+            .collect();
         let viewed: HashSet<String> = files
             .iter()
-            .filter(|loaded| {
-                viewed_marks.iter().any(|mark| {
-                    mark.filename == loaded.filename() && mark.fingerprint == loaded.fingerprint
-                })
-            })
+            .filter(|loaded| marks.get(loaded.filename()) == Some(&loaded.fingerprint))
             .map(|loaded| loaded.filename().to_owned())
             .collect();
         let collapsed = files

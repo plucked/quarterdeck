@@ -31,6 +31,9 @@ const DIFF_MEDIA_TYPE: &str = "application/vnd.github.diff";
 const PAGE_SIZE: &str = "100";
 /// GitHub lists at most 3000 changed files per pull request: 30 pages of 100.
 const MAX_FILE_PAGES: usize = 30;
+/// The most changed files `pull_request_files` can return; a larger pull
+/// request's files come whole from `compare_files` instead.
+pub const MAX_LISTED_FILES: u64 = 3000;
 const REVIEW_REQUESTED_QUERY: &str = "is:pr is:open archived:false review-requested:@me";
 const AUTHORED_QUERY: &str = "is:pr is:open archived:false author:@me";
 /// How much of a body is read between progress reports.

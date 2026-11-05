@@ -82,7 +82,7 @@ pub use api_usage::{ApiUsage, ApiUsageSnapshot};
 pub use conditional_response::ConditionalResponse;
 pub use download_progress::DownloadProgress;
 pub use etag::ETag;
-pub use github_client::GitHubClient;
+pub use github_client::{GitHubClient, MAX_LISTED_FILES};
 pub use github_error::GitHubError;
 pub use line_side::LineSide;
 pub use listed_stack_membership::ListedStackMembership;

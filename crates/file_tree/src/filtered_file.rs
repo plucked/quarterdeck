@@ -1,22 +1,20 @@
-use crate::FileKind;
-use crate::file_category::file_type_of;
+use crate::{FileFacets, FileKind};
 
-/// What the filter looks at in one changed file.
+/// What the filter looks at in one changed file: its facets and whether it
+/// is marked viewed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FilteredFile<'path> {
-    pub path: &'path str,
+pub struct FilteredFile<'facets> {
+    pub facets: &'facets FileFacets,
     pub is_viewed: bool,
-    /// Moved or copied with its content unchanged.
-    pub is_unchanged_move: bool,
 }
 
 impl FilteredFile<'_> {
     pub fn kind(&self) -> FileKind {
-        FileKind::of(self.path, self.is_unchanged_move)
+        self.facets.kind
     }
 
     /// The extension, or the name of a file without one.
-    pub fn file_type(&self) -> String {
-        file_type_of(self.path)
+    pub fn file_type(&self) -> &str {
+        &self.facets.file_type
     }
 }
