@@ -11,6 +11,7 @@ use qd_cache::{
 use qd_github::{GitHubClient, PullRequest, PullRequestStack, RepoRef, StackMembership};
 
 use super::activation_refresh::ActivationRefresh;
+use super::collapsed_groups::CollapsedGroups;
 use super::queue_lists::QueueLists;
 use super::queue_row::QueueRow;
 use super::refresh_schedule::RefreshSchedule;
@@ -74,7 +75,8 @@ pub struct ReviewQueue {
     sidebar_visibility: PanelVisibility,
     /// The sidebar rows of the shown tab.
     rows: Vec<QueueRow>,
-    collapsed_stacks: HashSet<StackKey>,
+    /// The repositories and stacks folded in the sidebar.
+    collapsed: CollapsedGroups,
     selected: Option<PullRequest>,
     selection_origin: SelectionOrigin,
     refresh_status: RefreshStatus,
@@ -166,7 +168,7 @@ impl ReviewQueue {
             tab: saved.tab,
             sidebar_visibility: saved.sidebar,
             rows: Vec::new(),
-            collapsed_stacks: HashSet::new(),
+            collapsed: CollapsedGroups::default(),
             selected: None,
             selection_origin: SelectionOrigin::Listed,
             refresh_status,
@@ -269,11 +271,7 @@ impl ReviewQueue {
     /// scroll position (a list reset alone would jump to the top).
     fn rebuild_rows(&mut self) {
         let scroll_top = self.queue_list.logical_scroll_top();
-        self.rows = QueueRow::build_all(
-            self.lists.get(self.tab),
-            &self.collapsed_stacks,
-            &self.stacks,
-        );
+        self.rows = QueueRow::build_all(self.lists.get(self.tab), &self.collapsed, &self.stacks);
         self.queue_list.reset(self.rows.len());
         self.queue_list.scroll_to(ListOffset {
             item_ix: scroll_top.item_ix.min(self.rows.len().saturating_sub(1)),
@@ -381,11 +379,16 @@ impl ReviewQueue {
         cx.notify();
     }
 
+    /// Collapses or expands a repository's group in the sidebar.
+    pub(super) fn toggle_repository_group(&mut self, repo: &RepoRef, cx: &mut Context<Self>) {
+        self.collapsed.toggle_repository(repo);
+        self.rebuild_rows();
+        cx.notify();
+    }
+
     /// Collapses or expands a stack's group in the sidebar.
     pub(super) fn toggle_stack_group(&mut self, key: &StackKey, cx: &mut Context<Self>) {
-        if !self.collapsed_stacks.remove(key) {
-            self.collapsed_stacks.insert(key.clone());
-        }
+        self.collapsed.toggle_stack(key);
         self.rebuild_rows();
         cx.notify();
     }

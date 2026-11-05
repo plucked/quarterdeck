@@ -1,12 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use qd_github::{PullRequest, PullRequestStack};
+use qd_github::{PullRequest, PullRequestStack, RepoRef};
 
+use super::collapsed_groups::CollapsedGroups;
 use super::stack_key::StackKey;
 
 /// One row of the queue's sidebar list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueueRow {
+    /// The header above a repository's pull requests.
+    RepoHeader(RepoGroup),
     /// A standalone pull request, by its index in the shown list.
     PullRequest(usize),
     /// The header above a stack's layers.
@@ -17,6 +20,15 @@ pub enum QueueRow {
     /// else's, or one not asking for the viewer's review), by its index in
     /// the stack's layers.
     OtherLayer { key: StackKey, layer: usize },
+}
+
+/// What a repository's header shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoGroup {
+    pub repo: RepoRef,
+    /// Pull requests of it in the shown list.
+    pub pull_requests: usize,
+    pub is_collapsed: bool,
 }
 
 /// What a stack's header shows.
@@ -32,64 +44,43 @@ pub struct StackGroup {
 }
 
 impl QueueRow {
-    /// The rows for `list`, in its order (most recently updated first): a
-    /// stack's header takes the place of its first listed layer, and its
-    /// layers follow bottom first unless it is collapsed. With the stack's
-    /// layers in `stacks`, every layer shows, listed or not; without, only
-    /// the listed ones.
+    /// The rows for `list`, grouped by repository: each repository's header
+    /// (in the order of its most recently updated pull request, as the list
+    /// is sorted), then, unless it is collapsed, its pull requests in list
+    /// order. A stack's header takes the place of its first listed layer,
+    /// and its layers follow bottom first unless it is collapsed. With the
+    /// stack's layers in `stacks`, every layer shows, listed or not;
+    /// without, only the listed ones.
     pub fn build_all(
         list: &[PullRequest],
-        collapsed: &HashSet<StackKey>,
+        collapsed: &CollapsedGroups,
         stacks: &HashMap<StackKey, PullRequestStack>,
     ) -> Vec<Self> {
-        let mut rows = Vec::new();
-        let mut placed: HashSet<StackKey> = HashSet::new();
-        for (index, pull_request) in list.iter().enumerate() {
-            // A standalone pull request is one row; a stack is placed once, at its first layer.
-            let (Some(key), Some(membership)) = (StackKey::of(pull_request), &pull_request.stack)
-            else {
-                rows.push(Self::PullRequest(index));
-                continue;
-            };
-            if !placed.insert(key.clone()) {
-                continue;
+        // The repositories in the order they first appear.
+        let mut repositories: Vec<&RepoRef> = Vec::new();
+        for pull_request in list {
+            if !repositories.contains(&&pull_request.repo) {
+                repositories.push(&pull_request.repo);
             }
+        }
 
-            // Its listed layers, bottom first.
-            let mut listed: Vec<usize> = list
+        // Each one's header, then its rows.
+        let mut rows = Vec::new();
+        for repo in repositories {
+            let indexes: Vec<usize> = list
                 .iter()
                 .enumerate()
-                .filter(|(_, candidate)| StackKey::of(candidate).as_ref() == Some(&key))
-                .map(|(layer_index, _)| layer_index)
+                .filter(|(_, pull_request)| pull_request.repo == *repo)
+                .map(|(index, _)| index)
                 .collect();
-            listed.sort_by_key(|layer_index| {
-                list[*layer_index]
-                    .stack
-                    .as_ref()
-                    .map_or(0, |membership| membership.position)
-            });
-
-            // The header, then every layer when the stack is known, else the listed ones.
-            let stack = stacks.get(&key);
-            let layers = match stack {
-                Some(stack) => stack_layer_rows(&key, stack, list, &listed),
-                None => listed.iter().copied().map(Self::StackLayer).collect(),
-            };
-            let is_collapsed = collapsed.contains(&key);
-            rows.push(Self::StackHeader(StackGroup {
-                size: stack.map_or(membership.size, |stack| {
-                    u64::try_from(stack.layers.len()).unwrap_or(u64::MAX)
-                }),
-                base_ref: stack.map_or_else(
-                    || membership.base_ref.clone(),
-                    |stack| stack.base_ref.clone(),
-                ),
-                listed: listed.len(),
+            let is_collapsed = collapsed.repositories.contains(repo);
+            rows.push(Self::RepoHeader(RepoGroup {
+                repo: repo.clone(),
+                pull_requests: indexes.len(),
                 is_collapsed,
-                key,
             }));
             if !is_collapsed {
-                rows.extend(layers);
+                rows.extend(repository_rows(list, &indexes, &collapsed.stacks, stacks));
             }
         }
         rows
@@ -99,9 +90,71 @@ impl QueueRow {
     pub fn pull_request_index(&self) -> Option<usize> {
         match self {
             Self::PullRequest(index) | Self::StackLayer(index) => Some(*index),
-            Self::StackHeader(_) | Self::OtherLayer { .. } => None,
+            Self::RepoHeader(_) | Self::StackHeader(_) | Self::OtherLayer { .. } => None,
         }
     }
+}
+
+/// The rows of one repository's pull requests, at `indexes` in `list`: a
+/// standalone pull request is one row; a stack is placed once, at its first
+/// listed layer, as its header and (unless collapsed) its layers.
+fn repository_rows(
+    list: &[PullRequest],
+    indexes: &[usize],
+    collapsed_stacks: &HashSet<StackKey>,
+    stacks: &HashMap<StackKey, PullRequestStack>,
+) -> Vec<QueueRow> {
+    let mut rows = Vec::new();
+    let mut placed: HashSet<StackKey> = HashSet::new();
+    for &index in indexes {
+        let pull_request = &list[index];
+        let (Some(key), Some(membership)) = (StackKey::of(pull_request), &pull_request.stack)
+        else {
+            rows.push(QueueRow::PullRequest(index));
+            continue;
+        };
+        if !placed.insert(key.clone()) {
+            continue;
+        }
+
+        // Its listed layers, bottom first.
+        let mut listed: Vec<usize> = list
+            .iter()
+            .enumerate()
+            .filter(|(_, candidate)| StackKey::of(candidate).as_ref() == Some(&key))
+            .map(|(layer_index, _)| layer_index)
+            .collect();
+        listed.sort_by_key(|layer_index| {
+            list[*layer_index]
+                .stack
+                .as_ref()
+                .map_or(0, |membership| membership.position)
+        });
+
+        // The header, then every layer when the stack is known, else the listed ones.
+        let stack = stacks.get(&key);
+        let layers = match stack {
+            Some(stack) => stack_layer_rows(&key, stack, list, &listed),
+            None => listed.iter().copied().map(QueueRow::StackLayer).collect(),
+        };
+        let is_collapsed = collapsed_stacks.contains(&key);
+        rows.push(QueueRow::StackHeader(StackGroup {
+            size: stack.map_or(membership.size, |stack| {
+                u64::try_from(stack.layers.len()).unwrap_or(u64::MAX)
+            }),
+            base_ref: stack.map_or_else(
+                || membership.base_ref.clone(),
+                |stack| stack.base_ref.clone(),
+            ),
+            listed: listed.len(),
+            is_collapsed,
+            key,
+        }));
+        if !is_collapsed {
+            rows.extend(layers);
+        }
+    }
+    rows
 }
 
 /// Every layer of `stack` bottom first: listed ones by their list index,
@@ -151,12 +204,16 @@ mod tests {
     use super::*;
 
     fn pull_request(number: u64, stack: Option<(u64, u64)>) -> PullRequest {
+        in_repo("b", number, stack)
+    }
+
+    fn in_repo(name: &str, number: u64, stack: Option<(u64, u64)>) -> PullRequest {
         PullRequest {
             id: number,
             number,
             repo: RepoRef {
                 owner: "a".into(),
-                name: "b".into(),
+                name: name.into(),
             },
             title: String::new(),
             body: None,
@@ -185,12 +242,13 @@ mod tests {
             pull_request(11, None),
             pull_request(12, Some((9, 1))),
         ];
-        let rows = QueueRow::build_all(&list, &HashSet::new(), &HashMap::new());
+        let rows = QueueRow::build_all(&list, &CollapsedGroups::default(), &HashMap::new());
+        assert!(matches!(&rows[0], QueueRow::RepoHeader(group) if group.pull_requests == 3));
         assert!(
-            matches!(&rows[0], QueueRow::StackHeader(group) if group.listed == 2 && group.size == 3)
+            matches!(&rows[1], QueueRow::StackHeader(group) if group.listed == 2 && group.size == 3)
         );
         assert_eq!(
-            rows[1..],
+            rows[2..],
             [
                 QueueRow::StackLayer(2),
                 QueueRow::StackLayer(0),
@@ -206,10 +264,55 @@ mod tests {
             pull_request(10, Some((9, 1))),
             pull_request(11, Some((9, 2))),
         ];
-        let key = StackKey::of(&list[0]).unwrap();
-        let rows = QueueRow::build_all(&list, &HashSet::from([key]), &HashMap::new());
-        assert_eq!(rows.len(), 1);
-        assert!(matches!(&rows[0], QueueRow::StackHeader(group) if group.is_collapsed));
+        let collapsed = CollapsedGroups {
+            stacks: HashSet::from([StackKey::of(&list[0]).unwrap()]),
+            ..CollapsedGroups::default()
+        };
+        let rows = QueueRow::build_all(&list, &collapsed, &HashMap::new());
+        assert_eq!(rows.len(), 2);
+        assert!(matches!(&rows[1], QueueRow::StackHeader(group) if group.is_collapsed));
+    }
+
+    /// Pull requests group under their repository, repositories in the order
+    /// of their most recent pull request; a collapsed one shows its header alone.
+    #[test]
+    fn groups_pull_requests_by_repository() {
+        let list = [
+            in_repo("web", 1, None),
+            in_repo("api", 2, None),
+            in_repo("web", 3, None),
+        ];
+        let rows = QueueRow::build_all(&list, &CollapsedGroups::default(), &HashMap::new());
+        let header = |name: &str, count: usize| {
+            QueueRow::RepoHeader(RepoGroup {
+                repo: list
+                    .iter()
+                    .find(|pr| pr.repo.name == name)
+                    .unwrap()
+                    .repo
+                    .clone(),
+                pull_requests: count,
+                is_collapsed: false,
+            })
+        };
+        assert_eq!(
+            rows,
+            [
+                header("web", 2),
+                QueueRow::PullRequest(0),
+                QueueRow::PullRequest(2),
+                header("api", 1),
+                QueueRow::PullRequest(1),
+            ]
+        );
+
+        let collapsed = CollapsedGroups {
+            repositories: HashSet::from([list[0].repo.clone()]),
+            ..CollapsedGroups::default()
+        };
+        let rows = QueueRow::build_all(&list, &collapsed, &HashMap::new());
+        assert_eq!(rows.len(), 3);
+        assert!(matches!(&rows[0], QueueRow::RepoHeader(group) if group.is_collapsed));
     }
 
     fn layer(number: u64) -> StackLayer {
@@ -243,14 +346,14 @@ mod tests {
         };
         let rows = QueueRow::build_all(
             &list,
-            &HashSet::new(),
+            &CollapsedGroups::default(),
             &HashMap::from([(key.clone(), stack)]),
         );
         assert!(
-            matches!(&rows[0], QueueRow::StackHeader(group) if group.listed == 1 && group.size == 3)
+            matches!(&rows[1], QueueRow::StackHeader(group) if group.listed == 1 && group.size == 3)
         );
         assert_eq!(
-            rows[1..],
+            rows[2..],
             [
                 QueueRow::OtherLayer {
                     key: key.clone(),

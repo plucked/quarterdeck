@@ -8,7 +8,7 @@ use qd_cache::QueueTab;
 use qd_github::{PullRequest, StackLayer};
 
 use super::ReviewQueue;
-use super::queue_row::{QueueRow, StackGroup};
+use super::queue_row::{QueueRow, RepoGroup, StackGroup};
 use super::refresh_status::RefreshStatus;
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
@@ -149,6 +149,7 @@ impl ReviewQueue {
         let selected_id = self.selected_pull_request().map(|selected| selected.id);
         let row = self.rows().get(index)?;
         let element = match row {
+            QueueRow::RepoHeader(group) => render_repo_header(index, group, cx),
             QueueRow::PullRequest(list_index) => {
                 let pull_request = self.shown_list().get(*list_index)?;
                 render_pull_request_row(
@@ -214,7 +215,16 @@ impl ReviewQueue {
             }
         };
         // Inset from the sidebar's edges; the row keeps the full width inside.
-        Some(div().px_2().pb_0p5().child(element).into_any_element())
+        // A repository after the first gets room above it.
+        let starts_later_group = index > 0 && matches!(row, QueueRow::RepoHeader(_));
+        Some(
+            div()
+                .px_2()
+                .pb_0p5()
+                .when(starts_later_group, Styled::pt_3)
+                .child(element)
+                .into_any_element(),
+        )
     }
 }
 
@@ -280,9 +290,64 @@ fn render_pull_request_row(
         .on_click(cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)))
         .child(div().text_sm().truncate().child(pull_request.title.clone()))
         .child(render_meta(format!(
-            "{} #{} · {}{draft_marker}",
-            pull_request.repo.name, pull_request.number, pull_request.author.login,
+            "#{} · {}{draft_marker}",
+            pull_request.number, pull_request.author.login,
         )))
+        .into_any_element()
+}
+
+/// A repository's header: chevron, name, owner and how many pull requests
+/// it has here. Clicking it folds or unfolds the repository's group.
+fn render_repo_header(
+    row_index: usize,
+    group: &RepoGroup,
+    cx: &mut Context<ReviewQueue>,
+) -> AnyElement {
+    let chevron = if group.is_collapsed { "▸" } else { "▾" };
+    let repo = group.repo.clone();
+    div()
+        .id(("repo-header", row_index))
+        .flex()
+        .items_center()
+        .gap_1p5()
+        .px_1()
+        .py_1()
+        .rounded_md()
+        .cursor_pointer()
+        .text_xs()
+        .hover(|style| style.bg(theme::hover()))
+        .on_click(cx.listener(move |queue, _, _, cx| queue.toggle_repository_group(&repo, cx)))
+        .child(
+            div()
+                .flex_none()
+                .size_4()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_color(theme::subtle())
+                .child(chevron),
+        )
+        .child(
+            div()
+                .flex_none()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme::muted())
+                .child(group.repo.name.clone()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_color(theme::subtle())
+                .child(group.repo.owner.clone()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .text_color(theme::subtle())
+                .child(group.pull_requests.to_string()),
+        )
         .into_any_element()
 }
 
@@ -346,10 +411,11 @@ fn render_stack_header(
                         .child(format!("→ {}", group.base_ref)),
                 ),
         )
-        .child(div().pl(px(22.)).child(render_meta(format!(
-            "{} · {} layers · {listed}",
-            group.key.repo.name, group.size
-        ))))
+        .child(
+            div()
+                .pl(px(22.))
+                .child(render_meta(format!("{} layers · {listed}", group.size))),
+        )
         .into_any_element()
 }
 

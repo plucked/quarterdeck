@@ -15,11 +15,13 @@
 //! - `selection_restore.rs`: decides how a selection saved before a relaunch is restored.
 //! - `restore_phase.rs`: `RestorePhase`, which queue a saved selection is matched against.
 //! - `queue_lists.rs`: `QueueLists`, the authored and review-requested lists.
-//! - `queue_row.rs`: `QueueRow`, a sidebar row (pull request, stack header, stack layer), and grouping.
+//! - `queue_row.rs`: `QueueRow`, a sidebar row (repository header, pull request, stack header, stack layer), and grouping.
+//! - `collapsed_groups.rs`: `CollapsedGroups`, the repositories and stacks folded in the sidebar.
 //! - `stack_key.rs`: `StackKey`, a stack's repository and number.
 //! - `selection_origin.rs`: `SelectionOrigin`, picked from a list or opened from a stack.
 
 mod activation_refresh;
+mod collapsed_groups;
 mod queue_lists;
 mod queue_row;
 mod refresh_schedule;
