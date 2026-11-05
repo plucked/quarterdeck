@@ -7,6 +7,7 @@
 //!
 //! Files:
 //! - `file_header_rendering.rs`: a file's header row, the top of its card.
+//! - `file_status_badge.rs`: the letter badge for a file's status (added, removed, renamed…).
 //! - `unified_rendering.rs`: one unified diff row.
 //! - `split_rendering.rs`: one side-by-side diff row.
 //! - `diff_cell_rendering.rs`: the shared pieces: rows, gutters, markers, code, hunk headers.
@@ -37,6 +38,7 @@ mod file_diff_state;
 mod file_header_rendering;
 mod file_note;
 mod file_note_rendering;
+mod file_status_badge;
 mod split_rendering;
 mod unified_rendering;
 
@@ -53,5 +55,6 @@ pub use file_diff_state::FileDiffState;
 pub use file_header_rendering::{FileClickHandler, render_file_header};
 pub use file_note::FileNote;
 pub use file_note_rendering::render_file_note;
+pub use file_status_badge::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
 pub use split_rendering::render_split_row;
 pub use unified_rendering::render_unified_line;

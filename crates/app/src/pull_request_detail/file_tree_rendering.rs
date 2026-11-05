@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{
-    AnyElement, Context, FontWeight, IntoElement, Rgba, Styled, div, prelude::*, px, relative,
+    AnyElement, Context, Div, IntoElement, Rgba, Stateful, Styled, div, prelude::*, px, relative,
     uniform_list,
 };
 use qc_file_tree::{TreeNodeKind, TreeRow};
@@ -10,6 +10,7 @@ use super::folder_viewed_state::FolderViewedState;
 use super::pull_request_detail::PullRequestDetail;
 use super::side_panel_tab::SidePanelTab;
 use crate::checkbox::{CheckState, Checkbox};
+use crate::diff_view::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
@@ -21,8 +22,36 @@ const MAX_PANEL_WIDTH: f32 = 640.;
 const TREE_ROW_HEIGHT: f32 = 24.;
 /// Indent per tree level.
 const TREE_INDENT: f32 = 12.;
+/// Size of the line counts' monospace font, and the width of one of its characters.
+const COUNT_FONT_SIZE: f32 = 10.;
+const COUNT_CHARACTER_WIDTH: f32 = 6.1;
 /// Height of the viewed progress bar.
 const PROGRESS_BAR_HEIGHT: f32 = 4.;
+
+/// Lines a file (or the files under a folder) adds and removes.
+#[derive(Clone, Copy, Default)]
+struct LineCounts {
+    additions: u64,
+    deletions: u64,
+}
+
+/// Widths of the added and removed columns, wide enough for the largest
+/// count a row shows.
+#[derive(Clone, Copy)]
+struct CountColumns {
+    additions_width: f32,
+    deletions_width: f32,
+}
+
+impl CountColumns {
+    /// Columns that fit `largest` with its sign.
+    fn fitting(largest: LineCounts) -> Self {
+        Self {
+            additions_width: count_width(largest.additions),
+            deletions_width: count_width(largest.deletions),
+        }
+    }
+}
 
 impl PullRequestDetail {
     /// The panel beside the diff: the Files and Review tabs; Files holds
@@ -134,22 +163,52 @@ impl PullRequestDetail {
             .into_any_element()
     }
 
-    /// The visible tree rows in `range`.
+    /// The visible tree rows in `range`, their count columns sized for the
+    /// largest counts any row shows (a top-level folder's sums, since no
+    /// deeper row exceeds them) so every row's numbers line up.
     fn render_tree_rows(&self, range: Range<usize>, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let tree = self.file_tree().tree();
+        let largest = self
+            .file_tree()
+            .rows()
+            .iter()
+            .filter(|row| row.depth == 0)
+            .map(|row| self.line_counts_of(tree.files_under(row.node)))
+            .fold(LineCounts::default(), |largest, counts| LineCounts {
+                additions: largest.additions.max(counts.additions),
+                deletions: largest.deletions.max(counts.deletions),
+            });
+        let columns = CountColumns::fitting(largest);
         range
             .filter_map(|index| {
                 let row = *self.file_tree().rows().get(index)?;
-                Some(self.render_tree_row(index, row, cx))
+                Some(self.render_tree_row(index, row, columns, cx))
             })
             .collect()
     }
 
-    /// A folder row (chevron, name, viewed box) or a file row (status,
-    /// name, viewed box), indented by depth. The file at the top of the diff is
-    /// highlighted.
-    fn render_tree_row(&self, index: usize, row: TreeRow, cx: &mut Context<Self>) -> AnyElement {
-        let tree = self.file_tree().tree();
-        let node = tree.node(row.node);
+    /// Added and removed lines of the loaded files at `files`.
+    fn line_counts_of(&self, files: impl IntoIterator<Item = usize>) -> LineCounts {
+        files
+            .into_iter()
+            .filter_map(|file| self.loaded_files().get(file))
+            .fold(LineCounts::default(), |counts, loaded| LineCounts {
+                additions: counts.additions + loaded.file.additions,
+                deletions: counts.deletions + loaded.file.deletions,
+            })
+    }
+
+    /// A folder row (chevron, name) or a file row (name), indented by
+    /// depth, then right-aligned columns: added and removed lines, the
+    /// file's status badge, the viewed box. The file at the top of the diff
+    /// is highlighted.
+    fn render_tree_row(
+        &self,
+        index: usize,
+        row: TreeRow,
+        columns: CountColumns,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let base = div()
             .id(index)
             .flex()
@@ -164,86 +223,120 @@ impl PullRequestDetail {
             .text_sm()
             .cursor_pointer()
             .hover(|style| style.bg(theme::hover()));
-
-        match &node.kind {
-            TreeNodeKind::Folder { .. } => {
-                let path = node.path.clone();
-                let is_collapsed = self.file_tree().is_folder_collapsed(&path);
-                let state = self.file_tree().folder_viewed_state(
-                    row.node,
-                    self.loaded_files(),
-                    self.file_review(),
-                );
-                let folder = row.node;
-                base.on_click(cx.listener(move |detail, _, _, cx| detail.toggle_folder(&path, cx)))
-                    .child(
-                        div()
-                            .flex_none()
-                            .w_3()
-                            .text_xs()
-                            .text_color(theme::subtle())
-                            .child(if is_collapsed { "▸" } else { "▾" }),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .text_color(theme::muted())
-                            .child(node.name.clone()),
-                    )
-                    .child(
-                        div()
-                            .id(("folder-viewed", index))
-                            .flex_none()
-                            .on_click(cx.listener(move |detail, _, _, cx| {
-                                cx.stop_propagation();
-                                detail.toggle_folder_viewed(folder, cx);
-                            }))
-                            .child(Checkbox::new(folder_check_state(state))),
-                    )
-                    .into_any_element()
-            }
+        match &self.file_tree().tree().node(row.node).kind {
+            TreeNodeKind::Folder { .. } => self.render_folder_row(base, index, row, columns, cx),
             TreeNodeKind::File { file } => {
-                let file = *file;
-                let Some(loaded) = self.loaded_files().get(file) else {
-                    return base.into_any_element();
-                };
-                let is_viewed = self.file_review().is_viewed(loaded.filename());
-                let is_current = self.current_file() == Some(file);
-                let (letter, color) = status_badge(&loaded.file.status);
-                base.when(is_current, |row| row.bg(theme::selected()))
-                    .on_click(cx.listener(move |detail, _, _, cx| detail.reveal_file(file, cx)))
-                    .child(
-                        div()
-                            .flex_none()
-                            .w_3()
-                            .text_size(px(9.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(color)
-                            .child(letter),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .when(is_viewed, |name| name.text_color(theme::subtle()))
-                            .child(node.name.clone()),
-                    )
-                    .child(
-                        div()
-                            .id(("file-viewed", index))
-                            .flex_none()
-                            .on_click(cx.listener(move |detail, _, _, cx| {
-                                cx.stop_propagation();
-                                detail.toggle_file_viewed(file, cx);
-                            }))
-                            .child(Checkbox::new(CheckState::from_bool(is_viewed))),
-                    )
-                    .into_any_element()
+                self.render_file_row(base, index, *file, row, columns, cx)
             }
         }
+    }
+
+    /// A folder: chevron, name, the lines changed under it, and its
+    /// tri-state viewed box.
+    fn render_folder_row(
+        &self,
+        base: Stateful<Div>,
+        index: usize,
+        row: TreeRow,
+        columns: CountColumns,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let tree = self.file_tree().tree();
+        let node = tree.node(row.node);
+        let path = node.path.clone();
+        let is_collapsed = self.file_tree().is_folder_collapsed(&path);
+        let state =
+            self.file_tree()
+                .folder_viewed_state(row.node, self.loaded_files(), self.file_review());
+        let counts = self.line_counts_of(tree.files_under(row.node));
+        let folder = row.node;
+        base.on_click(cx.listener(move |detail, _, _, cx| detail.toggle_folder(&path, cx)))
+            .child(
+                div()
+                    .flex_none()
+                    .w_3()
+                    .text_xs()
+                    .text_color(theme::subtle())
+                    .child(if is_collapsed { "▸" } else { "▾" }),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_color(theme::muted())
+                    .child(node.name.clone()),
+            )
+            .child(render_line_counts(counts, columns))
+            .child(div().flex_none().w(px(FILE_STATUS_BADGE_SIZE)))
+            .child(
+                div()
+                    .id(("folder-viewed", index))
+                    .flex_none()
+                    .on_click(cx.listener(move |detail, _, _, cx| {
+                        cx.stop_propagation();
+                        detail.toggle_folder_viewed(folder, cx);
+                    }))
+                    .child(Checkbox::new(folder_check_state(state))),
+            )
+            .into_any_element()
+    }
+
+    /// A file: name, its added and removed lines, a badge when it was
+    /// added, removed or moved, and its viewed box.
+    fn render_file_row(
+        &self,
+        base: Stateful<Div>,
+        index: usize,
+        file: usize,
+        row: TreeRow,
+        columns: CountColumns,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(loaded) = self.loaded_files().get(file) else {
+            return base.into_any_element();
+        };
+        let name = self.file_tree().tree().node(row.node).name.clone();
+        let is_viewed = self.file_review().is_viewed(loaded.filename());
+        let is_current = self.current_file() == Some(file);
+        let counts = LineCounts {
+            additions: loaded.file.additions,
+            deletions: loaded.file.deletions,
+        };
+        // A plain modification needs no badge; the counts say enough.
+        let badge = match loaded.file.status.as_str() {
+            "modified" | "changed" => None,
+            status => Some(render_file_status_badge(status)),
+        };
+        base.when(is_current, |row| row.bg(theme::selected()))
+            .on_click(cx.listener(move |detail, _, _, cx| detail.reveal_file(file, cx)))
+            .child(div().flex_none().w_3())
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .when(is_viewed, |name| name.text_color(theme::subtle()))
+                    .child(name),
+            )
+            .child(render_line_counts(counts, columns))
+            .child(
+                div()
+                    .flex_none()
+                    .w(px(FILE_STATUS_BADGE_SIZE))
+                    .children(badge),
+            )
+            .child(
+                div()
+                    .id(("file-viewed", index))
+                    .flex_none()
+                    .on_click(cx.listener(move |detail, _, _, cx| {
+                        cx.stop_propagation();
+                        detail.toggle_file_viewed(file, cx);
+                    }))
+                    .child(Checkbox::new(CheckState::from_bool(is_viewed))),
+            )
+            .into_any_element()
     }
 }
 
@@ -277,13 +370,37 @@ fn render_progress_bar(viewed: usize, total: usize) -> impl IntoElement {
         )
 }
 
-/// GitHub's file status as a letter and its color, like the diff headers show.
-fn status_badge(status: &str) -> (&'static str, Rgba) {
-    match status {
-        "added" => ("A", theme::added()),
-        "removed" => ("D", theme::removed()),
-        "renamed" => ("R", theme::renamed()),
-        "copied" => ("C", theme::renamed()),
-        _ => ("M", theme::accent()),
-    }
+/// `+12` and `−3` in their columns, right-aligned in a monospace font so
+/// digits line up from row to row; a zero leaves its column empty.
+fn render_line_counts(counts: LineCounts, columns: CountColumns) -> impl IntoElement {
+    let column = |width: f32, text: Option<String>, color: Rgba| {
+        div()
+            .flex_none()
+            .w(px(width))
+            .text_right()
+            .text_color(color)
+            .children(text)
+    };
+    div()
+        .flex_none()
+        .flex()
+        .gap_1()
+        .font_family(theme::MONO_FONT)
+        .text_size(px(COUNT_FONT_SIZE))
+        .child(column(
+            columns.additions_width,
+            (counts.additions > 0).then(|| format!("+{}", counts.additions)),
+            theme::added(),
+        ))
+        .child(column(
+            columns.deletions_width,
+            (counts.deletions > 0).then(|| format!("−{}", counts.deletions)),
+            theme::removed(),
+        ))
+}
+
+/// Width of a count column holding `largest` with its sign.
+fn count_width(largest: u64) -> f32 {
+    let characters = largest.max(1).to_string().len() + 1;
+    f32::from(u16::try_from(characters).unwrap_or(u16::MAX)) * COUNT_CHARACTER_WIDTH
 }

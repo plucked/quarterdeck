@@ -1,14 +1,12 @@
 use std::rc::Rc;
 
-use gpui::{App, ClickEvent, Div, FontWeight, Rgba, Stateful, Window, div, prelude::*, px};
+use gpui::{App, ClickEvent, Div, FontWeight, Stateful, Window, div, prelude::*};
 use qc_github::PullRequestFile;
 
 use super::FileDiffState;
+use super::file_status_badge::render_file_status_badge;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::theme;
-
-/// Edge length of the file status badge.
-const STATUS_BADGE_SIZE: f32 = 15.;
 
 /// A click handler shared by several elements of one file.
 pub type FileClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -53,7 +51,7 @@ pub fn render_file_header(
                 .text_color(theme::subtle())
                 .child(chevron),
         )
-        .child(render_status_badge(&file.status))
+        .child(render_file_status_badge(&file.status))
         .child(
             div()
                 .flex_1()
@@ -133,29 +131,4 @@ fn split_path(path: &str) -> (&str, &str) {
         Some(slash) => path.split_at(slash + 1),
         None => ("", path),
     }
-}
-
-/// A one-letter badge for GitHub's file status, colored like GitHub's.
-fn render_status_badge(status: &str) -> Div {
-    let (letter, color): (&str, Rgba) = match status {
-        "added" => ("A", theme::added()),
-        "removed" => ("D", theme::removed()),
-        "renamed" => ("R", theme::renamed()),
-        "copied" => ("C", theme::renamed()),
-        _ => ("M", theme::accent()),
-    };
-    div()
-        .flex_none()
-        .w(px(STATUS_BADGE_SIZE))
-        .h(px(STATUS_BADGE_SIZE))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(px(3.))
-        .border_1()
-        .border_color(color)
-        .text_size(px(9.))
-        .font_weight(FontWeight::BOLD)
-        .text_color(color)
-        .child(letter)
 }
