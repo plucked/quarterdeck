@@ -8,17 +8,21 @@
 //! - `scrollbar/`: `VerticalScrollbar`, a draggable scrollbar for any scroll container.
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
 //! - `theme.rs`: the color palette and fonts.
+//! - `diff_view/`: `FileDiffView` and `DiffToolbar`, how changed files show.
+//! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
 //! - `review_queue/`: the main view, the queue of pull requests awaiting review.
 //! - `ui_state/`: saves and restores what the UI showed across relaunches.
 
 mod app_commands;
 mod app_services;
+mod diff_view;
 mod launch_app;
 mod main_window;
 mod markdown_view;
 mod review_queue;
 mod scrollbar;
+mod segmented_control;
 mod shared_cache;
 mod theme;
 mod ui_state;

@@ -1,0 +1,8 @@
+/// Totals over a pull request's changed files, for the toolbar.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DiffSummary {
+    pub file_count: usize,
+    pub viewed_count: usize,
+    pub additions: u64,
+    pub deletions: u64,
+}

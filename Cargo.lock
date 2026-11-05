@@ -3560,6 +3560,7 @@ dependencies = [
  "anyhow",
  "gpui",
  "qc-cache",
+ "qc-diff",
  "qc-github",
  "qc-markdown",
 ]

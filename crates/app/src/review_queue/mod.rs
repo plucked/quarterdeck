@@ -13,18 +13,22 @@
 //! - `restore_phase.rs`: `RestorePhase`, which queue a saved selection is matched against.
 //! - `sidebar_rendering.rs`: renders the queue list and its header.
 //! - `detail_rendering.rs`: renders the selected pull request.
-//! - `render_file_diff.rs`: renders one changed file and its patch.
+//! - `loaded_file.rs`: `LoadedFile`, a changed file with its built diff and fingerprint.
+//! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
+//! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.
 
 mod activation_refresh;
 mod changed_files;
 mod detail_rendering;
+mod file_review_state;
+mod loaded_file;
 mod refresh_schedule;
 mod refresh_status;
-mod render_file_diff;
 mod restore_phase;
 mod review_queue;
 mod selection_after_refresh;
 mod selection_restore;
 mod sidebar_rendering;
+mod viewed_toggle;
 
 pub use review_queue::ReviewQueue;

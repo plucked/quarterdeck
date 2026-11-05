@@ -68,6 +68,22 @@ pub fn added_background() -> Rgba {
 pub fn removed_background() -> Rgba {
     rgb(0x3b_23_26)
 }
+/// Background of the changed words inside an added line.
+pub fn added_emphasis() -> Rgba {
+    rgb(0x2e_5a_37)
+}
+/// Background of the changed words inside a removed line.
+pub fn removed_emphasis() -> Rgba {
+    rgb(0x6b_32_38)
+}
+/// Background of a hunk header row and of the empty side of a split row.
+pub fn diff_filler() -> Rgba {
+    rgb(0x25_27_2b)
+}
+/// File status badge for a renamed file.
+pub fn renamed() -> Rgba {
+    rgb(0xd1_9a_66)
+}
 /// Error messages.
 pub fn error() -> Rgba {
     rgb(0xf0_71_78)

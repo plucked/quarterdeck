@@ -3,7 +3,8 @@ use qc_github::PullRequest;
 
 use super::ReviewQueue;
 use super::changed_files::ChangedFiles;
-use super::render_file_diff::render_file_diff;
+use super::loaded_file::LoadedFile;
+use crate::diff_view::{DiffSummary, DiffToolbar, FileDiffView};
 use crate::markdown_view::MarkdownView;
 use crate::scrollbar::VerticalScrollbar;
 use crate::theme;
@@ -50,7 +51,7 @@ impl ReviewQueue {
         container
             .child(render_detail_header(pull_request))
             .children(self.render_description())
-            .child(self.render_changed_files())
+            .child(self.render_changed_files(cx))
     }
 
     /// The description rendered as Markdown; `None` when it is empty.
@@ -67,7 +68,7 @@ impl ReviewQueue {
     }
 
     /// The changed files in their load state.
-    fn render_changed_files(&self) -> AnyElement {
+    fn render_changed_files(&self, cx: &mut Context<Self>) -> AnyElement {
         match self.changed_files() {
             None | Some(ChangedFiles::Loading) => div()
                 .text_color(theme::muted())
@@ -81,14 +82,61 @@ impl ReviewQueue {
                 .flex()
                 .flex_col()
                 .gap_3()
+                .child(self.render_diff_toolbar(files, cx))
                 .children(
                     files
                         .iter()
                         .enumerate()
-                        .map(|(index, file)| render_file_diff(index, file)),
+                        .map(|(index, loaded)| self.render_file(index, loaded, cx)),
                 )
                 .into_any_element(),
         }
+    }
+
+    /// The totals and view options above the files.
+    fn render_diff_toolbar(&self, files: &[LoadedFile], cx: &mut Context<Self>) -> DiffToolbar {
+        let summary = DiffSummary {
+            file_count: files.len(),
+            viewed_count: self.file_review().viewed_count(),
+            additions: files.iter().map(|loaded| loaded.file.additions).sum(),
+            deletions: files.iter().map(|loaded| loaded.file.deletions).sum(),
+        };
+        let queue = cx.entity().downgrade();
+        let collapsing = queue.clone();
+        let expanding = queue.clone();
+        DiffToolbar::new(self.diff_settings(), summary, move |settings, _, cx| {
+            queue
+                .update(cx, |queue, cx| queue.set_diff_settings(*settings, cx))
+                .ok();
+        })
+        .on_collapse_all(move |_, cx| {
+            collapsing.update(cx, ReviewQueue::collapse_all_files).ok();
+        })
+        .on_expand_all(move |_, cx| {
+            expanding.update(cx, ReviewQueue::expand_all_files).ok();
+        })
+    }
+
+    /// One file's diff, wired to this view's collapse and viewed state.
+    fn render_file(
+        &self,
+        index: usize,
+        loaded: &LoadedFile,
+        cx: &mut Context<Self>,
+    ) -> FileDiffView {
+        FileDiffView::new(
+            index,
+            loaded.file.clone(),
+            loaded.diff.clone(),
+            self.diff_settings(),
+            self.file_review().state_of(loaded),
+        )
+        .on_toggle_collapsed(cx.listener(move |queue, _, _, cx| {
+            queue.toggle_file_collapsed(index, cx);
+        }))
+        .on_toggle_viewed(cx.listener(move |queue, _, _, cx| {
+            queue.toggle_file_viewed(index, cx);
+        }))
     }
 }
 

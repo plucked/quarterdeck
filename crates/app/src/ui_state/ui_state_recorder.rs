@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
-use qc_cache::{ReviewQueueViewState, UiStateStore, WindowPlacement};
+use qc_cache::{DiffViewSettings, ReviewQueueViewState, UiStateStore, ViewedFile, WindowPlacement};
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
 const WRITE_DELAY: Duration = Duration::from_millis(300);
@@ -14,12 +14,30 @@ const WRITE_DELAY: Duration = Duration::from_millis(300);
 struct PendingUiState {
     window_placement: Option<WindowPlacement>,
     review_queue: Option<ReviewQueueViewState>,
+    diff_view_settings: Option<DiffViewSettings>,
+    /// Every viewed mark change, in the order made: unlike settings, each counts.
+    viewed_changes: Vec<ViewedChange>,
 }
 
 impl PendingUiState {
     fn is_empty(&self) -> bool {
-        self.window_placement.is_none() && self.review_queue.is_none()
+        self.window_placement.is_none()
+            && self.review_queue.is_none()
+            && self.diff_view_settings.is_none()
+            && self.viewed_changes.is_empty()
     }
+}
+
+/// A change to a file's viewed mark, waiting to be written.
+enum ViewedChange {
+    Mark {
+        pull_request_id: u64,
+        file: ViewedFile,
+    },
+    Unmark {
+        pull_request_id: u64,
+        filename: String,
+    },
 }
 
 /// The gpui global through which views read the UI state saved before the
@@ -66,6 +84,51 @@ impl UiStateRecorder {
         self.lock_store()
             .review_queue_view_state()
             .unwrap_or_else(|error| report_unreadable("review queue state", &error))
+    }
+
+    /// The diff view settings saved before the last relaunch; `None` when
+    /// there are none or they no longer read. Reads on the main thread: one
+    /// small local row, read at startup only.
+    pub fn saved_diff_view_settings(&self) -> Option<DiffViewSettings> {
+        self.lock_store()
+            .diff_view_settings()
+            .unwrap_or_else(|error| report_unreadable("diff view settings", &error))
+    }
+
+    /// The store, for reads on the background executor (viewed marks when a
+    /// pull request's files load). Shared because those reads outlive the call.
+    pub fn shared_store(&self) -> Arc<Mutex<UiStateStore>> {
+        self.store.clone()
+    }
+
+    /// Records the diff view settings and schedules a write.
+    pub fn record_diff_view_settings(cx: &mut App, settings: DiffViewSettings) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.diff_view_settings = Some(settings);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// Records that a file is viewed at its current patch and schedules a write.
+    pub fn record_file_viewed(cx: &mut App, pull_request_id: u64, file: ViewedFile) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.viewed_changes.push(ViewedChange::Mark {
+                pull_request_id,
+                file,
+            });
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// Records that a file is no longer viewed and schedules a write.
+    pub fn record_file_unviewed(cx: &mut App, pull_request_id: u64, filename: String) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.viewed_changes.push(ViewedChange::Unmark {
+                pull_request_id,
+                filename,
+            });
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
     }
 
     /// Records the window's placement and schedules a write.
@@ -154,6 +217,37 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
     {
         eprintln!("ui state: cannot save review queue state: {error:#}");
     }
+    if let Some(settings) = &pending.diff_view_settings
+        && let Err(error) = store.put_diff_view_settings(settings)
+    {
+        eprintln!("ui state: cannot save diff view settings: {error:#}");
+    }
+    for change in &pending.viewed_changes {
+        let written = match change {
+            ViewedChange::Mark {
+                pull_request_id,
+                file,
+            } => store.mark_file_viewed(*pull_request_id, file),
+            ViewedChange::Unmark {
+                pull_request_id,
+                filename,
+            } => store.unmark_file_viewed(*pull_request_id, filename),
+        };
+        if let Err(error) = written {
+            eprintln!("ui state: cannot save a viewed mark: {error:#}");
+        }
+    }
+}
+
+/// The viewed marks of a pull request, read through the shared store on the
+/// background executor; an unreadable table counts as no marks.
+pub fn read_viewed_files(store: &Mutex<UiStateStore>, pull_request_id: u64) -> Vec<ViewedFile> {
+    lock_store(store)
+        .viewed_files(pull_request_id)
+        .unwrap_or_else(|error| {
+            eprintln!("ui state: ignoring viewed marks: {error:#}");
+            Vec::new()
+        })
 }
 
 /// Locks the store; see [`UiStateRecorder::lock_store`] for why a poisoned

@@ -12,5 +12,5 @@
 mod ui_state_recorder;
 mod window_placement_conversion;
 
-pub use ui_state_recorder::UiStateRecorder;
+pub use ui_state_recorder::{UiStateRecorder, read_viewed_files};
 pub use window_placement_conversion::{placement_from_window, window_bounds_from_placement};
