@@ -60,6 +60,14 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 - **`render` only builds elements.** It reads state and calls rendering helpers; it starts no tasks and changes no state. Long element trees are split into `render_*` methods grouped by area in their own files.
 - **Colors and fonts come from `theme`,** never a hex literal in a view.
 
+## Persistence
+
+- **State the app owns lives in typed SQLite columns, never in JSON** (or any other self-described format): the schema is our local contract, and SQLite checks it on every write. One table per concept; an enum is a `TEXT` column with a `CHECK` listing its values, mapped by `as_sql_text`/`from_sql_text` beside the enum (`WindowMode`); one-row state uses `id INTEGER PRIMARY KEY CHECK (id = 1)` (`window_placement`). JSON is for talking to GitHub; the only JSON stored is the cached copy of GitHub's own objects (`pull_requests.data`, `pr_files.data`).
+- **All persistence goes through `qc-cache`,** in the one database file. Each store type opens its own connection (`GitHubCache`, `UiStateStore`); WAL lets them share the file without waiting on each other.
+- **A schema change is a new entry in `SCHEMA_MIGRATIONS`,** never an edit of an existing one.
+- **Restoring never fails the app.** Nothing saved, a row that no longer reads, or a value that no longer fits (a window off every display, a pull request that left the queue) restores nothing for that part and is reported on stderr at most (`window_bounds_from_placement`, `SelectionRestore`).
+- **UI state writes are batched** through `UiStateRecorder`: a change starts a short timer, later changes overwrite the pending value, and one task writes in order; the window losing focus writes at once.
+
 ## Documentation
 
 - **Describe the effect where the logic happens.** A comment describes what that code does and why; put claims about another module at the code that performs them. Describe the code as it is, without history.
@@ -72,7 +80,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 ## Tests
 
 - **Tests say what they pin:** every test has a one-line `///` naming the behaviour it checks, and long scenarios have a comment above each phase (set up, act, expect).
-- **Test-only code is compiled only for tests:** `#[cfg(test)]`, so release builds cannot call it (`Cache::open_in_memory`).
+- **Test-only code is compiled only for tests:** `#[cfg(test)]`, so release builds cannot call it (`GitHubCache::open_in_memory`).
 - **Tests never touch the network or the user's cache.** Parse recorded JSON for GitHub shapes; use an in-memory or temp-dir database.
 - **A test that blocks cannot hang:** give every blocking wait a timeout.
 
@@ -99,7 +107,7 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 ```
 
-Upstream future-incompatibility notes from gpui's dependencies (`block`, `proc-macro-error2`) are not ours and are ignored. A UI change is also checked by running the app (`cargo run`).
+Upstream future-incompatibility notes from gpui's dependencies (`block`, `proc-macro-error2`) are not ours and are ignored. A UI change is also checked by running the app (`cargo run`, or `bacon` to rebuild and relaunch on save).
 
 ## Evolving these conventions
 
