@@ -4,8 +4,13 @@
 
 default_job = "app"
 
+# The app runs from a dev bundle (target/debug/Quarterdeck.app), so macOS
+# shows its icon and name; it keeps this terminal's environment (token, gh).
 [jobs.app]
-command = ["cargo", "run"]
+command = [
+    "sh", "-c",
+    "packaging/macos/bundle.sh --dev && exec target/debug/Quarterdeck.app/Contents/MacOS/Quarterdeck",
+]
 need_stdout = true
 allow_warnings = true
 background = false

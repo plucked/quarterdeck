@@ -23,7 +23,7 @@ Only the app depends on gpui. Library crates are blocking and UI-free; the app r
 
 ## Run & check
 ```bash
-bacon                                       # rebuild + relaunch on save (job `app`); UI state is restored
+bacon                                       # rebuild + relaunch on save (job `app`, from the dev bundle with icon); UI state is restored
 cargo run                                   # needs GITHUB_TOKEN or `gh auth login`
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
@@ -32,7 +32,7 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 ```
 
-App bundle: `packaging/macos/bundle.sh [--universal]` → `target/bundle/Quarterdeck.app` (`de.plucked.quarterdeck`, `Info.plist` template, version from `[workspace.package]`, `AppIcon.icns` from the 1024 px `AppIcon.png`, ad hoc signed; no Developer ID or notarization yet). Started from Finder the app gets launchd's environment: no `GITHUB_TOKEN`, no Homebrew `PATH`.
+App bundle: `packaging/macos/bundle.sh [--universal]` → `target/bundle/Quarterdeck.app`; `--dev` keeps `target/debug/Quarterdeck.app` (debug binary hard-linked, icon remade only when `AppIcon.png` changes), which bacon's `app` job runs so the app has its icon and name (`de.plucked.quarterdeck`, `Info.plist` template, version from `[workspace.package]`, `AppIcon.icns` from the 1024 px `AppIcon.png`, ad hoc signed; no Developer ID or notarization yet). Started from Finder the app gets launchd's environment: no `GITHUB_TOKEN`, no Homebrew `PATH`.
 
 Devbox: `devbox.json` pins rustup, bacon, gh, sqlite; `devbox run app | dev | check | test`. `devbox.lock` pins the resolved versions (Devbox 0.19); `devbox update` moves them.
 

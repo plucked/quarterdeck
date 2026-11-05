@@ -70,7 +70,7 @@ The first run installs Nix if it is missing (Devbox asks for your password) and 
 
 ### Working on it
 
-For working on Quarterdeck itself, [bacon](https://dystroy.org/bacon) rebuilds and relaunches on every save, and the app reopens where it was:
+For working on Quarterdeck itself, [bacon](https://dystroy.org/bacon) rebuilds and relaunches on every save (as a small app bundle, so it has its icon and name), and the app reopens where it was:
 
 ```bash
 bacon
