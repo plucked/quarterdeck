@@ -12,6 +12,7 @@ use super::queue_row::{QueueRow, RepoGroup, StackGroup};
 use super::refresh_status::RefreshStatus;
 use super::repo_monogram::RepoMonogram;
 use crate::display_date::{relative_age, unix_now};
+use crate::fold_chevron::{FoldChevron, FoldState};
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::segmented_control::SegmentedControl;
@@ -401,11 +402,9 @@ fn render_repo_header(
     group: &RepoGroup,
     cx: &mut Context<ReviewQueue>,
 ) -> AnyElement {
-    let chevron = if group.is_collapsed { "▸" } else { "▾" };
     let repo = group.repo.clone();
     div()
         .id(("repo-header", row_index))
-        .group("repo-header")
         .flex()
         .items_center()
         .gap_2()
@@ -449,15 +448,10 @@ fn render_repo_header(
                 .text_color(theme::muted())
                 .child(group.pull_requests.to_string()),
         )
-        .child(
-            div()
-                .flex_none()
-                .w_3()
-                .text_xs()
-                .text_color(theme::subtle())
-                .group_hover("repo-header", |style| style.text_color(theme::text()))
-                .child(chevron),
-        )
+        .child(FoldChevron::new(
+            ("repo-fold", row_index),
+            FoldState::of(group.is_collapsed),
+        ))
         .into_any_element()
 }
 
@@ -472,7 +466,6 @@ fn render_stack_header(
     is_reviewed: bool,
     cx: &mut Context<ReviewQueue>,
 ) -> AnyElement {
-    let chevron = if group.is_collapsed { "▸" } else { "▾" };
     let open_key = group.key.clone();
     let toggle_key = group.key.clone();
     let is_all = u64::try_from(group.listed).is_ok_and(|listed| listed == group.size);
@@ -519,22 +512,10 @@ fn render_stack_header(
                 .child(render_meta(format!("{} layers · {listed}", group.size))),
         )
         .child(
-            div()
-                .id(("stack-chevron", row_index))
-                .flex_none()
-                .size_5()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_md()
-                .text_xs()
-                .text_color(theme::subtle())
-                .hover(|style| style.text_color(theme::text()))
+            FoldChevron::new(("stack-fold", row_index), FoldState::of(group.is_collapsed))
                 .on_click(cx.listener(move |queue, _, _, cx| {
-                    cx.stop_propagation();
                     queue.toggle_stack_group(&toggle_key, cx);
-                }))
-                .child(chevron),
+                })),
         )
         .into_any_element()
 }

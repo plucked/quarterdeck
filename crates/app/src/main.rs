@@ -17,6 +17,7 @@
 //! - `button.rs`: `Button`, a small text button.
 //! - `display_date.rs`: `short_date`, a GitHub timestamp as `21 Oct 2026`.
 //! - `display_size.rs`: `byte_size`, a byte count as `151.7 MB`.
+//! - `fold_chevron.rs`: `FoldChevron`, the button folding a group.
 //! - `checkbox.rs`: `Checkbox`, a drawn checkbox (checked, unchecked or mixed).
 //! - `panel_toggle.rs`: `PanelToggle`, the icon button showing or hiding a side panel.
 //! - `resize_handle.rs`: `ResizeHandle`, a divider dragged to resize the panel beside it.
@@ -35,6 +36,7 @@ mod diff_view;
 mod display_date;
 mod display_size;
 mod fetch_stack;
+mod fold_chevron;
 mod launch_app;
 mod main_window;
 mod markdown_view;
