@@ -184,8 +184,8 @@ impl ReviewQueue {
         let row = self.rows().get(index)?;
         let element = match row {
             QueueRow::RepoHeader(group) => render_repo_header(index, group, cx),
-            QueueRow::OthersFilter(repo) => return Some(self.render_others_filter(repo, cx)),
-            QueueRow::NothingShown(repo) => return Some(self.render_nothing_shown(repo, cx)),
+            QueueRow::OthersFilter(repo) => self.render_others_filter(repo, cx),
+            QueueRow::NothingShown(repo) => self.render_nothing_shown(repo, cx),
             QueueRow::PullRequest(list_index) => {
                 let pull_request = self.shown_list().get(*list_index)?;
                 render_pull_request_row(
@@ -251,11 +251,14 @@ impl ReviewQueue {
                 render_stack_header(index, group, self.tab(), is_reviewed, cx)
             }
         };
-        // Inset from the sidebar's edges; the row keeps the full width inside.
+        // Inset from the sidebar's edges; the row keeps the full width inside
+        // (`w_full`: the list's width bounds it, so wrapping content such as
+        // filter chips wraps instead of widening the row).
         // A repository after the first starts below a divider.
         let starts_later_group = index > 0 && matches!(row, QueueRow::RepoHeader(_));
         Some(
             div()
+                .w_full()
                 .px_2()
                 .pb_0p5()
                 .when(starts_later_group, |row| {

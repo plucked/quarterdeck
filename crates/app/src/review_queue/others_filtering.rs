@@ -29,9 +29,10 @@ pub fn passes(filter: &OthersFilter, pull_request: &PullRequest, context: &Filte
         && filter.authors.admits(pull_request.author.login.as_str())
 }
 
-/// The chips of one row for `pull_requests` (one repository's), most
-/// common first, then by name: how many have each value, and how many of
-/// those the rest of the filter lets through.
+/// The chips of one row for `pull_requests` (one repository's), those the
+/// rest of the filter lets through most first (so chips that would show
+/// nothing sink to the end), then the most common, then by name: how many
+/// have each value, and how many of those the rest of the filter lets through.
 pub fn chip_counts(
     filter: &OthersFilter,
     facet: OthersFacet,
@@ -61,7 +62,7 @@ pub fn chip_counts(
         }
     }
 
-    // Most common first, so the collapsed row shows the useful ones.
+    // Most matching first, so the collapsed row shows the useful ones.
     let mut counts: Vec<FacetCount<String>> = counts
         .into_iter()
         .map(|(value, (total, matching))| FacetCount {
@@ -72,8 +73,9 @@ pub fn chip_counts(
         .collect();
     counts.sort_by(|left, right| {
         right
-            .total
-            .cmp(&left.total)
+            .matching
+            .cmp(&left.matching)
+            .then_with(|| right.total.cmp(&left.total))
             .then_with(|| left.value.to_lowercase().cmp(&right.value.to_lowercase()))
     });
     counts
@@ -235,7 +237,7 @@ mod tests {
         assert_eq!(shown(&filter, &HashSet::new()), [1, 2, 4]);
     }
 
-    /// Chip counts: most common first, and what the other row lets through.
+    /// Chip counts: most matching first, and what the other row lets through.
     #[test]
     fn counts_chips_given_the_other_row() {
         let mut filter = OthersFilter::default();
@@ -249,6 +251,6 @@ mod tests {
             .iter()
             .map(|count| (count.value.as_str(), count.total, count.matching))
             .collect();
-        assert_eq!(summary, [("bug", 2, 1), ("deps", 1, 0), ("ui", 1, 1)]);
+        assert_eq!(summary, [("bug", 2, 1), ("ui", 1, 1), ("deps", 1, 0)]);
     }
 }

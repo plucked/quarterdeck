@@ -28,6 +28,7 @@ pub fn most_common_values(counts: &[FacetCount<String>]) -> Vec<&str> {
 pub fn render_chip_row(label: &'static str, chips: Vec<AnyElement>) -> Div {
     div()
         .flex()
+        .items_start()
         .gap_1()
         .child(
             div()
@@ -39,12 +40,15 @@ pub fn render_chip_row(label: &'static str, chips: Vec<AnyElement>) -> Div {
                 .text_color(theme::subtle())
                 .child(label.to_uppercase()),
         )
+        // Lines start at the top and keep their own height, so a chip never stretches.
         .child(
             div()
                 .flex_1()
                 .min_w_0()
                 .flex()
                 .flex_wrap()
+                .items_start()
+                .content_start()
                 .gap_1()
                 .children(chips),
         )

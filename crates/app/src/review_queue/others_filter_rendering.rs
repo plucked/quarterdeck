@@ -9,7 +9,7 @@ use super::others_tab::review_requested_ids;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::display_date::unix_now;
 use crate::facet_chips::{
-    COLLAPSED_CHIPS, ChipClick, most_common_values, render_chip, render_chip_row, render_more_chip,
+    COLLAPSED_CHIPS, ChipClick, render_chip, render_chip_row, render_more_chip,
 };
 use crate::segmented_control::SegmentedControl;
 use crate::settings_window::{SettingsCategory, open_settings_window_at};
@@ -49,8 +49,10 @@ impl ReviewQueue {
 
         div()
             .mx_2()
+            .mt_0p5()
             .mb_1()
             .p_2p5()
+            .min_w_0()
             .flex()
             .flex_col()
             .gap_2()
@@ -175,8 +177,13 @@ impl ReviewQueue {
         };
         let is_expanded = self.others_tab().is_chip_row_expanded(repo, facet);
 
-        // The most common, plus every chip that is set, so a set chip never hides behind "more".
-        let most_common = most_common_values(counts);
+        // The first ones (most matching first), plus every chip that is set,
+        // so a set chip never hides behind "more".
+        let most_common: Vec<&str> = counts
+            .iter()
+            .take(COLLAPSED_CHIPS)
+            .map(|count| count.value.as_str())
+            .collect();
         let shown: Vec<&FacetCount<String>> = counts
             .iter()
             .filter(|count| {
@@ -281,8 +288,7 @@ impl ReviewQueue {
             .filter(|pull_request| &pull_request.repo == repo)
             .count();
         let note = div()
-            .mx_2()
-            .px_2()
+            .px_4()
             .py_1p5()
             .flex()
             .items_center()
