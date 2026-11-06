@@ -21,7 +21,7 @@ query ReviewState($owner: String!, $name: String!, $number: Int!) {
           comments(first: 100) {
             nodes {
               id body createdAt viewerCanUpdate viewerCanDelete
-              author { login }
+              author { login avatarUrl }
               pullRequestReview { state }
             }
           }
@@ -118,6 +118,15 @@ struct Login {
     login: String,
 }
 
+/// A comment's author: the login and the avatar shown beside it.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CommentAuthor {
+    login: String,
+    #[serde(default)]
+    avatar_url: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RepositoryNode {
@@ -175,7 +184,7 @@ struct CommentNode {
     created_at: String,
     viewer_can_update: bool,
     viewer_can_delete: bool,
-    author: Option<Login>,
+    author: Option<CommentAuthor>,
     pull_request_review: Option<ReviewNode>,
 }
 
@@ -231,19 +240,23 @@ impl ThreadNode {
                 .comments
                 .nodes
                 .into_iter()
-                .map(|comment| ThreadComment {
-                    id: comment.id,
-                    author_login: comment
+                .map(|comment| {
+                    let (author_login, author_avatar_url) = comment
                         .author
-                        .map(|author| author.login)
-                        .unwrap_or_default(),
-                    body: comment.body,
-                    created_at: comment.created_at,
-                    is_pending: comment
-                        .pull_request_review
-                        .is_some_and(|review| review.state == "PENDING"),
-                    can_update: comment.viewer_can_update,
-                    can_delete: comment.viewer_can_delete,
+                        .map(|author| (author.login, author.avatar_url))
+                        .unwrap_or_default();
+                    ThreadComment {
+                        id: comment.id,
+                        author_login,
+                        author_avatar_url,
+                        body: comment.body,
+                        created_at: comment.created_at,
+                        is_pending: comment
+                            .pull_request_review
+                            .is_some_and(|review| review.state == "PENDING"),
+                        can_update: comment.viewer_can_update,
+                        can_delete: comment.viewer_can_delete,
+                    }
                 })
                 .collect(),
         }

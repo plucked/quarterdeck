@@ -11,6 +11,7 @@ use super::ReviewQueue;
 use super::others_filter_rendering::{render_filter_button, render_others_empty_state};
 use super::queue_row::{QueueRow, RepoGroup, StackGroup};
 use super::refresh_status::RefreshStatus;
+use crate::avatar_images::Avatar;
 use crate::display_date::{relative_age, unix_now};
 use crate::fold_chevron::{FoldChevron, FoldState};
 use crate::repo_monogram::RepoMonogram;
@@ -30,6 +31,8 @@ const LAYER_GUTTER_WIDTH: f32 = 28.;
 const STATE_RING_SIZE: f32 = 10.;
 /// The stack glyph beside a stack's header.
 const STACK_GLYPH_SIZE: f32 = 16.;
+/// The author's avatar in a pull request row's second line.
+const ROW_AVATAR_SIZE: f32 = 14.;
 /// Height of the rail mark beside a layer's position.
 const LAYER_RAIL_HEIGHT: f32 = 16.;
 
@@ -348,6 +351,7 @@ fn row_frame(id: impl Into<gpui::ElementId>, is_selected: bool) -> gpui::Statefu
 /// A row's second line: small and quiet.
 fn render_meta(text: impl Into<SharedString>) -> impl IntoElement {
     div()
+        .min_w_0()
         .text_xs()
         .text_color(theme::subtle())
         .truncate()
@@ -398,9 +402,17 @@ fn render_pull_request_row(
                         .flex()
                         .items_center()
                         .gap_1p5()
+                        .child(
+                            div()
+                                .flex_none()
+                                .child(render_meta(format!("#{} ·", pull_request.number))),
+                        )
+                        .child(Avatar::new(
+                            pull_request.author.avatar_url.clone(),
+                            px(ROW_AVATAR_SIZE),
+                        ))
                         .child(render_meta(format!(
-                            "#{} · {} · {}",
-                            pull_request.number,
+                            "{} · {}",
                             pull_request.author.login,
                             relative_age(&pull_request.updated_at, now)
                         )))

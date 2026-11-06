@@ -24,7 +24,7 @@
 | `download_progress` | `DownloadProgress` (bytes received, `Content-Length`) |
 | `graphql_response` | GraphQL envelope (data or errors; errors come with status 200) (crate-private) |
 | `line_side` / `review_event` | `LineSide` (Old/New = LEFT/RIGHT), `ReviewEvent` (Comment, Approve, RequestChanges) |
-| `review_thread` / `pull_request_review_state` | `ReviewThread` (+ `ThreadComment`, `ThreadPermissions`), `PullRequestReviewState` (node id, viewer, pending review, threads) |
+| `review_thread` / `pull_request_review_state` | `ReviewThread` (+ `ThreadComment` with the author's login and `avatarUrl`, `ThreadPermissions`), `PullRequestReviewState` (node id, viewer, pending review, threads) |
 | `review_submission` | `ReviewSubmission` (+ `NewReviewThread`, `NewThreadReply`, `SubmittedPart`) |
 | `merge_method` / `merge_options` / `merge_outcome` / `merge_queries` / `pull_request_requests` | `MergeMethod`, `MergeOptions` (state, `MergeReadiness`, allowed methods, `MergePermissions`, `MergeQueueState`, branches), `MergeOutcome`; `GitHubClient::merge_options`, `start_merge`, `merge_outcome`, `close_pull_request`, `delete_branch` |
 | `review_queries` / `review_requests` | the review GraphQL texts and answers; `GitHubClient::review_state`, `submit_review`, `discard_pending_review`, `update_review_comment`, `delete_review_comment`, `set_thread_resolved` |

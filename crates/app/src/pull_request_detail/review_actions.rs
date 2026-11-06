@@ -17,6 +17,7 @@ use super::review_comments::{CommentCard, ReviewComments};
 use super::review_status::ReviewStatus;
 use super::review_target::ReviewTarget;
 use super::side_panel_tab::SidePanelTab;
+use crate::avatar_images::AvatarImages;
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::ui_state::{ReviewChange, UiStateRecorder};
 
@@ -99,8 +100,16 @@ impl PullRequestDetail {
                     comments.is_loading_github = false;
                     match state {
                         Ok(state) => {
+                            // The comment cards show their authors' avatars.
+                            let avatars: Vec<String> = state
+                                .threads
+                                .iter()
+                                .flat_map(|thread| &thread.comments)
+                                .map(|comment| comment.author_avatar_url.clone())
+                                .collect();
                             comments.github = Some(state);
                             comments.github_error = None;
+                            AvatarImages::load(cx, avatars);
                         }
                         Err(error) => comments.github_error = Some(format!("{error:#}").into()),
                     }

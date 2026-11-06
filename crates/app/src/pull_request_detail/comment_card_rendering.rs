@@ -5,12 +5,16 @@ use qd_github::{LineSide, ReviewThread, ThreadComment};
 use super::comment_editor::EditorTarget;
 use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::{CommentCard, note_key};
+use crate::avatar_images::Avatar;
 use crate::button::Button;
 use crate::diff_view::frame_file_row;
 use crate::display_date::short_date;
 use crate::markdown_view::MarkdownView;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
+
+/// A comment author's avatar in the comment's header line.
+const COMMENT_AVATAR_SIZE: f32 = 18.;
 
 impl PullRequestDetail {
     /// Card `card` of the diff, inside its file's frame: a GitHub
@@ -221,6 +225,12 @@ impl PullRequestDetail {
             .items_center()
             .gap_2()
             .text_xs()
+            .when(!comment.author_avatar_url.is_empty(), |header| {
+                header.child(Avatar::new(
+                    comment.author_avatar_url.clone(),
+                    px(COMMENT_AVATAR_SIZE),
+                ))
+            })
             .child(
                 div()
                     .font_weight(FontWeight::SEMIBOLD)

@@ -35,6 +35,8 @@ pub struct ThreadComment {
     pub id: String,
     /// Empty when the account is gone.
     pub author_login: String,
+    /// The author's avatar; empty when the account is gone.
+    pub author_avatar_url: String,
     /// Markdown.
     pub body: String,
     pub created_at: String,

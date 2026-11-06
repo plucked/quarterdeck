@@ -47,18 +47,15 @@ impl ReviewQueue {
         cx.notify();
     }
 
-    /// Starts loading the avatars of others' pull requests' authors (the
-    /// author chips show them); each is downloaded once per session.
+    /// Starts loading the avatars of the listed pull requests' authors (the
+    /// rows and the author chips show them); each is downloaded once per session.
     pub(super) fn request_author_avatars(&self, cx: &mut Context<Self>) {
         let urls: Vec<String> = self
             .lists()
-            .others
             .iter()
             .map(|pull_request| pull_request.author.avatar_url.clone())
             .collect();
-        AvatarImages::global(cx).update(cx, |images, cx| {
-            images.request(urls.iter().map(String::as_str), cx);
-        });
+        AvatarImages::load(cx, urls);
     }
 
     /// Works out which of others' pull requests the Others tab shows.

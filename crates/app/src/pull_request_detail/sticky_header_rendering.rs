@@ -2,6 +2,7 @@ use gpui::{AnyElement, Context, FontWeight, IntoElement, Styled, div, prelude::*
 use qd_github::PullRequest;
 
 use super::pull_request_detail::PullRequestDetail;
+use crate::avatar_images::Avatar;
 use crate::button::Button;
 use crate::display_date::short_date;
 use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
@@ -12,6 +13,9 @@ use crate::theme;
 /// The tallest the expanded description gets before it scrolls on its own,
 /// so the diff always keeps most of the pane.
 const DESCRIPTION_MAX_HEIGHT: f32 = 320.;
+
+/// The author's avatar in the header's meta line.
+const HEADER_AVATAR_SIZE: f32 = 16.;
 
 impl PullRequestDetail {
     /// The header that stays above the diff: chevron, title, links, what is
@@ -121,10 +125,17 @@ impl PullRequestDetail {
                         .child("Draft"),
                 )
             })
-            .child(div().min_w_0().truncate().child(format!(
-                "{} #{}  ·  {}  ·  updated {}",
+            .child(div().flex_none().child(format!(
+                "{} #{}  ·",
                 pull_request.repo.full_name(),
                 pull_request.number,
+            )))
+            .child(Avatar::new(
+                pull_request.author.avatar_url.clone(),
+                px(HEADER_AVATAR_SIZE),
+            ))
+            .child(div().min_w_0().truncate().child(format!(
+                "{}  ·  updated {}",
                 pull_request.author.login,
                 short_date(&pull_request.updated_at),
             )))

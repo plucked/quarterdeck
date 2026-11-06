@@ -43,6 +43,7 @@ use super::side_panel_tab::SidePanelTab;
 use super::viewed_toggle::ViewedToggle;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
+use crate::avatar_images::AvatarImages;
 use crate::diff_view::{CodeCells, CodeSegments, DiffPosition, SideSelection};
 use crate::facet_chips::ChipClick;
 use crate::fetch_stack::{cached_stack, refresh_stack};
@@ -179,8 +180,9 @@ pub struct PullRequestDetail {
     review: ReviewPane,
     /// The merge or close panel under the header, while open.
     action_panel: Option<ActionPanel>,
-    /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
-    _settings_subscription: Subscription,
+    /// Keep the observers of [`AppSettings`] and the avatars (header and
+    /// comment authors) registered for the view's lifetime.
+    _subscriptions: [Subscription; 2],
 }
 
 impl EventEmitter<DetailEvent> for PullRequestDetail {}
@@ -251,7 +253,10 @@ impl PullRequestDetail {
                 .saved_panel_widths()
                 .unwrap_or_default()
                 .side_panel,
-            _settings_subscription: settings_subscription,
+            _subscriptions: [
+                settings_subscription,
+                cx.observe(&AvatarImages::global(cx), |_, _, cx| cx.notify()),
+            ],
         };
         detail.rebuild_rows(ScrollAnchor::Top);
         detail
@@ -593,6 +598,8 @@ impl PullRequestDetail {
             return;
         };
         let is_other_stack = !is_same_stack(self.stack.as_ref(), &pull_request);
+        // The header shows the author's avatar.
+        AvatarImages::load(cx, [pull_request.author.avatar_url.clone()]);
 
         // Decide by what was shown before.
         let shown = self.pull_request.as_ref();

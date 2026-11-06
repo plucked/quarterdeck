@@ -44,6 +44,15 @@ impl AvatarImages {
         cx.global::<GlobalAvatarImages>().0.clone()
     }
 
+    /// Starts loading `urls` from anywhere (a view's event handler, a
+    /// task's result): each is downloaded once per session.
+    pub fn load(cx: &mut App, urls: impl IntoIterator<Item = String>) {
+        let urls: Vec<String> = urls.into_iter().collect();
+        Self::global(cx).update(cx, |images, cx| {
+            images.request(urls.iter().map(String::as_str), cx);
+        });
+    }
+
     /// The avatar at `url`, once loaded.
     pub fn image(&self, url: &str) -> Option<Arc<RenderImage>> {
         match self.avatars.get(url)? {
