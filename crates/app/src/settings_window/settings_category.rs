@@ -8,15 +8,18 @@ pub enum SettingsCategory {
     FileDiff,
     /// The GitHub account, the local cache of GitHub data and API usage.
     GitHub,
+    /// The repositories the Others tab lists.
+    Repositories,
     /// The running version and updates.
     Updates,
 }
 
 impl SettingsCategory {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::Appearance,
         Self::FileDiff,
         Self::GitHub,
+        Self::Repositories,
         Self::Updates,
     ];
 
@@ -26,6 +29,7 @@ impl SettingsCategory {
             Self::Appearance => "Appearance",
             Self::FileDiff => "File Diff",
             Self::GitHub => "GitHub",
+            Self::Repositories => "Repositories",
             Self::Updates => "Updates",
         }
     }

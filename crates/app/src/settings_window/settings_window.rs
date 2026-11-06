@@ -4,6 +4,7 @@ use gpui::{
 };
 use qd_cache::{CacheUsage, ColorTheme};
 
+use super::add_repository_status::AddRepositoryStatus;
 use super::file_diff_page::render_file_diff_page;
 use super::github_page::render_github_page;
 use super::settings_category::SettingsCategory;
@@ -39,9 +40,18 @@ pub struct SettingsWindow {
     pub(super) sign_in_status: SignInStatus,
     /// The token check or sign-out in flight.
     pub(super) sign_in_task: Option<Task<()>>,
-    /// Keep the observers of [`AppSettings`], the updater and the token field
-    /// registered for the view's lifetime.
-    _subscriptions: [Subscription; 3],
+    /// Where a repository to watch is typed.
+    pub(super) repository_input: Entity<TextArea>,
+    pub(super) add_repository_status: AddRepositoryStatus,
+    /// The check of a typed repository in flight.
+    pub(super) add_repository_task: Option<Task<()>>,
+    /// The repositories of the queue's own lists, offered as quick picks.
+    pub(super) queue_repositories: Vec<qd_github::RepoRef>,
+    /// The read of `queue_repositories` in flight.
+    pub(super) queue_repositories_task: Option<Task<()>>,
+    /// Keep the observers of [`AppSettings`], the updater and the text
+    /// fields registered for the view's lifetime.
+    _subscriptions: [Subscription; 4],
 }
 
 impl SettingsWindow {
@@ -52,6 +62,7 @@ impl SettingsWindow {
 
         // cmd-enter in the token field signs in, like the button.
         let token_input = cx.new(|cx| TextArea::new("ghp_…", cx));
+        let repository_input = cx.new(|cx| TextArea::new("owner/name or a GitHub link", cx));
         let subscriptions = [
             cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
             cx.observe(&AppUpdater::global(cx), |_, _, cx| cx.notify()),
@@ -60,6 +71,13 @@ impl SettingsWindow {
                     settings.sign_in(cx);
                 }
             }),
+            // The field is one line: return (or cmd-enter) adds the repository.
+            cx.subscribe(
+                &repository_input,
+                |settings, input, event: &TextAreaEvent, cx| {
+                    settings.on_repository_input_event(&input, *event, cx);
+                },
+            ),
         ];
         let mut settings = Self {
             focus,
@@ -71,10 +89,34 @@ impl SettingsWindow {
             token_input,
             sign_in_status: SignInStatus::default(),
             sign_in_task: None,
+            repository_input,
+            add_repository_status: AddRepositoryStatus::default(),
+            add_repository_task: None,
+            queue_repositories: Vec::new(),
+            queue_repositories_task: None,
             _subscriptions: subscriptions,
         };
         settings.read_cache_usage(cx);
+        settings.read_queue_repositories(cx);
         settings
+    }
+
+    /// Adds the typed repository on return or cmd-enter: a newline typed
+    /// into the one-line field is taken out and counts as the submit.
+    fn on_repository_input_event(
+        &mut self,
+        input: &Entity<TextArea>,
+        event: TextAreaEvent,
+        cx: &mut Context<Self>,
+    ) {
+        let text = input.read(cx).text().to_owned();
+        let has_newline = text.contains('\n');
+        if has_newline {
+            input.update(cx, |input, cx| input.set_text(text.replace('\n', ""), cx));
+        }
+        if event == TextAreaEvent::Submit || has_newline {
+            self.add_typed_repository(cx);
+        }
     }
 
     /// Reads what the cache holds off the main thread (it sums every cached
@@ -206,6 +248,7 @@ impl Render for SettingsWindow {
                 )
                 .into_any_element()
             }
+            SettingsCategory::Repositories => self.render_repositories_page(cx),
             SettingsCategory::Updates => render_updates_page(cx).into_any_element(),
         };
         div()

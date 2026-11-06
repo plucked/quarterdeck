@@ -20,6 +20,8 @@
 //! - `button.rs`: `Button`, a small text button.
 //! - `display_date.rs`: `short_date`, a GitHub timestamp as `21 Oct 2026`.
 //! - `display_size.rs`: `byte_size`, a byte count as `151.7 MB`.
+//! - `facet_chips/`: filter chips (pick with a click, hide with ⌥-click), shared by the file tree and the Others tab.
+//! - `repo_monogram.rs`: `RepoMonogram`, a repository's colored letter (sidebar, settings).
 //! - `fold_chevron.rs`: `FoldChevron`, the button folding a group.
 //! - `checkbox.rs`: `Checkbox`, a drawn checkbox (checked, unchecked or mixed).
 //! - `panel_toggle.rs`: `PanelToggle`, the icon button showing or hiding a side panel.
@@ -40,6 +42,7 @@ mod checkbox;
 mod diff_view;
 mod display_date;
 mod display_size;
+mod facet_chips;
 mod fetch_stack;
 mod fold_chevron;
 mod launch_app;
@@ -47,6 +50,7 @@ mod main_window;
 mod markdown_view;
 mod panel_toggle;
 mod pull_request_detail;
+mod repo_monogram;
 mod resize_handle;
 mod review_queue;
 mod scrollbar;

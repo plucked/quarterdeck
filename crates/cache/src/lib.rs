@@ -41,6 +41,10 @@
 //! - `viewed_files_storage.rs`: reads and writes of viewed marks.
 //! - `review_scope.rs`: `ReviewScope`, what viewed marks and review notes belong to: a pull request or a combined range of stack layers.
 //! - `queue_tab.rs`: `QueueTab`, which list the queue shows.
+//! - `watched_repositories_storage.rs`: reads and writes of the repositories the Others tab lists.
+//! - `others_filter.rs`: `OthersFilter` and `RepositoryOthersFilter`, how the Others tab narrows a repository's pull requests.
+//! - `updated_within.rs`: `UpdatedWithin`, how recently an Others pull request was updated.
+//! - `others_filter_storage.rs`: reads and writes of the Others filters.
 //! - `folded_groups.rs`: `FoldedGroups` and `FoldedStack`, the sidebar groups the user folded.
 //! - `folded_groups_storage.rs`: reads and writes of the folded groups.
 //! - `stack_review_mode.rs`: `StackReviewMode`, one layer or combined layers.
@@ -83,6 +87,8 @@ mod line_wrapping;
 mod note_anchor;
 mod note_destination;
 mod note_id;
+mod others_filter;
+mod others_filter_storage;
 mod panel_visibility;
 mod panel_widths;
 mod panel_widths_storage;
@@ -102,8 +108,10 @@ mod stack_review_mode;
 mod stack_storage;
 mod ui_state_store;
 mod unix_now;
+mod updated_within;
 mod viewed_file;
 mod viewed_files_storage;
+mod watched_repositories_storage;
 mod window_mode;
 mod window_placement;
 
@@ -124,6 +132,7 @@ pub use line_wrapping::LineWrapping;
 pub use note_anchor::NoteAnchor;
 pub use note_destination::NoteDestination;
 pub use note_id::NoteId;
+pub use others_filter::{OthersFilter, RepositoryOthersFilter};
 pub use panel_visibility::PanelVisibility;
 pub use panel_widths::PanelWidths;
 pub use patch_fingerprint::PatchFingerprint;
@@ -136,6 +145,7 @@ pub use review_scope::ReviewScope;
 pub use review_summary::ReviewSummary;
 pub use stack_review_mode::StackReviewMode;
 pub use ui_state_store::UiStateStore;
+pub use updated_within::UpdatedWithin;
 pub use viewed_file::ViewedFile;
 pub use window_mode::WindowMode;
 pub use window_placement::WindowPlacement;

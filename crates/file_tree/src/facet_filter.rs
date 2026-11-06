@@ -3,9 +3,10 @@ use std::collections::BTreeSet;
 
 use crate::FacetChoice;
 
-/// One row of filter chips over values every file has exactly one of
-/// (its kind, its type). Nothing picked admits every value; picked values
-/// admit only themselves; hidden values never pass.
+/// One row of filter chips: nothing picked admits every value; picked
+/// values admit only themselves; hidden values never pass. Over values an
+/// item has exactly one of (a file's kind or type) use [`Self::admits`];
+/// over values it has any number of (a pull request's labels), [`Self::admits_any`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FacetFilter<T: Ord> {
     pub only: BTreeSet<T>,
@@ -30,6 +31,21 @@ impl<T: Ord + Clone> FacetFilter<T> {
         Q: Ord + ?Sized,
     {
         !self.hidden.contains(value) && (self.only.is_empty() || self.only.contains(value))
+    }
+
+    /// Whether an item with all of `values` passes: none of them is hidden,
+    /// and one of them is picked when anything is (an item without values
+    /// passes only while nothing is picked).
+    pub fn admits_any<'value>(&self, values: impl IntoIterator<Item = &'value T> + Clone) -> bool
+    where
+        T: 'value,
+    {
+        let has_hidden = values
+            .clone()
+            .into_iter()
+            .any(|value| self.hidden.contains(value));
+        let has_picked = values.into_iter().any(|value| self.only.contains(value));
+        !has_hidden && (self.only.is_empty() || has_picked)
     }
 
     pub fn choice_of(&self, value: &T) -> FacetChoice {
@@ -84,5 +100,18 @@ mod tests {
         assert_eq!(filter.choice_of(&1), FacetChoice::Only);
         filter.toggle_only(&1);
         assert!(!filter.is_active());
+    }
+
+    /// Over several values: any picked one admits, any hidden one refuses.
+    #[test]
+    fn admits_any_of_several_values() {
+        let mut filter: FacetFilter<u8> = FacetFilter::default();
+        assert!(filter.admits_any(&[]) && filter.admits_any(&[1, 2]));
+
+        filter.toggle_only(&1);
+        assert!(filter.admits_any(&[1, 2]) && !filter.admits_any(&[2]) && !filter.admits_any(&[]));
+
+        filter.toggle_hidden(&2);
+        assert!(!filter.admits_any(&[1, 2]) && filter.admits_any(&[1, 3]));
     }
 }

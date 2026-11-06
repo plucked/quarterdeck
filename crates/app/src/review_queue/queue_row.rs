@@ -20,6 +20,11 @@ pub enum QueueRow {
     /// else's, or one not asking for the viewer's review), by its index in
     /// the stack's layers.
     OtherLayer { key: StackKey, layer: usize },
+    /// The Others tab's filter of the repository above, open under its header.
+    OthersFilter(RepoRef),
+    /// Under a repository of the Others tab that shows no pull request: it
+    /// has none open, or its filter hides them all.
+    NothingShown(RepoRef),
 }
 
 /// What a repository's header shows.
@@ -29,6 +34,24 @@ pub struct RepoGroup {
     /// Pull requests of it in the shown list.
     pub pull_requests: usize,
     pub is_collapsed: bool,
+    /// Its filter, in the Others tab; `None` in the other tabs.
+    pub others: Option<OthersGroup>,
+}
+
+/// A repository of the Others tab: how many of its open pull requests
+/// there are before the filter, and the filter's state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OthersGroup {
+    pub total: usize,
+    pub is_filter_active: bool,
+    pub is_filter_open: bool,
+}
+
+/// A repository the Others tab shows, in order, with its [`OthersGroup`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OthersRepository {
+    pub repo: RepoRef,
+    pub group: OthersGroup,
 }
 
 /// What a stack's header shows.
@@ -78,9 +101,52 @@ impl QueueRow {
                 repo: repo.clone(),
                 pull_requests: indexes.len(),
                 is_collapsed,
+                others: None,
             }));
             if !is_collapsed {
                 rows.extend(repository_rows(list, &indexes, &collapsed.stacks, stacks));
+            }
+        }
+        rows
+    }
+
+    /// The rows of the Others tab: every repository of `repositories`, in
+    /// that order, even when it shows nothing (so its filter stays within
+    /// reach): its header, its filter when open, then its pull requests in
+    /// `shown` (already filtered) grouped like [`Self::build_all`], or a
+    /// note that none shows. A collapsed repository shows its header alone.
+    pub fn build_others(
+        shown: &[PullRequest],
+        repositories: &[OthersRepository],
+        collapsed: &CollapsedGroups,
+        stacks: &HashMap<StackKey, PullRequestStack>,
+    ) -> Vec<Self> {
+        let mut rows = Vec::new();
+        for repository in repositories {
+            let repo = &repository.repo;
+            let indexes: Vec<usize> = shown
+                .iter()
+                .enumerate()
+                .filter(|(_, pull_request)| &pull_request.repo == repo)
+                .map(|(index, _)| index)
+                .collect();
+            let is_collapsed = collapsed.repositories.contains(repo);
+            rows.push(Self::RepoHeader(RepoGroup {
+                repo: repo.clone(),
+                pull_requests: indexes.len(),
+                is_collapsed,
+                others: Some(repository.group.clone()),
+            }));
+            if is_collapsed {
+                continue;
+            }
+            if repository.group.is_filter_open {
+                rows.push(Self::OthersFilter(repo.clone()));
+            }
+            if indexes.is_empty() {
+                rows.push(Self::NothingShown(repo.clone()));
+            } else {
+                rows.extend(repository_rows(shown, &indexes, &collapsed.stacks, stacks));
             }
         }
         rows
@@ -90,7 +156,11 @@ impl QueueRow {
     pub fn pull_request_index(&self) -> Option<usize> {
         match self {
             Self::PullRequest(index) | Self::StackLayer(index) => Some(*index),
-            Self::RepoHeader(_) | Self::StackHeader(_) | Self::OtherLayer { .. } => None,
+            Self::RepoHeader(_)
+            | Self::StackHeader(_)
+            | Self::OtherLayer { .. }
+            | Self::OthersFilter(_)
+            | Self::NothingShown(_) => None,
         }
     }
 }
@@ -225,6 +295,7 @@ mod tests {
             draft: false,
             created_at: String::new(),
             updated_at: String::new(),
+            labels: Vec::new(),
             stack: stack.map(|(stack_number, position)| StackMembership {
                 number: stack_number,
                 position,
@@ -293,6 +364,7 @@ mod tests {
                     .clone(),
                 pull_requests: count,
                 is_collapsed: false,
+                others: None,
             })
         };
         assert_eq!(
@@ -330,6 +402,43 @@ mod tests {
             base_sha: String::new(),
             author_login: String::new(),
         }
+    }
+
+    /// The Others tab lists every repository, an empty one with a note, and
+    /// an open filter right under its header.
+    #[test]
+    fn others_rows_keep_empty_repositories() {
+        let shown = [in_repo("web", 1, None)];
+        let repository = |name: &str, is_filter_open: bool| OthersRepository {
+            repo: RepoRef {
+                owner: "a".into(),
+                name: name.into(),
+            },
+            group: OthersGroup {
+                total: 3,
+                is_filter_active: true,
+                is_filter_open,
+            },
+        };
+        let repositories = [repository("web", true), repository("api", false)];
+        let rows = QueueRow::build_others(
+            &shown,
+            &repositories,
+            &CollapsedGroups::default(),
+            &HashMap::new(),
+        );
+        assert_eq!(rows.len(), 5);
+        assert!(matches!(&rows[0], QueueRow::RepoHeader(group) if group.pull_requests == 1));
+        assert_eq!(
+            rows[1],
+            QueueRow::OthersFilter(repositories[0].repo.clone())
+        );
+        assert_eq!(rows[2], QueueRow::PullRequest(0));
+        assert!(matches!(&rows[3], QueueRow::RepoHeader(group) if group.pull_requests == 0));
+        assert_eq!(
+            rows[4],
+            QueueRow::NothingShown(repositories[1].repo.clone())
+        );
     }
 
     /// With the stack known, every layer shows: listed ones by list index, others by stack place.

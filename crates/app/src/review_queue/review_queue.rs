@@ -12,6 +12,7 @@ use qd_github::{GitHubClient, PullRequest, PullRequestStack, RepoRef, StackMembe
 
 use super::activation_refresh::ActivationRefresh;
 use super::collapsed_groups::CollapsedGroups;
+use super::others_tab::OthersTab;
 use super::queue_lists::QueueLists;
 use super::queue_row::QueueRow;
 use super::refresh_schedule::RefreshSchedule;
@@ -23,7 +24,8 @@ use super::selection_restore::SelectionRestore;
 use super::stack_key::StackKey;
 use crate::app_commands::{
     MarkViewedAndNext, NextFile, NextLayer, PreviousFile, PreviousLayer, REVIEW_QUEUE_CONTEXT,
-    Refresh, ShowAuthored, ShowReviewRequested, ToggleFileTree, ToggleSidebar, ToggleStackReview,
+    Refresh, ShowAuthored, ShowOthers, ShowReviewRequested, ToggleFileTree, ToggleSidebar,
+    ToggleStackReview,
 };
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
@@ -43,11 +45,22 @@ struct PendingRestore {
     detail_scroll: DetailScrollPosition,
 }
 
-/// Both lists as fetched by a refresh, with their stacks filled in.
+/// The lists as fetched by a refresh, with their stacks filled in.
 struct RefreshedLists {
     lists: QueueLists,
     /// Why the stacks could not be read, when they could not (the lists keep the last known ones).
     stack_error: Option<String>,
+    /// Why others' pull requests could not be read, when they could not
+    /// (the Others list keeps the last known ones).
+    others_error: Option<String>,
+}
+
+/// What a refresh starts from besides the client: the watched repositories
+/// and what is known already, kept when part of the refresh fails.
+struct RefreshInput {
+    watched: Vec<RepoRef>,
+    known_memberships: HashMap<(RepoRef, u64), StackMembership>,
+    known_others: Vec<PullRequest>,
 }
 
 /// A stack layer being fetched because it is in no list.
@@ -103,8 +116,10 @@ pub struct ReviewQueue {
     stacks: HashMap<StackKey, PullRequestStack>,
     /// The check of those stacks with GitHub; replacing it cancels the previous one.
     stacks_task: Option<Task<()>>,
-    /// Keep the window activation, detail and updater observers registered.
-    _subscriptions: [Subscription; 3],
+    /// The Others tab: watched repositories, their filters, what passes.
+    others_tab: OthersTab,
+    /// Keep the window activation, detail, updater and settings observers registered.
+    _subscriptions: [Subscription; 4],
 }
 
 impl ReviewQueue {
@@ -186,13 +201,20 @@ impl ReviewQueue {
             sidebar_width,
             stacks,
             stacks_task: None,
+            others_tab: OthersTab::new(
+                AppSettings::watched_repositories(cx).to_vec(),
+                cx.global::<UiStateRecorder>().saved_others_filters(),
+            ),
             _subscriptions: [
                 activation_subscription,
                 detail_subscription,
                 // The top bar offers the restart once an update is ready.
                 cx.observe(&AppUpdater::global(cx), |_, _, cx| cx.notify()),
+                // A change of the watched repositories refetches the Others tab.
+                cx.observe_global::<AppSettings>(Self::on_settings_changed),
             ],
         };
+        queue.update_others_shown();
         queue.rebuild_rows();
         queue.restore_selection(RestorePhase::CachedQueue, cx);
         queue.refresh(cx);
@@ -238,9 +260,30 @@ impl ReviewQueue {
         &self.lists
     }
 
-    /// The pull requests of the shown tab.
+    /// The pull requests of the shown tab: in the Others tab, those its
+    /// filters let through.
     pub(super) fn shown_list(&self) -> &[PullRequest] {
-        self.lists.get(self.tab)
+        match self.tab {
+            QueueTab::Authored | QueueTab::ReviewRequested => self.lists.get(self.tab),
+            QueueTab::Others => self.others_tab.shown(),
+        }
+    }
+
+    pub(super) fn others_tab(&self) -> &OthersTab {
+        &self.others_tab
+    }
+
+    pub(super) fn others_tab_mut(&mut self) -> &mut OthersTab {
+        &mut self.others_tab
+    }
+
+    pub(super) fn lists_mut(&mut self) -> &mut QueueLists {
+        &mut self.lists
+    }
+
+    /// Whether `repo`'s group is folded in the sidebar.
+    pub(super) fn is_repository_collapsed(&self, repo: &RepoRef) -> bool {
+        self.collapsed.repositories.contains(repo)
     }
 
     pub(super) fn rows(&self) -> &[QueueRow] {
@@ -277,9 +320,19 @@ impl ReviewQueue {
 
     /// Rebuilds the sidebar rows of the shown tab, keeping the list's
     /// scroll position (a list reset alone would jump to the top).
-    fn rebuild_rows(&mut self) {
+    pub(super) fn rebuild_rows(&mut self) {
         let scroll_top = self.queue_list.logical_scroll_top();
-        self.rows = QueueRow::build_all(self.lists.get(self.tab), &self.collapsed, &self.stacks);
+        self.rows = match self.tab {
+            QueueTab::Authored | QueueTab::ReviewRequested => {
+                QueueRow::build_all(self.lists.get(self.tab), &self.collapsed, &self.stacks)
+            }
+            QueueTab::Others => QueueRow::build_others(
+                self.others_tab.shown(),
+                &self.others_tab.repositories(&self.lists),
+                &self.collapsed,
+                &self.stacks,
+            ),
+        };
         self.queue_list.reset(self.rows.len());
         self.queue_list.scroll_to(ListOffset {
             item_ix: scroll_top.item_ix.min(self.rows.len().saturating_sub(1)),
@@ -465,7 +518,7 @@ impl ReviewQueue {
         let Some(selected_id) = self.selected.as_ref().map(|selected| selected.id) else {
             return;
         };
-        let list = self.lists.get(self.tab);
+        let list = self.shown_list();
         let row = self.rows.iter().position(|row| {
             row.pull_request_index().is_some_and(|index| {
                 list.get(index)
@@ -495,7 +548,11 @@ impl ReviewQueue {
         };
         let cache = self.services.cache.clone();
         let ttl = AppSettings::cache_ttl(cx).duration();
-        let known_memberships = known_memberships(&self.lists);
+        let input = RefreshInput {
+            watched: self.others_tab.watched().to_vec(),
+            known_memberships: known_memberships(&self.lists),
+            known_others: self.lists.others.clone(),
+        };
 
         self.refresh_status = RefreshStatus::Refreshing;
         cx.notify();
@@ -504,13 +561,14 @@ impl ReviewQueue {
             let fetched = cx
                 .background_executor()
                 .spawn(async move {
-                    let refreshed = fetch_lists(&client, known_memberships)?;
+                    let refreshed = fetch_lists(&client, input)?;
                     let mut cache = cache.lock();
                     cache.replace_list(PullRequestListKey::AUTHORED, &refreshed.lists.authored)?;
                     cache.replace_list(
                         PullRequestListKey::REVIEW_REQUESTED,
                         &refreshed.lists.review_requested,
                     )?;
+                    cache.replace_list(PullRequestListKey::OTHERS, &refreshed.lists.others)?;
 
                     // With the lists current, drop what has not been used within the TTL.
                     cache.delete_expired(ttl)?;
@@ -526,6 +584,7 @@ impl ReviewQueue {
                             if let Some(error) = &refreshed.stack_error {
                                 eprintln!("stacks: keeping the last known ones: {error}");
                             }
+                            queue.others_tab.set_error(refreshed.others_error);
                             queue.replace_lists(refreshed.lists, cx);
                         }
                         Err(error) => {
@@ -584,6 +643,7 @@ impl ReviewQueue {
         );
         self.lists = lists;
         self.refresh_status = RefreshStatus::Idle;
+        self.update_others_shown();
         self.rebuild_rows();
 
         // The detail pane reloads an updated pull request and keeps its scroll.
@@ -773,6 +833,11 @@ impl ReviewQueue {
         self.show_tab(QueueTab::ReviewRequested, cx);
     }
 
+    /// Handles the `ShowOthers` action (cmd-3): shows others' pull requests.
+    fn on_show_others(&mut self, _: &ShowOthers, _: &mut Window, cx: &mut Context<Self>) {
+        self.show_tab(QueueTab::Others, cx);
+    }
+
     /// Handles the `NextFile` action (`]`): scrolls the detail to the next shown file.
     fn on_next_file(&mut self, _: &NextFile, _: &mut Window, cx: &mut Context<Self>) {
         self.detail.update(cx, PullRequestDetail::reveal_next_file);
@@ -837,6 +902,7 @@ impl Render for ReviewQueue {
             .on_action(cx.listener(Self::on_refresh))
             .on_action(cx.listener(Self::on_show_authored))
             .on_action(cx.listener(Self::on_show_review_requested))
+            .on_action(cx.listener(Self::on_show_others))
             .on_action(cx.listener(Self::on_next_file))
             .on_action(cx.listener(Self::on_previous_file))
             .on_action(cx.listener(Self::on_mark_viewed_and_next))
@@ -867,12 +933,13 @@ impl Render for ReviewQueue {
     }
 }
 
-/// Both cached lists, read at startup.
+/// The cached lists, read at startup.
 fn read_cached_lists(cache: &SharedCache) -> anyhow::Result<QueueLists> {
     let cache = cache.lock();
     Ok(QueueLists {
         authored: cache.list(PullRequestListKey::AUTHORED)?,
         review_requested: cache.list(PullRequestListKey::REVIEW_REQUESTED)?,
+        others: cache.list(PullRequestListKey::OTHERS)?,
     })
 }
 
@@ -907,20 +974,26 @@ fn known_memberships(lists: &QueueLists) -> HashMap<(RepoRef, u64), StackMembers
         .collect()
 }
 
-/// Fetches both lists (one search request each) and their stacks (one
-/// GraphQL request), filling in each pull request's membership. When the
-/// stacks cannot be read, the memberships known before are kept.
+/// Fetches the lists (one search request each; others' one per ten
+/// watched repositories and page) and their stacks (one GraphQL request),
+/// filling in each pull request's membership. When the stacks or others'
+/// pull requests cannot be read, what was known before is kept.
 ///
 /// Blocking: runs on the background executor.
-fn fetch_lists(
-    client: &GitHubClient,
-    known: HashMap<(RepoRef, u64), StackMembership>,
-) -> anyhow::Result<RefreshedLists> {
+fn fetch_lists(client: &GitHubClient, input: RefreshInput) -> anyhow::Result<RefreshedLists> {
+    // Others' pull requests may fail on their own (a watched repository gone).
+    let (others, others_error) = match fetch_others(client, &input.watched) {
+        Ok(others) => (others, None),
+        Err(error) => (input.known_others, Some(format!("{error:#}"))),
+    };
     let mut lists = QueueLists {
         authored: client.authored()?,
         review_requested: client.review_requested()?,
+        others,
     };
-    let (memberships, stack_error) = match client.stack_memberships() {
+
+    // Stacks for all three lists in one request.
+    let (memberships, stack_error) = match client.stack_memberships(&input.watched) {
         Ok(listed) => (
             listed
                 .into_iter()
@@ -928,14 +1001,34 @@ fn fetch_lists(
                 .collect(),
             None,
         ),
-        Err(error) => (known, Some(format!("{error:#}"))),
+        Err(error) => (input.known_memberships, Some(format!("{error:#}"))),
     };
-    for pull_request in lists.authored.iter_mut().chain(&mut lists.review_requested) {
+    for pull_request in lists
+        .authored
+        .iter_mut()
+        .chain(&mut lists.review_requested)
+        .chain(&mut lists.others)
+    {
         pull_request.stack = memberships
             .get(&(pull_request.repo.clone(), pull_request.number))
             .cloned();
     }
-    Ok(RefreshedLists { lists, stack_error })
+    Ok(RefreshedLists {
+        lists,
+        stack_error,
+        others_error,
+    })
+}
+
+/// Others' open pull requests in `watched`; none without watched repositories.
+fn fetch_others(
+    client: &GitHubClient,
+    watched: &[RepoRef],
+) -> Result<Vec<PullRequest>, qd_github::GitHubError> {
+    match watched {
+        [] => Ok(Vec::new()),
+        _ => client.other_pull_requests(watched),
+    }
 }
 
 /// Fetches a stack layer that is in no list, with the membership the stack

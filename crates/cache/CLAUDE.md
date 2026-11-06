@@ -5,6 +5,8 @@
 | `github_cache` | `GitHubCache`: cached pull requests, lists and changed files, with row mapping |
 | `ui_state_store` | `UiStateStore`: window placement and review queue state |
 | `database_connection` | database path (`Quarterdeck/`, or `Quarterdeck Dev/` in debug builds, seeded once by `VACUUM INTO` from the release database) and connection setup (WAL, foreign keys, migrations); `prepare_data_directory` runs before the default database opens |
+| `watched_repositories_storage` | the repositories the Others tab lists (`watched_repositories`, ordered by `position`; a preference, never expired) |
+| `others_filter` / `updated_within` / `others_filter_storage` | `OthersFilter` (hide drafts, hide review requests, `UpdatedWithin`, label and author `FacetFilter<String>`s) per repository (`RepositoryOthersFilter`); stored in `others_filters` + `others_filter_chips` (facet `label`/`author`, choice `only`/`hidden`), a row only while the filter narrows something |
 | `schema_migrations` | append-only `SCHEMA_MIGRATIONS` and their runner (`PRAGMA user_version`) |
 | `pull_request_list_key` | `PullRequestListKey` newtype (`REVIEW_REQUESTED`) |
 | `window_placement` / `window_mode` / `display_uuid` | `WindowPlacement` (bounds relative to its display), `WindowMode` (SQL text mapping), `DisplayUuid` |
@@ -27,6 +29,7 @@
 | `comparison_storage` | `compare_file_sets` + `compare_files`: files between two commits (combined stack diffs) |
 
 - One database file; each store opens its own connection.
+- Pull requests keep their labels in `pr_labels` (position order, cascade-deleted with the pull request). Migration 20 added it, the Others tables and `queue_tab = 'others'` (the column re-made with the wider CHECK, its value kept).
 - Schema changes append a new entry to `SCHEMA_MIGRATIONS`; never edit a shipped one. A database whose `user_version` is past the known migrations (a newer app ran) is refused, not opened.
 - Every field is its own typed column; nothing is stored as JSON. Changed files are `pr_file_sets` (version tag) + `pr_files` (one row per file, `position` keeps GitHub's order).
 - Adding a field to a `qd-github` type means a migration adding its column and updating the row mapping in `github_cache.rs`.

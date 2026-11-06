@@ -30,7 +30,6 @@
 //! - `line_counts.rs`: `LineCounts`, lines added and removed.
 //! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
 //! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.
-//! - `chip_click.rs`: `ChipClick`, a filter chip clicked to pick or (option) to hide.
 //! - `load_progress.rs`: `LoadProgress`, how far loading the files has come.
 //! - `review_target.rs`: `ReviewTarget`, one layer or a combined range of stack layers.
 //! - `fetch_combined_files.rs`: gets a combined range's files from the cache or one diff download.
@@ -58,7 +57,6 @@ mod action_panel_rendering;
 mod activity_rendering;
 mod changed_files;
 mod changed_rows;
-mod chip_click;
 mod comment_card_rendering;
 mod comment_editor;
 mod comment_placement;

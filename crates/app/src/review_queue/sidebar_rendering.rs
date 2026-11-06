@@ -8,11 +8,12 @@ use qd_cache::QueueTab;
 use qd_github::{PullRequest, StackLayer};
 
 use super::ReviewQueue;
+use super::others_filter_rendering::{render_filter_button, render_others_empty_state};
 use super::queue_row::{QueueRow, RepoGroup, StackGroup};
 use super::refresh_status::RefreshStatus;
-use super::repo_monogram::RepoMonogram;
 use crate::display_date::{relative_age, unix_now};
 use crate::fold_chevron::{FoldChevron, FoldState};
+use crate::repo_monogram::RepoMonogram;
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::segmented_control::SegmentedControl;
@@ -43,26 +44,37 @@ impl ReviewQueue {
             .flex_shrink_0()
             .bg(theme::sidebar())
             .child(self.render_sidebar_header(cx))
-            .child(
-                // The list fills the rest of the column, with a scrollbar over its right edge.
-                div()
-                    .relative()
-                    .flex_1()
-                    .min_h_0()
-                    .child(
-                        list(
-                            self.queue_list().clone(),
-                            cx.processor(|queue, index, _window, cx| {
-                                queue.render_queue_row(index, cx)
-                            }),
+            .when(self.shows_others_empty_state(), |sidebar| {
+                sidebar.child(render_others_empty_state())
+            })
+            .when(!self.shows_others_empty_state(), |sidebar| {
+                sidebar.child(
+                    // The list fills the rest of the column, with a scrollbar over its right edge.
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_h_0()
+                        .child(
+                            list(
+                                self.queue_list().clone(),
+                                cx.processor(|queue, index, _window, cx| {
+                                    queue.render_queue_row(index, cx)
+                                }),
+                            )
+                            .size_full(),
                         )
-                        .size_full(),
-                    )
-                    .child(VerticalScrollbar::new(
-                        "pull-requests-scrollbar",
-                        ScrollbarTarget::List(self.queue_list().clone()),
-                    )),
-            )
+                        .child(VerticalScrollbar::new(
+                            "pull-requests-scrollbar",
+                            ScrollbarTarget::List(self.queue_list().clone()),
+                        )),
+                )
+            })
+    }
+
+    /// Whether the sidebar shows the Others tab's invitation to choose
+    /// repositories instead of a list.
+    fn shows_others_empty_state(&self) -> bool {
+        self.tab() == QueueTab::Others && !self.others_tab().has_watched()
     }
 
     /// The divider right of the sidebar; dragging it resizes the sidebar.
@@ -97,11 +109,13 @@ impl ReviewQueue {
             .children(status)
     }
 
-    /// The Mine / Review tabs with their counts.
+    /// The Mine / Review / Others tabs with their counts (Others: those its
+    /// filters show).
     fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let tab = self.tab();
         let authored = self.lists().authored.len();
         let review_requested = self.lists().review_requested.len();
+        let others = self.others_tab().shown().len();
         let queue = cx.entity().downgrade();
         let show_tab = move |tab: QueueTab| {
             let queue = queue.clone();
@@ -121,6 +135,11 @@ impl ReviewQueue {
                 tab == QueueTab::ReviewRequested,
                 show_tab(QueueTab::ReviewRequested),
             )
+            .option(
+                format!("Others  {others}"),
+                tab == QueueTab::Others,
+                show_tab(QueueTab::Others),
+            )
     }
 
     /// The refresh state, an opening stack layer, or why one did not open.
@@ -133,6 +152,13 @@ impl ReviewQueue {
         }
         if let Some(error) = self.layer_error() {
             return Some(render_error_status(error.clone()));
+        }
+        // Others' pull requests can fail alone (a watched repository gone or renamed).
+        if self.tab() == QueueTab::Others
+            && matches!(self.refresh_status(), RefreshStatus::Idle)
+            && let Some(error) = self.others_tab().error()
+        {
+            return Some(render_error_status(format!("Others: {error}").into()));
         }
         match self.refresh_status() {
             RefreshStatus::Idle => None,
@@ -158,6 +184,8 @@ impl ReviewQueue {
         let row = self.rows().get(index)?;
         let element = match row {
             QueueRow::RepoHeader(group) => render_repo_header(index, group, cx),
+            QueueRow::OthersFilter(repo) => return Some(self.render_others_filter(repo, cx)),
+            QueueRow::NothingShown(repo) => return Some(self.render_nothing_shown(repo, cx)),
             QueueRow::PullRequest(list_index) => {
                 let pull_request = self.shown_list().get(*list_index)?;
                 render_pull_request_row(
@@ -446,13 +474,33 @@ fn render_repo_header(
                 .bg(theme::surface())
                 .text_xs()
                 .text_color(theme::muted())
-                .child(group.pull_requests.to_string()),
+                .child(repo_count_text(group)),
         )
+        .children(group.others.as_ref().map(|others| {
+            render_filter_button(
+                row_index,
+                &group.repo,
+                others.is_filter_active,
+                others.is_filter_open,
+                cx,
+            )
+        }))
         .child(FoldChevron::new(
             ("repo-fold", row_index),
             FoldState::of(group.is_collapsed),
         ))
         .into_any_element()
+}
+
+/// A repository header's count: in the Others tab, `4 / 12` while its
+/// filter hides some; otherwise how many it shows.
+fn repo_count_text(group: &RepoGroup) -> String {
+    match &group.others {
+        Some(others) if others.total != group.pull_requests => {
+            format!("{} / {}", group.pull_requests, others.total)
+        }
+        Some(_) | None => group.pull_requests.to_string(),
+    }
 }
 
 /// The header of a stack's group: a stack glyph, its number and trunk,
@@ -474,6 +522,8 @@ fn render_stack_header(
         (QueueTab::Authored, false) => format!("{} yours", group.listed),
         (QueueTab::ReviewRequested, true) => "all to review".to_owned(),
         (QueueTab::ReviewRequested, false) => format!("{} to review", group.listed),
+        (QueueTab::Others, true) => "all listed".to_owned(),
+        (QueueTab::Others, false) => format!("{} listed", group.listed),
     };
     row_frame(("stack-header", row_index), is_reviewed)
         .flex()

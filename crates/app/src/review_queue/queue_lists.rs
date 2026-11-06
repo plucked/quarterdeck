@@ -1,12 +1,14 @@
 use qd_cache::QueueTab;
 use qd_github::{PullRequest, RepoRef};
 
-/// The queue's two lists: the viewer's own pull requests and those that
-/// request the viewer's review. A pull request can be in both.
+/// The queue's lists: the viewer's own pull requests, those that request
+/// the viewer's review, and others' in the watched repositories (before
+/// their filters). A pull request can be in more than one.
 #[derive(Debug, Default)]
 pub struct QueueLists {
     pub authored: Vec<PullRequest>,
     pub review_requested: Vec<PullRequest>,
+    pub others: Vec<PullRequest>,
 }
 
 impl QueueLists {
@@ -15,12 +17,16 @@ impl QueueLists {
         match tab {
             QueueTab::Authored => &self.authored,
             QueueTab::ReviewRequested => &self.review_requested,
+            QueueTab::Others => &self.others,
         }
     }
 
-    /// Every listed pull request, the authored list first.
+    /// Every listed pull request: authored, review requested, then others.
     pub fn iter(&self) -> impl Iterator<Item = &PullRequest> {
-        self.authored.iter().chain(&self.review_requested)
+        self.authored
+            .iter()
+            .chain(&self.review_requested)
+            .chain(&self.others)
     }
 
     /// The listed pull request with GitHub id `id`.

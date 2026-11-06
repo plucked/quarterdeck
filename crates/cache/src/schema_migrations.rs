@@ -369,6 +369,53 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     DELETE FROM pr_file_sets;
     DELETE FROM compare_file_sets;
 ",
+    r"
+    -- The labels of cached pull requests, in GitHub's order.
+    CREATE TABLE pr_labels (
+        pr_id     INTEGER NOT NULL REFERENCES pull_requests (id) ON DELETE CASCADE,
+        position  INTEGER NOT NULL CHECK (position >= 0),
+        name      TEXT    NOT NULL,
+        color     TEXT    NOT NULL,
+        PRIMARY KEY (pr_id, position)
+    );
+
+    -- The repositories whose other open pull requests the Others tab lists (a preference).
+    CREATE TABLE watched_repositories (
+        repo_owner  TEXT    NOT NULL,
+        repo_name   TEXT    NOT NULL,
+        position    INTEGER NOT NULL CHECK (position >= 0),
+        PRIMARY KEY (repo_owner, repo_name)
+    );
+
+    -- The Others tab's filter of one repository (UI state).
+    CREATE TABLE others_filters (
+        repo_owner            TEXT    NOT NULL,
+        repo_name             TEXT    NOT NULL,
+        hide_drafts           INTEGER NOT NULL CHECK (hide_drafts IN (0, 1)),
+        hide_review_requests  INTEGER NOT NULL CHECK (hide_review_requests IN (0, 1)),
+        updated_within        TEXT    NOT NULL CHECK (updated_within IN ('any', 'week', 'month')),
+        PRIMARY KEY (repo_owner, repo_name)
+    );
+    CREATE TABLE others_filter_chips (
+        repo_owner  TEXT NOT NULL,
+        repo_name   TEXT NOT NULL,
+        facet       TEXT NOT NULL CHECK (facet IN ('label', 'author')),
+        value       TEXT NOT NULL,
+        choice      TEXT NOT NULL CHECK (choice IN ('only', 'hidden')),
+        PRIMARY KEY (repo_owner, repo_name, facet, value),
+        FOREIGN KEY (repo_owner, repo_name)
+            REFERENCES others_filters (repo_owner, repo_name) ON DELETE CASCADE
+    );
+
+    -- The queue's tab gains Others: the column is re-made with the wider CHECK, its value kept.
+    CREATE TEMP TABLE saved_queue_tab AS SELECT id, queue_tab FROM review_queue_view;
+    ALTER TABLE review_queue_view DROP COLUMN queue_tab;
+    ALTER TABLE review_queue_view ADD COLUMN queue_tab TEXT NOT NULL DEFAULT 'authored'
+        CHECK (queue_tab IN ('authored', 'review_requested', 'others'));
+    UPDATE review_queue_view SET queue_tab =
+        (SELECT queue_tab FROM saved_queue_tab WHERE saved_queue_tab.id = review_queue_view.id);
+    DROP TABLE saved_queue_tab;
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in
@@ -403,6 +450,39 @@ pub(crate) fn apply_schema_migrations(connection: &mut Connection) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Widening the queue tab's CHECK for Others keeps the saved tab.
+    #[test]
+    fn keeps_the_saved_tab_when_others_is_added() {
+        // Set up: a database at the version before Others, showing the Review tab.
+        let mut connection = Connection::open_in_memory().unwrap();
+        let before_others = SCHEMA_MIGRATIONS.len() - 1;
+        for sql in &SCHEMA_MIGRATIONS[..before_others] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection
+            .pragma_update(None, "user_version", i64::try_from(before_others).unwrap())
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO review_queue_view (id, detail_scroll_row, detail_scroll_row_offset, queue_tab)
+                 VALUES (1, 0, 0, 'review_requested')",
+                [],
+            )
+            .unwrap();
+
+        // Act and expect: the tab survives, and Others is now allowed.
+        apply_schema_migrations(&mut connection).unwrap();
+        let tab: String = connection
+            .query_row("SELECT queue_tab FROM review_queue_view", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(tab, "review_requested");
+        connection
+            .execute("UPDATE review_queue_view SET queue_tab = 'others'", [])
+            .unwrap();
+    }
 
     /// A database migrated by a newer app is refused, and left as it is.
     #[test]

@@ -13,6 +13,9 @@
 //! - `viewer_request.rs`: `GitHubClient::viewer`, the account the token belongs to.
 //! - `repo_ref.rs`: `RepoRef`, an owner/name pair.
 //! - `user.rs`: `User`, a GitHub account as embedded in other objects.
+//! - `label.rs`: `Label`, a pull request's label.
+//! - `other_pull_requests.rs`: `GitHubClient::other_pull_requests`, others' open pull requests in chosen repositories.
+//! - `repository_request.rs`: `GitHubClient::repository`, checks a repository exists.
 //! - `pull_request.rs`: `PullRequest`, the normalized pull request.
 //! - `pull_request_file.rs`: `PullRequestFile`, one changed file with its patch.
 //! - `search_issue.rs`: the issue shape the search API returns for a pull request.
@@ -61,6 +64,7 @@ mod github_client;
 mod github_error;
 mod graphql_response;
 mod keychain_token;
+mod label;
 mod line_side;
 mod listed_stack_membership;
 mod merge_method;
@@ -68,6 +72,7 @@ mod merge_options;
 mod merge_outcome;
 mod merge_queries;
 mod next_page_url;
+mod other_pull_requests;
 mod pull_request;
 mod pull_request_file;
 mod pull_request_requests;
@@ -76,6 +81,7 @@ mod pull_request_revision;
 mod pull_request_stack;
 mod rate_limit;
 mod repo_ref;
+mod repository_request;
 mod resolve_token;
 mod resolved_token;
 mod review_event;
@@ -103,6 +109,7 @@ pub use file_text_location::FileTextLocation;
 pub use github_client::{GitHubClient, MAX_LISTED_FILES};
 pub use github_error::GitHubError;
 pub use keychain_token::{delete_stored_token, store_token, stored_token};
+pub use label::Label;
 pub use line_side::LineSide;
 pub use listed_stack_membership::ListedStackMembership;
 pub use merge_method::MergeMethod;

@@ -56,6 +56,7 @@ mod tests {
             draft: false,
             created_at: String::new(),
             updated_at: updated_at.into(),
+            labels: Vec::new(),
             stack: None,
         }
     }

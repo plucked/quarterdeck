@@ -29,7 +29,8 @@ actions!(
         PreviousLayer,
         ToggleStackReview,
         ShowAuthored,
-        ShowReviewRequested
+        ShowReviewRequested,
+        ShowOthers
     ]
 );
 
@@ -58,6 +59,7 @@ pub fn install_app_commands(cx: &mut App) {
         KeyBinding::new("c", ToggleStackReview, Some(SINGLE_KEY_CONTEXT)),
         KeyBinding::new("cmd-1", ShowAuthored, None),
         KeyBinding::new("cmd-2", ShowReviewRequested, None),
+        KeyBinding::new("cmd-3", ShowOthers, None),
     ]);
 
     // Text areas have their own editing keys, and the queue's single keys stay out of them.
@@ -93,6 +95,7 @@ pub fn install_app_commands(cx: &mut App) {
                 MenuItem::separator(),
                 MenuItem::action("My Pull Requests", ShowAuthored),
                 MenuItem::action("Review Requests", ShowReviewRequested),
+                MenuItem::action("Others' Pull Requests", ShowOthers),
                 MenuItem::separator(),
                 MenuItem::action("Next Stack Layer", NextLayer),
                 MenuItem::action("Previous Stack Layer", PreviousLayer),

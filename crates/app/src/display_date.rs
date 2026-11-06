@@ -1,5 +1,5 @@
 //! `short_date` and `relative_age` (with `unix_now`): GitHub's ISO 8601
-//! timestamps as people read them.
+//! timestamps as people read them; `unix_seconds` reads one as a time.
 
 /// Month names, January first.
 const MONTHS: [&str; 12] = [
@@ -42,7 +42,7 @@ pub fn unix_now() -> i64 {
 
 /// `2026-10-21T09:59:57Z` (UTC, as GitHub sends) as Unix seconds; `None`
 /// for anything else.
-fn unix_seconds(timestamp: &str) -> Option<i64> {
+pub fn unix_seconds(timestamp: &str) -> Option<i64> {
     let field = |range: std::ops::Range<usize>| timestamp.get(range)?.parse::<i64>().ok();
     let (year, month, day) = (field(0..4)?, field(5..7)?, field(8..10)?);
     let (hour, minute, second) = (field(11..13)?, field(14..16)?, field(17..19)?);

@@ -2,6 +2,7 @@
 
 use gpui::{App, BorrowAppContext, Global};
 use qd_cache::{CacheTtl, ColorTheme, DiffViewSettings};
+use qd_github::RepoRef;
 
 use crate::theme;
 use crate::ui_state::UiStateRecorder;
@@ -10,11 +11,14 @@ use crate::ui_state::UiStateRecorder;
 /// from and the settings window changes them. Views that depend on a
 /// preference observe this global (`cx.observe_global::<AppSettings>`) and
 /// apply changes as they happen. Every change is saved.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AppSettings {
     diff_view: DiffViewSettings,
     cache_ttl: CacheTtl,
     color_theme: ColorTheme,
+    /// The repositories whose other open pull requests the Others tab lists,
+    /// in the order they were added.
+    watched_repositories: Vec<RepoRef>,
 }
 
 impl Global for AppSettings {}
@@ -28,6 +32,7 @@ impl AppSettings {
             diff_view: recorder.saved_diff_view_settings().unwrap_or_default(),
             cache_ttl: recorder.saved_cache_ttl().unwrap_or_default(),
             color_theme: recorder.saved_color_theme().unwrap_or_default(),
+            watched_repositories: recorder.saved_watched_repositories(),
         };
         theme::set_active_theme(settings.color_theme);
         settings
@@ -78,5 +83,22 @@ impl AppSettings {
         }
         cx.update_global::<Self, _>(|app_settings, _| app_settings.diff_view = settings);
         UiStateRecorder::record_diff_view_settings(cx, settings);
+    }
+
+    /// The repositories the Others tab lists.
+    pub fn watched_repositories(cx: &App) -> &[RepoRef] {
+        &cx.global::<Self>().watched_repositories
+    }
+
+    /// Changes the repositories the Others tab lists and saves them;
+    /// observers (the queue refreshes) are notified only on a change.
+    pub fn set_watched_repositories(cx: &mut App, repositories: Vec<RepoRef>) {
+        if Self::watched_repositories(cx) == repositories.as_slice() {
+            return;
+        }
+        UiStateRecorder::record_watched_repositories(cx, repositories.clone());
+        cx.update_global::<Self, _>(|app_settings, _| {
+            app_settings.watched_repositories = repositories;
+        });
     }
 }

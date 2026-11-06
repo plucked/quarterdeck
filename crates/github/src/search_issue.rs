@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::{PullRequest, RepoRef, User};
+use crate::{Label, PullRequest, RepoRef, User};
 
 /// A pull request as `GET /search/issues` (and `GET /repos/{o}/{r}/issues/{n}`)
 /// returns it: issue-shaped, with the repository only as an API URL.
@@ -17,6 +17,8 @@ pub(crate) struct SearchIssue {
     pub draft: bool,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub labels: Vec<Label>,
 }
 
 impl SearchIssue {
@@ -33,6 +35,7 @@ impl SearchIssue {
             draft: self.draft,
             created_at: self.created_at,
             updated_at: self.updated_at,
+            labels: self.labels,
             stack: None,
         })
     }
@@ -51,6 +54,7 @@ mod tests {
             "html_url": "https://github.com/a/b/pull/42",
             "repository_url": "https://api.github.com/repos/a/b",
             "draft": true,
+            "labels": [{"id": 1, "name": "bug", "color": "d73a4a", "default": true}],
             "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z"
         }"#;
         let issue: SearchIssue = serde_json::from_str(json).unwrap();
@@ -58,5 +62,6 @@ mod tests {
         assert_eq!(pull_request.repo.full_name(), "a/b");
         assert_eq!(pull_request.number, 42);
         assert!(pull_request.draft);
+        assert_eq!(pull_request.labels[0].name, "bug");
     }
 }

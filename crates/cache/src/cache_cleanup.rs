@@ -88,6 +88,7 @@ mod tests {
             draft: false,
             created_at: String::new(),
             updated_at: "t".into(),
+            labels: Vec::new(),
             stack: None,
         }
     }

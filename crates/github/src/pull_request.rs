@@ -1,4 +1,4 @@
-use crate::{RepoRef, StackMembership, User};
+use crate::{Label, RepoRef, StackMembership, User};
 
 /// A pull request, normalized from the search API's issue shape, with its
 /// place in a stack filled in from GraphQL.
@@ -18,6 +18,8 @@ pub struct PullRequest {
     pub draft: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// Its labels, in GitHub's order.
+    pub labels: Vec<Label>,
     /// Where it sits in a stack; `None` for a standalone pull request (and
     /// until the stack membership query answered).
     pub stack: Option<StackMembership>,

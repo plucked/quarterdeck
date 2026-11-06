@@ -199,6 +199,7 @@ mod tests {
             draft: false,
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: updated_at.into(),
+            labels: Vec::new(),
             stack: None,
         }
     }

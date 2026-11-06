@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use qd_github::{PullRequest, RepoRef, StackMembership, User};
+use qd_github::{Label, PullRequest, RepoRef, StackMembership, User};
 use rusqlite::{Connection, Row, Transaction, params};
 
 use crate::PullRequestListKey;
@@ -87,7 +87,11 @@ impl GitHubCache {
             "SELECT {PULL_REQUEST_COLUMNS} FROM pull_requests p WHERE p.id = ?1"
         ))?;
         let mut rows = statement.query_map([sql_integer(id)?], pull_request_from_row)?;
-        Ok(rows.next().transpose()?)
+        let Some(mut pull_request) = rows.next().transpose()? else {
+            return Ok(None);
+        };
+        pull_request.labels = self.labels_of(pull_request.id)?;
+        Ok(Some(pull_request))
     }
 
     /// The pull requests of a list, in stored order.
@@ -99,7 +103,27 @@ impl GitHubCache {
              WHERE l.list_key = ?1 ORDER BY l.position"
         ))?;
         let rows = statement.query_map([list_key.as_str()], pull_request_from_row)?;
-        Ok(rows.collect::<rusqlite::Result<_>>()?)
+        let mut pull_requests = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        for pull_request in &mut pull_requests {
+            pull_request.labels = self.labels_of(pull_request.id)?;
+        }
+        Ok(pull_requests)
+    }
+
+    /// The stored labels of pull request `id`, in GitHub's order.
+    fn labels_of(&self, id: u64) -> Result<Vec<Label>> {
+        let mut statement = self.connection.prepare_cached(
+            "SELECT name, color FROM pr_labels WHERE pr_id = ?1 ORDER BY position",
+        )?;
+        let labels = statement
+            .query_map([sql_integer(id)?], |row| {
+                Ok(Label {
+                    name: row.get(0)?,
+                    color: row.get(1)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(labels)
     }
 
     /// The connection, for the storage of other cached topics in sibling files.
@@ -120,6 +144,26 @@ fn upsert_pull_request(
     fetched_at: i64,
 ) -> Result<i64> {
     let id = sql_integer(pull_request.id)?;
+    upsert_pull_request_row(transaction, pull_request, id, fetched_at)?;
+
+    // Its labels replace the ones stored before.
+    transaction.execute("DELETE FROM pr_labels WHERE pr_id = ?1", [id])?;
+    for (position, label) in pull_request.labels.iter().enumerate() {
+        transaction.execute(
+            "INSERT INTO pr_labels (pr_id, position, name, color) VALUES (?1, ?2, ?3, ?4)",
+            params![id, i64::try_from(position)?, label.name, label.color],
+        )?;
+    }
+    Ok(id)
+}
+
+/// Inserts or updates the `pull_requests` row of `pull_request`.
+fn upsert_pull_request_row(
+    transaction: &Transaction<'_>,
+    pull_request: &PullRequest,
+    id: i64,
+    fetched_at: i64,
+) -> Result<()> {
     let stack = pull_request.stack.as_ref();
     transaction.execute(
         "INSERT INTO pull_requests (
@@ -164,7 +208,7 @@ fn upsert_pull_request(
             stack.map(|stack| stack.base_ref.as_str()),
         ],
     )?;
-    Ok(id)
+    Ok(())
 }
 
 /// Reads a pull request from a row of [`PULL_REQUEST_COLUMNS`].
@@ -186,6 +230,8 @@ fn pull_request_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequest> {
         draft: row.get(9)?,
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
+        // Read from `pr_labels` by the caller.
+        labels: Vec::new(),
         stack: stack_membership_from_row(row)?,
     })
 }
@@ -229,6 +275,7 @@ mod tests {
             draft: false,
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: updated_at.into(),
+            labels: Vec::new(),
             stack: None,
         }
     }

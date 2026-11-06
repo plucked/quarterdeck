@@ -7,12 +7,12 @@ use qd_file_tree::{
     TreeRow,
 };
 
-use super::chip_click::ChipClick;
 use super::file_review_state::FileReviewState;
 use super::folder_summary::FolderSummary;
 use super::folder_viewed_state::FolderViewedState;
 use super::line_counts::LineCounts;
 use super::loaded_file::LoadedFile;
+use crate::facet_chips::ChipClick;
 
 /// The file tree panel's state: the loaded files as a tree (file indexes
 /// match the loaded files, which are in tree order), the filter shared with

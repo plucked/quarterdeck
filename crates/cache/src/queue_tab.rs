@@ -8,6 +8,8 @@ pub enum QueueTab {
     Authored,
     /// Open pull requests that request the viewer's review.
     ReviewRequested,
+    /// Others' open pull requests in the watched repositories.
+    Others,
 }
 
 impl QueueTab {
@@ -16,6 +18,7 @@ impl QueueTab {
         match self {
             Self::Authored => PullRequestListKey::AUTHORED,
             Self::ReviewRequested => PullRequestListKey::REVIEW_REQUESTED,
+            Self::Others => PullRequestListKey::OTHERS,
         }
     }
 
@@ -24,6 +27,7 @@ impl QueueTab {
         match self {
             Self::Authored => "authored",
             Self::ReviewRequested => "review_requested",
+            Self::Others => "others",
         }
     }
 
@@ -32,6 +36,7 @@ impl QueueTab {
         match text {
             "authored" => Some(Self::Authored),
             "review_requested" => Some(Self::ReviewRequested),
+            "others" => Some(Self::Others),
             _ => None,
         }
     }

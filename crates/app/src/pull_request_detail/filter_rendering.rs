@@ -1,19 +1,13 @@
-use gpui::{
-    AnyElement, ClickEvent, Context, Div, FontWeight, IntoElement, SharedString, Stateful, div,
-    prelude::*,
-};
+use gpui::{AnyElement, ClickEvent, Context, IntoElement, div, prelude::*};
 use qd_file_tree::{FacetChoice, FacetCount};
 
-use super::chip_click::ChipClick;
 use super::pull_request_detail::PullRequestDetail;
 use crate::button::Button;
 use crate::checkbox::{CheckState, Checkbox};
+use crate::facet_chips::{
+    COLLAPSED_CHIPS, ChipClick, most_common_values, render_chip, render_chip_row, render_more_chip,
+};
 use crate::theme;
-
-/// Type chips shown before "more"; picked or hidden ones always show.
-const COLLAPSED_TYPE_CHIPS: usize = 8;
-/// Width of a chip row's label column, so both rows' chips line up.
-const ROW_LABEL_WIDTH: f32 = 38.;
 
 impl PullRequestDetail {
     /// The filter under the progress bar: the viewed switch, the kind and
@@ -96,7 +90,7 @@ impl PullRequestDetail {
                     filter.kinds.choice_of(&kind),
                 )
                 .on_click(cx.listener(move |detail, event: &ClickEvent, _, cx| {
-                    detail.click_kind(kind, chip_click_of(event), cx);
+                    detail.click_kind(kind, ChipClick::of(event), cx);
                 }))
                 .into_any_element()
             })
@@ -112,7 +106,7 @@ impl PullRequestDetail {
         let is_expanded = self.file_tree().are_types_expanded();
 
         // The most common, plus every chip that is set, so a set chip never hides behind "more".
-        let most_common = most_common_types(counts);
+        let most_common = most_common_values(counts);
         let shown: Vec<&FacetCount<String>> = counts
             .iter()
             .filter(|count| {
@@ -133,7 +127,7 @@ impl PullRequestDetail {
                     filter.file_types.choice_of(&count.value),
                 )
                 .on_click(cx.listener(move |detail, event: &ClickEvent, _, cx| {
-                    detail.click_file_type(&file_type, chip_click_of(event), cx);
+                    detail.click_file_type(&file_type, ChipClick::of(event), cx);
                 }))
                 .into_any_element()
             })
@@ -141,21 +135,14 @@ impl PullRequestDetail {
 
         // The more / less chip, when there is more than the collapsed row holds.
         let more_label = match (is_expanded, hidden_count) {
-            (true, _) if counts.len() > COLLAPSED_TYPE_CHIPS => Some("less".to_owned()),
+            (true, _) if counts.len() > COLLAPSED_CHIPS => Some("less".to_owned()),
             (false, 1..) => Some(format!("+{hidden_count} more")),
             (true | false, _) => None,
         };
         if let Some(label) = more_label {
             chips.push(
-                div()
-                    .id("type-more")
-                    .px_1()
-                    .py_0p5()
-                    .text_xs()
-                    .text_color(theme::accent())
-                    .cursor_pointer()
+                render_more_chip("type-more", label)
                     .on_click(cx.listener(|detail, _, _, cx| detail.toggle_types_expanded(cx)))
-                    .child(label)
                     .into_any_element(),
             );
         }
@@ -196,91 +183,5 @@ impl PullRequestDetail {
                 )
             })
             .into_any_element()
-    }
-}
-
-/// The [`COLLAPSED_TYPE_CHIPS`] types with the most files (ties by their
-/// alphabetical place), which the collapsed row shows.
-fn most_common_types(counts: &[FacetCount<String>]) -> Vec<&str> {
-    let mut by_size: Vec<&FacetCount<String>> = counts.iter().collect();
-    by_size.sort_by_key(|count| std::cmp::Reverse(count.total));
-    by_size
-        .into_iter()
-        .take(COLLAPSED_TYPE_CHIPS)
-        .map(|count| count.value.as_str())
-        .collect()
-}
-
-/// A plain click picks; an option-click hides.
-fn chip_click_of(event: &ClickEvent) -> ChipClick {
-    if event.modifiers().alt {
-        ChipClick::Hide
-    } else {
-        ChipClick::Pick
-    }
-}
-
-/// A row of chips after its label.
-fn render_chip_row(label: &'static str, chips: Vec<AnyElement>) -> Div {
-    div()
-        .flex()
-        .gap_1()
-        .child(
-            div()
-                .flex_none()
-                .w(gpui::px(ROW_LABEL_WIDTH))
-                .pt(gpui::px(3.))
-                .text_size(gpui::px(10.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(theme::subtle())
-                .child(label.to_uppercase()),
-        )
-        .child(div().flex_1().flex().flex_wrap().gap_1().children(chips))
-}
-
-/// One chip with what picking it would show: picked chips stand out, a
-/// hidden one is struck through, and one that would show nothing is dimmed.
-fn render_chip<T>(
-    id: SharedString,
-    label: &str,
-    count: &FacetCount<T>,
-    choice: FacetChoice,
-) -> Stateful<Div> {
-    let number = match choice {
-        FacetChoice::Hidden => count.total,
-        FacetChoice::Open | FacetChoice::Only => count.matching,
-    };
-    let chip = div()
-        .id(id)
-        .flex()
-        .gap_1()
-        .px_2()
-        .py_0p5()
-        .rounded_full()
-        .border_1()
-        .text_xs()
-        .cursor_pointer()
-        .child(label.to_owned())
-        .child(div().text_color(theme::subtle()).child(number.to_string()));
-    match choice {
-        FacetChoice::Only => chip
-            .border_color(theme::accent())
-            .bg(theme::selected())
-            .text_color(theme::text())
-            .font_weight(FontWeight::MEDIUM),
-        FacetChoice::Hidden => chip
-            .border_color(theme::border())
-            .text_color(theme::subtle())
-            .line_through(),
-        FacetChoice::Open => chip
-            .border_color(theme::border())
-            .bg(theme::surface())
-            .text_color(theme::muted())
-            .hover(|style| {
-                style
-                    .border_color(theme::border_strong())
-                    .text_color(theme::text())
-            })
-            .when(count.matching == 0, |chip| chip.opacity(0.45)),
     }
 }

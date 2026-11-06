@@ -3,15 +3,20 @@ use serde::Deserialize;
 use crate::{ListedStackMembership, RepoRef, StackMembership};
 
 /// One GraphQL query for the stack membership of every pull request in the
-/// viewer's two lists, run with the same search texts the REST lists use (as
-/// the `authored` and `reviewRequested` variables). Costs one point of the
-/// GraphQL budget.
+/// viewer's lists, run with the same search texts the REST lists use (as
+/// the `authored`, `reviewRequested` and `others` variables; `others` only
+/// when `includeOthers`). Costs one point of the GraphQL budget.
 pub(crate) const STACK_MEMBERSHIP_QUERY: &str = r"
-query StackMemberships($authored: String!, $reviewRequested: String!) {
+query StackMemberships(
+  $authored: String!, $reviewRequested: String!, $others: String!, $includeOthers: Boolean!
+) {
   authored: search(query: $authored, type: ISSUE, first: 100) {
     nodes { ...membership }
   }
   reviewRequested: search(query: $reviewRequested, type: ISSUE, first: 100) {
+    nodes { ...membership }
+  }
+  others: search(query: $others, type: ISSUE, first: 100) @include(if: $includeOthers) {
     nodes { ...membership }
   }
 }
@@ -29,6 +34,9 @@ fragment membership on PullRequest {
 pub(crate) struct StackMembershipData {
     authored: SearchNodes,
     review_requested: SearchNodes,
+    /// Absent unless the query included it.
+    #[serde(default)]
+    others: Option<SearchNodes>,
 }
 
 #[derive(Deserialize)]
@@ -72,7 +80,7 @@ struct StackEntry {
 }
 
 impl StackMembershipData {
-    /// The memberships of stacked pull requests in both lists, each once.
+    /// The memberships of stacked pull requests in the lists, each once.
     pub fn into_memberships(self) -> Vec<ListedStackMembership> {
         let data = self;
         let mut memberships: Vec<ListedStackMembership> = Vec::new();
@@ -81,6 +89,7 @@ impl StackMembershipData {
             .nodes
             .into_iter()
             .chain(data.review_requested.nodes)
+            .chain(data.others.into_iter().flat_map(|others| others.nodes))
         {
             let Some(listed) = node.into_listed() else {
                 continue;

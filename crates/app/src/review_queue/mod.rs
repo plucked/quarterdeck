@@ -1,6 +1,7 @@
-//! The main view: the viewer's own pull requests and those that request
-//! their review on the left (a tab each, stacked pull requests grouped by
-//! stack), and the selected one in the detail pane on the right. It opens
+//! The main view: the viewer's own pull requests, those that request
+//! their review and others' in watched repositories on the left (a tab
+//! each, grouped by repository and stack), and the selected one in the
+//! detail pane on the right. It opens
 //! stack layers the detail asks for, and records the tab, selection and
 //! detail scroll as UI state to restore them after a relaunch.
 //!
@@ -14,20 +15,26 @@
 //! - `selection_after_refresh.rs`: decides what stays selected when the queue is replaced.
 //! - `selection_restore.rs`: decides how a selection saved before a relaunch is restored.
 //! - `restore_phase.rs`: `RestorePhase`, which queue a saved selection is matched against.
-//! - `queue_lists.rs`: `QueueLists`, the authored and review-requested lists.
+//! - `queue_lists.rs`: `QueueLists`, the authored, review-requested and others' lists.
+//! - `others_tab.rs`: `OthersTab`, the Others tab's state: watched repositories, their filters, what passes, their order.
+//! - `others_tab_actions.rs`: the queue's Others actions: open a filter, change it, follow the watched repositories.
+//! - `others_filtering.rs`: whether a pull request passes an Others filter, and the chips' counts.
+//! - `others_filter_rendering.rs`: renders a repository's Others filter under its header.
 //! - `queue_row.rs`: `QueueRow`, a sidebar row (repository header, pull request, stack header, stack layer), and grouping.
-//! - `repo_monogram.rs`: `RepoMonogram`, a repository's colored letter in the sidebar.
 //! - `collapsed_groups.rs`: `CollapsedGroups`, the repositories and stacks folded in the sidebar.
 //! - `stack_key.rs`: `StackKey`, a stack's repository and number.
 //! - `selection_origin.rs`: `SelectionOrigin`, picked from a list or opened from a stack.
 
 mod activation_refresh;
 mod collapsed_groups;
+mod others_filter_rendering;
+mod others_filtering;
+mod others_tab;
+mod others_tab_actions;
 mod queue_lists;
 mod queue_row;
 mod refresh_schedule;
 mod refresh_status;
-mod repo_monogram;
 mod restore_phase;
 mod review_queue;
 mod selection_after_refresh;

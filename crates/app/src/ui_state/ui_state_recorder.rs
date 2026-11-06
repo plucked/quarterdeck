@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -6,10 +7,11 @@ use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 
 use super::review_change::ReviewChange;
 use qd_cache::{
-    CacheTtl, ColorTheme, DiffViewSettings, FoldedGroups, NoteDestination, PanelWidths,
-    ReviewLayoutState, ReviewNote, ReviewQueueViewState, ReviewScope, ReviewSummary, UiStateStore,
-    ViewedFile, WindowPlacement,
+    CacheTtl, ColorTheme, DiffViewSettings, FoldedGroups, NoteDestination, OthersFilter,
+    PanelWidths, RepositoryOthersFilter, ReviewLayoutState, ReviewNote, ReviewQueueViewState,
+    ReviewScope, ReviewSummary, UiStateStore, ViewedFile, WindowPlacement,
 };
+use qd_github::RepoRef;
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
 const WRITE_DELAY: Duration = Duration::from_millis(300);
@@ -27,6 +29,9 @@ struct PendingUiState {
     sidebar_width: Option<f32>,
     side_panel_width: Option<f32>,
     folded_groups: Option<FoldedGroups>,
+    watched_repositories: Option<Vec<RepoRef>>,
+    /// The latest Others filter of each repository changed.
+    others_filters: HashMap<RepoRef, OthersFilter>,
     /// Every viewed mark change, in the order made: unlike settings, each counts.
     viewed_changes: Vec<ViewedChange>,
     /// Every review note and summary change, in the order made.
@@ -44,6 +49,8 @@ impl PendingUiState {
             && self.sidebar_width.is_none()
             && self.side_panel_width.is_none()
             && self.folded_groups.is_none()
+            && self.watched_repositories.is_none()
+            && self.others_filters.is_empty()
             && self.viewed_changes.is_empty()
             && self.review_changes.is_empty()
     }
@@ -185,6 +192,42 @@ impl UiStateRecorder {
     pub fn record_folded_groups(cx: &mut App, groups: FoldedGroups) {
         cx.update_global::<Self, _>(|recorder, cx| {
             recorder.pending.folded_groups = Some(groups);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// The repositories the Others tab lists, as saved; none when there
+    /// are none or they no longer read. Reads on the main thread at startup only.
+    pub fn saved_watched_repositories(&self) -> Vec<RepoRef> {
+        self.lock_store()
+            .watched_repositories()
+            .unwrap_or_else(|error| {
+                report_unreadable::<()>("watched repositories", &error);
+                Vec::new()
+            })
+    }
+
+    /// Records the repositories the Others tab lists and schedules a write.
+    pub fn record_watched_repositories(cx: &mut App, repositories: Vec<RepoRef>) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.watched_repositories = Some(repositories);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// The Others filters saved before the last relaunch; none when there
+    /// are none or they no longer read. Reads on the main thread at startup only.
+    pub fn saved_others_filters(&self) -> Vec<RepositoryOthersFilter> {
+        self.lock_store().others_filters().unwrap_or_else(|error| {
+            report_unreadable::<()>("Others filters", &error);
+            Vec::new()
+        })
+    }
+
+    /// Records `repo`'s Others filter and schedules a write.
+    pub fn record_others_filter(cx: &mut App, repo: RepoRef, filter: OthersFilter) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.others_filters.insert(repo, filter);
             recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
@@ -360,6 +403,16 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
         && let Err(error) = store.put_folded_groups(groups)
     {
         eprintln!("ui state: cannot save the folded groups: {error:#}");
+    }
+    if let Some(repositories) = &pending.watched_repositories
+        && let Err(error) = store.put_watched_repositories(repositories)
+    {
+        eprintln!("ui state: cannot save the watched repositories: {error:#}");
+    }
+    for (repo, filter) in &pending.others_filters {
+        if let Err(error) = store.put_others_filter(repo, filter) {
+            eprintln!("ui state: cannot save an Others filter: {error:#}");
+        }
     }
     if let Some(ttl) = pending.cache_ttl
         && let Err(error) = store.put_cache_ttl(ttl)

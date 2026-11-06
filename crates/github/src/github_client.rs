@@ -7,6 +7,7 @@ use ureq::{Body, RequestBuilder};
 
 use crate::graphql_response::GraphQlResponse;
 use crate::next_page_url::next_page_url;
+use crate::other_pull_requests::others_search_queries;
 use crate::pull_request_revision::PullRequestRefs;
 use crate::pull_request_stack::StackResponse;
 use crate::search_issue::SearchIssue;
@@ -23,14 +24,14 @@ pub(crate) const API_BASE: &str = "https://api.github.com";
 pub(crate) const API_VERSION: &str = "2022-11-28";
 const USER_AGENT: &str = concat!("quarterdeck/", env!("CARGO_PKG_VERSION"));
 /// The JSON answers of the REST API.
-const JSON_MEDIA_TYPE: &str = "application/vnd.github+json";
+pub(crate) const JSON_MEDIA_TYPE: &str = "application/vnd.github+json";
 /// A comparison as one `git diff` text: every file, unlike the JSON
 /// comparison, which stops at 300.
 const DIFF_MEDIA_TYPE: &str = "application/vnd.github.diff";
 /// A blob's content as it is, not base64 in JSON.
 pub(crate) const RAW_MEDIA_TYPE: &str = "application/vnd.github.raw+json";
 /// GitHub's maximum page size.
-const PAGE_SIZE: &str = "100";
+pub(crate) const PAGE_SIZE: &str = "100";
 /// GitHub lists at most 3000 changed files per pull request: 30 pages of 100.
 const MAX_FILE_PAGES: usize = 30;
 /// The most changed files `pull_request_files` can return; a larger pull
@@ -46,7 +47,7 @@ pub(crate) struct HttpResponse {
     status: StatusCode,
     pub body: String,
     etag: Option<ETag>,
-    next_page: Option<String>,
+    pub next_page: Option<String>,
 }
 
 /// Blocking, authenticated GitHub REST client. Cheap to clone: clones share
@@ -90,14 +91,23 @@ impl GitHubClient {
         self.search_pull_requests(AUTHORED_QUERY)
     }
 
-    /// Where the pull requests of both lists sit in their stacks; standalone
-    /// ones are left out. One GraphQL request (the search API lacks stacks).
-    pub fn stack_memberships(&self) -> Result<Vec<ListedStackMembership>, GitHubError> {
+    /// Where the pull requests of the lists sit in their stacks: the
+    /// viewer's, those requesting the viewer's review, and others' in
+    /// `other_repositories` (the 100 most recently updated of the first ten
+    /// repositories); standalone ones are left out. One GraphQL request (the
+    /// search API lacks stacks).
+    pub fn stack_memberships(
+        &self,
+        other_repositories: &[RepoRef],
+    ) -> Result<Vec<ListedStackMembership>, GitHubError> {
+        let others = others_search_queries(other_repositories).into_iter().next();
         let data: StackMembershipData = self.graphql(
             STACK_MEMBERSHIP_QUERY,
             &serde_json::json!({
                 "authored": AUTHORED_QUERY,
                 "reviewRequested": REVIEW_REQUESTED_QUERY,
+                "includeOthers": others.is_some(),
+                "others": others.unwrap_or_default(),
             }),
         )?;
         Ok(data.into_memberships())
