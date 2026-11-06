@@ -16,26 +16,30 @@ const COLLAPSED_TYPE_CHIPS: usize = 8;
 const ROW_LABEL_WIDTH: f32 = 38.;
 
 impl PullRequestDetail {
-    /// The filter under the progress bar: the viewed switch (with the
-    /// button folding every folder beside it), the kind and type chip rows
-    /// with live counts, and a line saying what is shown.
+    /// The filter under the progress bar: the viewed switch, the kind and
+    /// type chip rows with live counts, and a line saying what is shown,
+    /// right above the tree, with the button folding every folder beside it.
     pub(super) fn render_filter_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
             .gap_1p5()
+            .child(self.render_hide_viewed_switch(cx))
+            .child(self.render_kind_row(cx))
+            .child(self.render_type_row(cx))
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .justify_between()
                     .gap_2()
-                    .child(self.render_hide_viewed_switch(cx))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(self.render_filter_summary(cx)),
+                    )
                     .children(self.render_fold_all_button(cx)),
             )
-            .child(self.render_kind_row(cx))
-            .child(self.render_type_row(cx))
-            .child(self.render_filter_summary(cx))
     }
 
     /// `☐ Hide viewed (12)`: hides viewed files on top of the chips.
