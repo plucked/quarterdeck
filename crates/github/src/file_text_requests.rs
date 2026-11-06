@@ -4,7 +4,7 @@ use crate::{FileText, FileTextLocation, GitHubClient, GitHubError, RepoRef};
 
 /// Files larger than this are not shown whole: their text would cost more
 /// memory and cache space than a review needs.
-pub const MAX_FILE_TEXT_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_FILE_TEXT_BYTES: u64 = 8 * 1024 * 1024;
 /// How far into a file git looks for a NUL byte to call it binary.
 const BINARY_PROBE_BYTES: usize = 8000;
 
@@ -12,8 +12,7 @@ impl GitHubClient {
     /// The whole text of one file. A blob by full SHA is one REST request
     /// (raw content, up to 100 MB); a path in a commit is one GraphQL
     /// request, plus the REST request when GitHub cut the text short.
-    /// Binary files and files over [`MAX_FILE_TEXT_BYTES`] are
-    /// [`GitHubError::NoFileText`].
+    /// Binary files and files over 8 MB are [`GitHubError::NoFileText`].
     pub fn file_text(
         &self,
         repo: &RepoRef,
@@ -31,7 +30,7 @@ impl GitHubClient {
                     }),
                 )?;
                 let blob = data.into_blob().ok_or(GitHubError::NoFileText {
-                    reason: "it is not in the commit",
+                    reason: "is not in the commit",
                 })?;
                 self.text_of_blob_node(repo, blob)
             }
@@ -43,12 +42,12 @@ impl GitHubClient {
     fn text_of_blob_node(&self, repo: &RepoRef, blob: BlobNode) -> Result<FileText, GitHubError> {
         // Only blobs have a SHA: a directory or submodule has no text.
         let blob_sha = blob.oid.ok_or(GitHubError::NoFileText {
-            reason: "it is not a file",
+            reason: "is not a file",
         })?;
         check_text_size(blob.byte_size)?;
         if blob.is_binary {
             return Err(GitHubError::NoFileText {
-                reason: "it is binary",
+                reason: "is binary",
             });
         }
         match (blob.text, blob.is_truncated) {
@@ -67,7 +66,7 @@ impl GitHubClient {
         check_text_size(u64::try_from(response.body.len()).unwrap_or(u64::MAX))?;
         if is_binary(&response.body) {
             return Err(GitHubError::NoFileText {
-                reason: "it is binary",
+                reason: "is binary",
             });
         }
         Ok(FileText {
@@ -82,7 +81,7 @@ fn check_text_size(byte_size: u64) -> Result<(), GitHubError> {
     match byte_size.cmp(&MAX_FILE_TEXT_BYTES) {
         std::cmp::Ordering::Less | std::cmp::Ordering::Equal => Ok(()),
         std::cmp::Ordering::Greater => Err(GitHubError::NoFileText {
-            reason: "it is larger than 8 MB",
+            reason: "is larger than 8 MB",
         }),
     }
 }

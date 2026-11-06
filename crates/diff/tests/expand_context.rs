@@ -63,6 +63,7 @@ fn reveals_lines_around_hunks() {
     revealed.reveal(1..4);
     revealed.reveal(7..9);
     revealed.reveal(23..31);
+    assert!(diff().is_patch_of(&source()));
     let expanded = diff().with_context(&source(), &revealed).unwrap();
 
     let headers: Vec<&str> = expanded

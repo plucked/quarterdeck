@@ -92,7 +92,6 @@ pub use download_progress::DownloadProgress;
 pub use etag::ETag;
 pub use file_text::FileText;
 pub use file_text_location::FileTextLocation;
-pub use file_text_requests::MAX_FILE_TEXT_BYTES;
 pub use github_client::{GitHubClient, MAX_LISTED_FILES};
 pub use github_error::GitHubError;
 pub use line_side::LineSide;

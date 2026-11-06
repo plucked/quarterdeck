@@ -116,9 +116,30 @@ impl LoadedFile {
         })
     }
 
+    /// This file, rebuilt from an older copy, showing the lines `shown`
+    /// (the copy on screen) reveals now: they may have grown, or the text
+    /// arrived, while it was rebuilt.
+    pub fn keeping_context_of(self, shown: &LoadedFile) -> Self {
+        let Some(context) = &shown.context else {
+            return self;
+        };
+        let is_same_context = self.context.as_ref().is_some_and(|built| {
+            Arc::ptr_eq(&built.source, &context.source) && built.revealed == context.revealed
+        });
+        if is_same_context {
+            return self;
+        }
+        self.with_context(context.clone()).unwrap_or(self)
+    }
+
     /// The file's text and revealed lines, once fetched.
     pub fn context(&self) -> Option<&FileContext> {
         self.context.as_ref()
+    }
+
+    /// The patch's diff alone, without revealed lines.
+    pub fn patch_diff(&self) -> &Arc<FileDiff> {
+        &self.patch_diff
     }
 
     /// The hidden lines at `place`, if the diff leaves any out there.
@@ -229,6 +250,15 @@ mod tests {
             expanded.gap_at(GapPlace::End).unwrap().line_count(),
             Some(2)
         );
+    }
+
+    /// A copy rebuilt from before a reveal takes the lines the shown copy reveals.
+    #[test]
+    fn rebuilt_copy_keeps_lines_revealed_meanwhile() {
+        let shown = loaded().with_context(context(1..3)).unwrap();
+        let rebuilt = loaded().keeping_context_of(&shown);
+        assert_eq!(rebuilt.diff.hunks()[0].lines.len(), 4);
+        assert!(loaded().keeping_context_of(&loaded()).context().is_none());
     }
 
     /// Rebuilding for other settings keeps the revealed lines.

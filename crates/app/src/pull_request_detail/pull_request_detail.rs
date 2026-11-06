@@ -1250,6 +1250,12 @@ impl PullRequestDetail {
                             .all(|(shown, built)| shown.fingerprint == built.fingerprint);
                     if is_same_files {
                         let anchor = detail.anchor_at_top();
+                        // Lines revealed while the rebuild ran stay revealed.
+                        let rebuilt = rebuilt
+                            .into_iter()
+                            .zip(detail.loaded_files())
+                            .map(|(built, shown)| built.keeping_context_of(shown))
+                            .collect();
                         detail.changed_files = Some(ChangedFiles::Loaded(rebuilt));
                         detail.rebuild_rows(anchor);
                         detail.highlight_syntax(cx);

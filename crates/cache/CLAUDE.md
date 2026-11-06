@@ -9,7 +9,7 @@
 | `pull_request_list_key` | `PullRequestListKey` newtype (`REVIEW_REQUESTED`) |
 | `window_placement` / `window_mode` / `display_uuid` | `WindowPlacement` (bounds relative to its display), `WindowMode` (SQL text mapping), `DisplayUuid` |
 | `file_set_storage` / `cached_file_set` / `file_set_revision` | changed files with the commits + PR ETag they were fetched for; `file_set` (marks used), `put_files`, `confirm_files` |
-| `file_text_storage` | `file_texts`: whole file contents by full blob SHA; `file_text(sha)` takes a full or abbreviated (≥ 7 hex) SHA (an abbreviation two blobs share finds none), `put_file_text` |
+| `file_text_storage` | `file_texts`: whole file contents by full blob SHA; `file_text(sha)` takes a full or abbreviated (≥ 7 hex) SHA as a key range `sha..sha+'g'` (an index seek; `LIKE` would scan), and an abbreviation two blobs share finds none; `put_file_text` |
 | `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` (then `VACUUM` and a WAL checkpoint, so the file shrinks) |
 | `cache_usage` / `cache_usage_storage` | `CacheUsage` (+ `CachedData`: entries, files, bytes) per kind (pull requests, PR files, comparisons), size on disk (pages + WAL) and free pages; `GitHubCache::usage` sums text bytes with `LENGTH(CAST(… AS BLOB))` |
 | `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
@@ -33,7 +33,7 @@
 - UI state tables hold one row (`id = 1`); `review_queue_view.selected_pr_id`, `viewed_files.pr_id` and `combined_viewed_files` have no foreign key (the PR may be gone or refetched; the user's state stays). Combined marks are keyed by repo + first and last layer number.
 - `pull_requests` carries the stack membership (`stack_*` columns, all NULL for a standalone PR). `put_pull_request`/`pull_request(id)` hold a stack layer opened outside any list.
 - `review_notes`: one table for both destinations; scope is `pr_id` or (repo, first, last layer numbers), enforced by CHECKs; anchor is (side, line, start_line) or `reply_to_thread`. GitHub drafts are deleted by the app as GitHub takes them.
-- Comparisons never go stale (commits are immutable); comparisons and stacks expire by `last_used_at` like file sets. So do file texts (content addressed by blob SHA, shared by every pull request and version with that content). `pr_files.sha` / `compare_files.sha` are NULL for rows cached before migration 18. `file_set_commits` reads a set's commits without its files.
+- Comparisons never go stale (commits are immutable); comparisons and stacks expire by `last_used_at` like file sets. So do file texts (content addressed by blob SHA, shared by every pull request and version with that content). `pr_files.sha` / `compare_files.sha`: migration 19 dropped the file sets and comparisons cached without them, so every cached file has its SHA (NULL only for deleted files and renames without an `index` line). `file_set_commits` reads a set's commits without its files.
 - A file set is current for the `updated_at` in its `pr_file_sets` row; an older one is still valid when the PR's head/base commits match (`confirm_files`). `last_used_at` moves on every read and write and drives expiry.
 - Every write is one statement or one transaction (the app relies on this for its poisoned-lock handling).
 - Tests use `open_in_memory` (test-only) or a temp dir, never the user's DB.

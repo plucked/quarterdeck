@@ -1,3 +1,5 @@
+use crate::parse_patch::TAB_AS_SPACES;
+
 /// A file's text after the change, split into lines the way patch lines
 /// are shown (tabs as four spaces, no line endings), numbered from 1. The
 /// lines around a diff's hunks come from here.
@@ -5,9 +7,6 @@
 pub struct SourceLines {
     lines: Vec<String>,
 }
-
-/// What a tab shows as, as in the patch's lines.
-const TAB_AS_SPACES: &str = "    ";
 
 impl SourceLines {
     /// Splits `text` into lines; a final line ending adds no empty line.

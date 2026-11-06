@@ -1,5 +1,14 @@
 use std::ops::Range;
 
+/// Where a gap sits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GapPlace {
+    /// Above hunk `n` (index into the diff's hunks); for hunk 0, the top of the file.
+    AboveHunk(usize),
+    /// Below the last hunk, to the end of the file.
+    End,
+}
+
 /// Unchanged lines a diff does not show: above a hunk (between it and the
 /// previous one, or the top of the file), or below the last hunk. The
 /// lines are numbered on the new side; the old side's numbers are the
@@ -14,15 +23,6 @@ pub struct ContextGap {
     pub new_end: Option<u32>,
     /// Old line number minus new line number, for every line of the gap.
     pub old_offset: i64,
-}
-
-/// Where a gap sits.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GapPlace {
-    /// Above hunk `n` (index into the diff's hunks); for hunk 0, the top of the file.
-    AboveHunk(usize),
-    /// Below the last hunk, to the end of the file.
-    End,
 }
 
 impl ContextGap {

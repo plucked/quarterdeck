@@ -59,7 +59,8 @@ impl DetailRowList {
     }
 
     /// The rows of one file: its header, then its lines (or a note), then
-    /// the strip closing its card.
+    /// the bar over hidden lines below its last hunk (when it has some),
+    /// then the strip closing its card.
     pub fn file_rows(
         file: usize,
         loaded: &LoadedFile,

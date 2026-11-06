@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::Context;
-use qd_diff::{GapPlace, RevealedLines};
+use qd_diff::{GapPlace, SourceLines};
 
 use super::changed_files::ChangedFiles;
 use super::fetch_file_text::{HeadCommit, fetch_file_text};
@@ -38,6 +38,7 @@ impl PullRequestDetail {
             return;
         }
         if self.context_loads().load_of(file) == Some(&FileTextLoad::Loading) {
+            self.context_loads_mut().reveal_when_loaded(file, lines);
             return;
         }
 
@@ -53,13 +54,24 @@ impl PullRequestDetail {
         };
         let repo = pull_request.repo.clone();
         let changed_file = loaded.file.clone();
+        let patch_diff = loaded.patch_diff().clone();
         let client = self.services().github.clone();
         let cache = self.services().cache.clone();
         let task = cx.spawn(async move |detail, cx| {
             let fetched_file = changed_file.clone();
             let fetched = cx
                 .background_executor()
-                .spawn(async move { fetch_file_text(client, &cache, &repo, &fetched_file, &head) })
+                .spawn(async move {
+                    let is_text_of_file = |source: &SourceLines| patch_diff.is_patch_of(source);
+                    fetch_file_text(
+                        client,
+                        &cache,
+                        &repo,
+                        &fetched_file,
+                        &head,
+                        &is_text_of_file,
+                    )
+                })
                 .await;
             detail
                 .update(cx, |detail, cx| {
@@ -73,9 +85,7 @@ impl PullRequestDetail {
                     }
                     match fetched {
                         Ok(source) => {
-                            detail.context_loads_mut().finish(file);
-                            let mut revealed = RevealedLines::default();
-                            revealed.reveal(lines);
+                            let revealed = detail.context_loads_mut().finish(file);
                             let context = FileContext {
                                 source: Arc::new(source),
                                 revealed,
@@ -90,7 +100,7 @@ impl PullRequestDetail {
                 })
                 .ok();
         });
-        self.context_loads_mut().start(file, task);
+        self.context_loads_mut().start(file, lines, task);
         cx.notify();
     }
 

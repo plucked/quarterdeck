@@ -1,7 +1,7 @@
 use crate::{DiffHunk, DiffLine, DiffLineKind, LineOrigin};
 
 /// What a tab shows as; tabs are expanded so highlight ranges match what is drawn.
-const TAB_AS_SPACES: &str = "    ";
+pub(crate) const TAB_AS_SPACES: &str = "    ";
 
 /// Parses the hunks of a unified patch as GitHub sends it per file (no
 /// `---`/`+++` header): each `@@ -a,b +c,d @@` line starts a hunk, and its

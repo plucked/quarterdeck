@@ -19,7 +19,9 @@ pub enum HeadCommit {
 /// The text of `file` after the change, asking GitHub at most once per
 /// blob: from the cache by the file's blob SHA (content addressed, so never
 /// stale), else fetched (one request: by full SHA, or at the file's path in
-/// `head`) and cached under the SHA GitHub reports.
+/// `head`) and cached under the SHA GitHub reports. A cached text that
+/// `is_text_of_file` rejects (another blob sharing an abbreviated SHA) is
+/// fetched instead.
 ///
 /// Blocking: runs on the background executor; no lock is held during the request.
 pub fn fetch_file_text(
@@ -28,12 +30,14 @@ pub fn fetch_file_text(
     repo: &RepoRef,
     file: &PullRequestFile,
     head: &HeadCommit,
+    is_text_of_file: &dyn Fn(&SourceLines) -> bool,
 ) -> Result<SourceLines> {
     // A blob read before needs no request; an abbreviated SHA finds it too.
     if let Some(blob_sha) = &file.sha {
         let cached = cache.lock().file_text(blob_sha)?;
-        if let Some(cached) = cached {
-            return Ok(SourceLines::parse(&cached.text));
+        let source = cached.map(|cached| SourceLines::parse(&cached.text));
+        if let Some(source) = source.filter(|source| is_text_of_file(source)) {
+            return Ok(source);
         }
     }
 
@@ -49,7 +53,11 @@ pub fn fetch_file_text(
         },
     };
     let fetched = client.file_text(repo, &location)?;
-    cache.lock().put_file_text(&fetched)?;
+
+    // A failed write only costs a request next time; the text is here now.
+    if let Err(error) = cache.lock().put_file_text(&fetched) {
+        eprintln!("cannot cache the text of {}: {error:#}", file.filename);
+    }
     Ok(SourceLines::parse(&fetched.text))
 }
 

@@ -24,16 +24,16 @@ impl RevealedLines {
         self.ranges.splice(first..last, [merged]);
     }
 
-    /// Whether line `number` is revealed.
-    pub fn contains(&self, number: u32) -> bool {
-        let index = self.ranges.partition_point(|range| range.end <= number);
-        self.ranges
-            .get(index)
-            .is_some_and(|range| range.contains(&number))
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.ranges.is_empty()
+    /// The revealed lines inside `lines`, as ranges in order.
+    pub fn within(&self, lines: Range<u32>) -> impl Iterator<Item = Range<u32>> + '_ {
+        // Skip the ranges that end before `lines`; stop at the first starting after it.
+        let first = self
+            .ranges
+            .partition_point(|range| range.end <= lines.start);
+        self.ranges[first..]
+            .iter()
+            .take_while(move |range| range.start < lines.end)
+            .map(move |range| range.start.max(lines.start)..range.end.min(lines.end))
     }
 }
 
@@ -55,13 +55,15 @@ mod tests {
         assert_eq!(revealed.ranges, vec![5..40_u32]);
     }
 
-    /// Only lines inside a range are revealed.
+    /// Only the revealed parts inside a span come back, clipped to it.
     #[test]
-    fn contains_lines_inside_ranges() {
+    fn lists_revealed_ranges_within_a_span() {
         let mut revealed = RevealedLines::default();
         revealed.reveal(10..12);
-        revealed.reveal(20..21);
-        let shown: Vec<u32> = (0..25).filter(|line| revealed.contains(*line)).collect();
-        assert_eq!(shown, [10, 11, 20]);
+        revealed.reveal(20..30);
+        revealed.reveal(40..41);
+        let within: Vec<_> = revealed.within(11..25).collect();
+        assert_eq!(within, [11..12, 20..25]);
+        assert_eq!(revealed.within(12..20).count(), 0);
     }
 }

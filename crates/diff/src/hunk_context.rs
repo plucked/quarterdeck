@@ -41,6 +41,16 @@ impl FileDiff {
         gaps
     }
 
+    /// Whether `source` is the text the patch changes the file into: every
+    /// line of the hunks' new side reads the same there.
+    pub fn is_patch_of(&self, source: &SourceLines) -> bool {
+        self.hunks()
+            .iter()
+            .flat_map(|hunk| &hunk.lines)
+            .filter_map(|line| Some((line.new_number?, line.text.as_str())))
+            .all(|(number, text)| source.line(number) == Some(text))
+    }
+
     /// This diff with the `revealed` lines of `source` (the file's text
     /// after the change) shown as unchanged lines around its hunks. Hunks
     /// that the revealed lines join become one, under a header worked out
@@ -48,13 +58,7 @@ impl FileDiff {
     /// a line of the patch's new side differs from it.
     pub fn with_context(&self, source: &SourceLines, revealed: &RevealedLines) -> Option<Self> {
         // The text must be what the patch leads to, or its lines would sit beside the wrong code.
-        let matches_patch = self
-            .hunks()
-            .iter()
-            .flat_map(|hunk| &hunk.lines)
-            .filter_map(|line| Some((line.new_number?, line.text.as_str())))
-            .all(|(number, text)| source.line(number) == Some(text));
-        if !matches_patch {
+        if !self.is_patch_of(source) {
             return None;
         }
 
@@ -92,31 +96,43 @@ struct OpenHunk {
 }
 
 impl HunkBuilder {
-    /// Adds the gap's revealed lines, and ends the open hunk at each hidden one.
+    /// Adds the gap's revealed lines, and ends the open hunk wherever lines
+    /// stay hidden. Only the revealed runs are walked, so a long gap with
+    /// little revealed costs little.
     fn add_gap(&mut self, gap: &ContextGap, source: &SourceLines, revealed: &RevealedLines) {
         let end = gap
             .new_end
             .unwrap_or(u32::MAX)
             .min(source.len().saturating_add(1));
-        for number in gap.new_start..end {
-            let old_number = u32::try_from(i64::from(number) + gap.old_offset).ok();
-            let shown = revealed
-                .contains(number)
-                .then(|| source.line(number))
-                .flatten()
-                .zip(old_number);
-            let Some((text, old_number)) = shown else {
+        let mut next_line = gap.new_start;
+        for run in revealed.within(gap.new_start..end) {
+            // Hidden lines before this run end the hunk above it.
+            if run.start > next_line {
                 self.close();
-                continue;
-            };
-            self.open_hunk().lines.push(DiffLine {
-                kind: DiffLineKind::Context,
-                old_number: Some(old_number),
-                new_number: Some(number),
-                text: text.to_owned(),
-                changed_ranges: Vec::new(),
-                origin: LineOrigin::FileText,
-            });
+            }
+            next_line = run.end;
+
+            // The run's lines, numbered on the old side by the gap's offset.
+            for number in run {
+                let old_number = u32::try_from(i64::from(number) + gap.old_offset).ok();
+                let Some((text, old_number)) = source.line(number).zip(old_number) else {
+                    self.close();
+                    continue;
+                };
+                self.open_hunk().lines.push(DiffLine {
+                    kind: DiffLineKind::Context,
+                    old_number: Some(old_number),
+                    new_number: Some(number),
+                    text: text.to_owned(),
+                    changed_ranges: Vec::new(),
+                    origin: LineOrigin::FileText,
+                });
+            }
+        }
+
+        // Hidden lines after the last run end the open hunk too.
+        if next_line < end {
+            self.close();
         }
     }
 

@@ -361,6 +361,14 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         last_used_at  INTEGER NOT NULL
     );
 ",
+    r"
+    -- Changed files cached without blob SHAs keep none while their commits
+    -- stay, so their texts could never be found in file_texts. Drop them
+    -- (their files go too, ON DELETE CASCADE); the next view fetches them
+    -- with SHAs. Viewed marks and notes are kept.
+    DELETE FROM pr_file_sets;
+    DELETE FROM compare_file_sets;
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

@@ -9,6 +9,9 @@ use crate::unix_now::unix_now;
 const FULL_SHA_LENGTH: usize = 40;
 /// The shortest abbreviated SHA looked up: git abbreviates to at least 7.
 const MIN_ABBREVIATED_SHA_LENGTH: usize = 7;
+/// Sorts after every lowercase hex digit, so `prefix..prefix + this` holds
+/// exactly the SHAs starting with `prefix`.
+const PAST_HEX_DIGITS: char = 'g';
 
 impl GitHubCache {
     /// The cached content of the blob `blob_sha`, and marks it used now.
@@ -16,19 +19,22 @@ impl GitHubCache {
     /// one cached blob starting with it, and none when several do. `None`
     /// when not cached. A blob's content never changes, so a hit is current.
     pub fn file_text(&self, blob_sha: &str) -> Result<Option<FileText>> {
-        // Hex digits only, so the prefix pattern below holds no wildcards.
+        // Hex digits only, so the prefix range below holds just SHAs.
         let is_hex = blob_sha.bytes().all(|byte| byte.is_ascii_hexdigit());
         let is_usable = (MIN_ABBREVIATED_SHA_LENGTH..=FULL_SHA_LENGTH).contains(&blob_sha.len());
         if !is_hex || !is_usable {
             return Ok(None);
         }
 
-        // Find the blob; two matches for a prefix are ambiguous, so neither counts.
+        // Find the blob with a range on the key (an index seek, unlike
+        // `LIKE`); two matches for a prefix are ambiguous, so neither counts.
+        let prefix = blob_sha.to_ascii_lowercase();
+        let past_prefix = format!("{prefix}{PAST_HEX_DIGITS}");
         let mut statement = self.connection().prepare(
-            "SELECT blob_sha, text FROM file_texts WHERE blob_sha LIKE ?1 || '%' LIMIT 2",
+            "SELECT blob_sha, text FROM file_texts WHERE blob_sha >= ?1 AND blob_sha < ?2 LIMIT 2",
         )?;
         let mut matches: Vec<FileText> = statement
-            .query_map([blob_sha.to_ascii_lowercase()], |row| {
+            .query_map(params![prefix, past_prefix], |row| {
                 Ok(FileText {
                     blob_sha: row.get(0)?,
                     text: row.get(1)?,

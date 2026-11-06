@@ -42,29 +42,25 @@ pub fn render_gap_bar(
         .whitespace_nowrap()
         .overflow_hidden()
         .text_color(theme::subtle());
-    let buttons = || {
-        gap_buttons(gap)
-            .into_iter()
-            .enumerate()
-            .map(|(position, button)| {
-                render_gap_button(row * MAX_GAP_BUTTONS + position, button, on_click)
-            })
+    // While loading, a note stands in for the buttons; a failure shows after them.
+    let (note, buttons, failure) = match load {
+        Some(FileTextLoad::Loading) => (Some("Loading the file…"), Vec::new(), None),
+        Some(FileTextLoad::Failed(message)) => (None, gap_buttons(gap), Some(message)),
+        None => (None, gap_buttons(gap), None),
     };
-    let bar = match load {
-        Some(FileTextLoad::Loading) => bar.child(div().px_1().child("Loading the file…")),
-        Some(FileTextLoad::Failed(message)) => {
-            bar.children(buttons())
-                .child(
-                    div()
-                        .px_1()
-                        .text_color(theme::danger())
-                        .child(SharedString::from(format!(
-                            "Can't show the lines: {message}"
-                        ))),
-                )
-        }
-        None => bar.children(buttons()),
-    };
+    let bar = bar
+        .children(note.map(|note| div().px_1().child(note)))
+        .children(buttons.into_iter().enumerate().map(|(position, button)| {
+            render_gap_button(row * MAX_GAP_BUTTONS + position, button, on_click)
+        }))
+        .children(failure.map(|message| {
+            div()
+                .px_1()
+                .text_color(theme::danger())
+                .child(SharedString::from(format!(
+                    "Can't show the lines: {message}"
+                )))
+        }));
     frame_file_row(bar.children(header.map(|header| div().pl_2().child(header.to_owned()))))
 }
 
