@@ -6,11 +6,11 @@
 | `github_error` | `GitHubError` |
 | `resolve_token` / `resolved_token` / `token_source` | token lookup → `ResolvedToken` with its `TokenSource`: `GITHUB_TOKEN`, then the Keychain, then `gh auth token` (`gh` on `PATH`, `/opt/homebrew/bin/gh`, `/usr/local/bin/gh`: a Finder launch has neither Homebrew folder on `PATH`) |
 | `keychain_token` | the token saved from the app's settings, a generic password in the login Keychain (service `de.plucked.quarterdeck`, account `github-token`, `security-framework`): `stored_token`, `store_token`, `delete_stored_token`; `GitHubError::Keychain` |
-| `viewer_request` | `GitHubClient::viewer()`: `GET /user`, which checks a pasted token |
+| `viewer_request` | `GitHubClient::viewer()`: `GET /user`, which checks a pasted token; `viewer_login()` asks once and remembers (shared by clones) |
 | `repo_ref` | `RepoRef` (owner/name) |
 | `user` | `User` |
 | `label` | `Label` (name, color), on `PullRequest::labels` from the search results |
-| `other_pull_requests` | `GitHubClient::other_pull_requests(repositories)`: `is:pr is:open archived:false -author:@me` + `repo:` qualifiers, 10 repositories per search, up to 5 pages of 100 each, merged newest first |
+| `other_pull_requests` | `GitHubClient::other_pull_requests(repo, known, viewer_login)`: the issues API (`GET /repos/{o}/{r}/issues`, issue ids like the search results; core budget): nothing known → every open item (`SyncMode::Full`), else changes since the newest known `updated_at` (`SyncMode::Since`, `state=all`) merged into `known`; pull requests only (`pull_request` present), open, not the viewer's; up to 20 pages of 100; `others_search_queries` for the stack membership query |
 | `repository_request` | `GitHubClient::repository(repo)`: `GET /repos/{o}/{r}`, the repository as GitHub spells it (404 when missing or invisible to the token); `RepoRef::parse_input` reads `owner/name` or a GitHub URL |
 | `pull_request` | `PullRequest`, normalized |
 | `pull_request_file` | `PullRequestFile` (changed file + patch) |
@@ -36,6 +36,7 @@
 - Types derive `Deserialize` only where they are decoded from a GitHub response (`User`, `PullRequestFile`, `SearchIssue`); none derive `Serialize`. `qd-cache` stores every field in its own column, so a new field also needs a cache migration.
 - `pull_request_files` follows `Link: rel="next"` pages (100 per page, at most 30 pages = GitHub's 3000-file cap, `MAX_LISTED_FILES`). Past it, `compare_files(base, head)` gets every file: the compare `.diff` has no file limit, while a pull request's own `.diff` answers 406 past 300 files. The search query reads one page (100 PRs).
 - Conditional requests: `pull_request_revision(…, etag)` sends `If-None-Match`; `304` → `ConditionalResponse::NotModified`, which GitHub does not count against the rate limit. `pull_request_stack(…, etag)` works the same. The search API sends no ETag (`Cache-Control: no-cache`), so each list is always one search request (search budget: 30/min).
+- Errors: `GitHubError::Api` shows the `message` of GitHub's JSON error body; a 403/429 with `retry-after` or naming the secondary rate limit (a burst of requests) is `GitHubError::SlowDown`.
 - `ApiUsage` (shared by clones) counts requests and 304s and keeps the last `x-ratelimit-*` budget per resource (core, search, GraphQL). A 403/429 with `x-ratelimit-remaining: 0` becomes `GitHubError::RateLimited { resource, resets_at }`.
 - Lists: `authored()` and `review_requested()` (REST search, issue ids); `pull_request_by_number` uses the issues API so ids match the search ids. `stack_memberships(other_repositories)` is one GraphQL POST with the search texts as variables (1 point); the others' search (the first 10 repositories, 100 newest) is included only when repositories are watched (`@include(if: $includeOthers)`).
 - `compare_files(base, head)` asks for the diff media type: one request for every file (the JSON compare stops at 300). Measured: 25-layer stack, 1692 files, 3 MB in 1.3 s; parsing takes 19 ms. Bodies are read in 64 KB chunks, reporting `DownloadProgress` (gzip makes received bytes exceed `Content-Length`).

@@ -14,8 +14,13 @@ pub enum GitHubError {
         resource: &'static str,
         resets_at: u64,
     },
-    /// GitHub answered with a non-success HTTP status.
-    #[error("GitHub API returned {status}: {body}")]
+    /// GitHub refused a burst of requests (its secondary rate limit) and
+    /// asks to wait, `retry_after_seconds` when it says how long.
+    #[error("GitHub asked Quarterdeck to slow down; it tries again {}", retry_wording(*retry_after_seconds))]
+    SlowDown { retry_after_seconds: Option<u64> },
+    /// GitHub answered with a non-success HTTP status; `body` as sent, shown
+    /// by its `message` when it is GitHub's JSON error.
+    #[error("GitHub API returned {status}: {}", api_message(body))]
     Api { status: u16, body: String },
     /// The request did not complete (DNS, TLS, connection, body read).
     #[error("http error: {0}")]
@@ -35,4 +40,40 @@ fn minutes_until(unix_seconds: u64) -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs());
     unix_seconds.saturating_sub(now).div_ceil(60)
+}
+
+/// When the next attempt comes, after a secondary rate limit.
+fn retry_wording(retry_after_seconds: Option<u64>) -> String {
+    match retry_after_seconds {
+        Some(seconds) => format!("after {} min", seconds.div_ceil(60).max(1)),
+        None => "with the next refresh".to_owned(),
+    }
+}
+
+/// The `message` of GitHub's JSON error body, else the body as sent.
+fn api_message(body: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|json| json.get("message")?.as_str().map(str::to_owned))
+        .unwrap_or_else(|| body.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An API error shows GitHub's message, not its JSON.
+    #[test]
+    fn shows_the_message_of_a_json_error() {
+        let error = GitHubError::Api {
+            status: 404,
+            body: r#"{"message": "Not Found", "documentation_url": "https://docs"}"#.to_owned(),
+        };
+        assert_eq!(error.to_string(), "GitHub API returned 404: Not Found");
+        let error = GitHubError::Api {
+            status: 500,
+            body: "oops".to_owned(),
+        };
+        assert_eq!(error.to_string(), "GitHub API returned 500: oops");
+    }
 }

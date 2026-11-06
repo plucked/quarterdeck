@@ -974,18 +974,16 @@ fn known_memberships(lists: &QueueLists) -> HashMap<(RepoRef, u64), StackMembers
         .collect()
 }
 
-/// Fetches the lists (one search request each; others' one per ten
-/// watched repositories and page) and their stacks (one GraphQL request),
-/// filling in each pull request's membership. When the stacks or others'
-/// pull requests cannot be read, what was known before is kept.
+/// Fetches the lists (one search request each for the viewer's own and
+/// review requests; others' through the issues API, usually one request
+/// per watched repository) and their stacks (one GraphQL request), filling
+/// in each pull request's membership. When the stacks or others' pull
+/// requests cannot be read, what was known before is kept.
 ///
 /// Blocking: runs on the background executor.
 fn fetch_lists(client: &GitHubClient, input: RefreshInput) -> anyhow::Result<RefreshedLists> {
     // Others' pull requests may fail on their own (a watched repository gone).
-    let (others, others_error) = match fetch_others(client, &input.watched) {
-        Ok(others) => (others, None),
-        Err(error) => (input.known_others, Some(format!("{error:#}"))),
-    };
+    let (others, others_error) = fetch_others(client, &input.watched, &input.known_others);
     let mut lists = QueueLists {
         authored: client.authored()?,
         review_requested: client.review_requested()?,
@@ -1020,15 +1018,47 @@ fn fetch_lists(client: &GitHubClient, input: RefreshInput) -> anyhow::Result<Ref
     })
 }
 
-/// Others' open pull requests in `watched`; none without watched repositories.
+/// Others' open pull requests in `watched`, each repository brought up to
+/// date from what `known` has of it, most recently updated first; a
+/// repository that fails keeps what was known of it, and the first failure
+/// is returned to show.
 fn fetch_others(
     client: &GitHubClient,
     watched: &[RepoRef],
-) -> Result<Vec<PullRequest>, qd_github::GitHubError> {
-    match watched {
-        [] => Ok(Vec::new()),
-        _ => client.other_pull_requests(watched),
+    known: &[PullRequest],
+) -> (Vec<PullRequest>, Option<String>) {
+    let known_of = |repo: &RepoRef| -> Vec<PullRequest> {
+        known
+            .iter()
+            .filter(|pull_request| &pull_request.repo == repo)
+            .cloned()
+            .collect()
+    };
+    if watched.is_empty() {
+        return (Vec::new(), None);
     }
+
+    // Whose pull requests to leave out: the viewer's (asked once per session).
+    let viewer_login = match client.viewer_login() {
+        Ok(login) => login,
+        Err(error) => return (known.to_vec(), Some(format!("{error:#}"))),
+    };
+
+    // Each repository on its own, so one failure keeps the others current.
+    let mut others = Vec::new();
+    let mut first_error = None;
+    for repo in watched {
+        let known = known_of(repo);
+        match client.other_pull_requests(repo, &known, &viewer_login) {
+            Ok(pull_requests) => others.extend(pull_requests),
+            Err(error) => {
+                first_error.get_or_insert_with(|| format!("{}: {error:#}", repo.full_name()));
+                others.extend(known);
+            }
+        }
+    }
+    others.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    (others, first_error)
 }
 
 /// Fetches a stack layer that is in no list, with the membership the stack

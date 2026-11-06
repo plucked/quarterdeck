@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::sync::{Arc, OnceLock};
 
 use serde::de::DeserializeOwned;
 use ureq::Agent;
@@ -57,6 +58,8 @@ pub struct GitHubClient {
     agent: Agent,
     token: String,
     usage: ApiUsage,
+    /// The viewer's login once asked for; shared by clones, so it is asked once.
+    viewer_login: Arc<OnceLock<String>>,
 }
 
 impl GitHubClient {
@@ -71,7 +74,13 @@ impl GitHubClient {
             agent,
             token: token.into(),
             usage: ApiUsage::default(),
+            viewer_login: Arc::default(),
         }
+    }
+
+    /// The login known for the token, once [`Self::viewer_login`] asked.
+    pub(crate) fn known_viewer_login(&self) -> &OnceLock<String> {
+        &self.viewer_login
     }
 
     /// The requests this client (and its clones) sent and the budgets left.
@@ -391,6 +400,12 @@ impl GitHubClient {
         }
         let body = String::from_utf8_lossy(&bytes).into_owned();
 
+        if is_secondary_rate_limited(status, &headers, &body) {
+            return Err(GitHubError::SlowDown {
+                retry_after_seconds: header_text(&headers, "retry-after")
+                    .and_then(|seconds| seconds.parse().ok()),
+            });
+        }
         if is_rate_limited(status, &headers) {
             let (resource, resets_at) = budget.map_or(("API", 0), |(resource, limit)| {
                 (resource.name(), limit.resets_at)
@@ -441,6 +456,14 @@ fn rate_limit_of(headers: &HeaderMap) -> Option<(RateLimitResource, RateLimit)> 
 fn is_rate_limited(status: StatusCode, headers: &HeaderMap) -> bool {
     let is_refused = status == StatusCode::FORBIDDEN || status == StatusCode::TOO_MANY_REQUESTS;
     is_refused && header_text(headers, "x-ratelimit-remaining").as_deref() == Some("0")
+}
+
+/// Whether GitHub refused a burst of requests (its secondary rate limit),
+/// which it says with a 403 or 429 carrying `retry-after` or naming it.
+fn is_secondary_rate_limited(status: StatusCode, headers: &HeaderMap, body: &str) -> bool {
+    let is_refused = status == StatusCode::FORBIDDEN || status == StatusCode::TOO_MANY_REQUESTS;
+    is_refused
+        && (header_text(headers, "retry-after").is_some() || body.contains("secondary rate limit"))
 }
 
 /// A header's value as text, when present and valid.
