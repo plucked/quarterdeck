@@ -14,6 +14,10 @@ const DEVELOPMENT_APP_DIRECTORY: &str = "Quarterdeck Dev";
 /// Where the app kept its data before it was named Quarterdeck.
 const FORMER_APP_DIRECTORY: &str = "quick-check";
 const DATABASE_FILE: &str = "cache.sqlite";
+/// Where the development database is copied to before it is moved into place.
+const SEEDING_FILE: &str = "cache.sqlite.seeding";
+/// How long seeding waits for a release app that holds the database busy.
+const SEED_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// `~/Library/Application Support/Quarterdeck/cache.sqlite` on macOS
 /// (`Quarterdeck Dev/` in a debug build): the one database file every store
@@ -57,11 +61,18 @@ fn seed_development_directory(data_directory: &Path) -> Result<()> {
     if target.exists() || !release.exists() {
         return Ok(());
     }
+
+    // Copy into a temporary file, waiting a while for a busy release app,
+    // then move it into place: an interrupted copy never counts as the seed.
     std::fs::create_dir_all(&development)?;
+    let partial = development.join(SEEDING_FILE);
+    std::fs::remove_file(&partial).ok();
     let source = Connection::open(&release)?;
+    source.busy_timeout(SEED_BUSY_TIMEOUT)?;
     source
-        .execute("VACUUM INTO ?1", [target.to_string_lossy()])
-        .with_context(|| format!("copying {} to {}", release.display(), target.display()))?;
+        .execute("VACUUM INTO ?1", [partial.to_string_lossy()])
+        .with_context(|| format!("copying {} to {}", release.display(), partial.display()))?;
+    std::fs::rename(&partial, &target)?;
     Ok(())
 }
 

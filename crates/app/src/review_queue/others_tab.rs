@@ -4,7 +4,9 @@ use gpui::SharedString;
 use qd_cache::{OthersFilter, RepositoryOthersFilter};
 use qd_github::{PullRequest, RepoRef};
 
-use super::others_filtering::{FilterContext, OthersFacet, passes};
+use super::chip_marks::ChipMarks;
+use super::open_filter_chips::OpenFilterChips;
+use super::others_filtering::{FilterContext, OthersFacet, chip_counts, passes};
 use super::queue_lists::QueueLists;
 use super::queue_row::{OthersGroup, OthersRepository};
 
@@ -21,10 +23,18 @@ pub struct OthersTab {
     shown: Vec<PullRequest>,
     /// The repository whose filter is open under its header.
     open_filter: Option<RepoRef>,
+    /// The chips of that filter, worked out with what passes.
+    open_filter_chips: Option<OpenFilterChips>,
+    /// Ids of the pull requests in the Review tab, for Hide review requests.
+    review_requested: HashSet<u64>,
     /// The chip rows showing all their chips, not just the most common.
     expanded_chip_rows: HashSet<(RepoRef, OthersFacet)>,
     /// Why others' pull requests could not be refreshed, until they can.
     error: Option<SharedString>,
+    /// Where each repository's last sync ended this session (GitHub's
+    /// `updated_at` of the newest item read), so the next asks only for
+    /// changes since.
+    synced_until: HashMap<RepoRef, String>,
 }
 
 impl OthersTab {
@@ -79,6 +89,14 @@ impl OthersTab {
         filter.clone()
     }
 
+    pub fn synced_until(&self) -> &HashMap<RepoRef, String> {
+        &self.synced_until
+    }
+
+    pub fn set_synced_until(&mut self, synced_until: HashMap<RepoRef, String>) {
+        self.synced_until = synced_until;
+    }
+
     pub fn error(&self) -> Option<&SharedString> {
         self.error.as_ref()
     }
@@ -87,7 +105,13 @@ impl OthersTab {
         self.error = error.map(SharedString::from);
     }
 
-    /// Opens `repo`'s filter (closing another one), or closes it.
+    /// The chips of the open filter, once worked out by [`Self::update_shown`].
+    pub fn open_filter_chips(&self) -> Option<&OpenFilterChips> {
+        self.open_filter_chips.as_ref()
+    }
+
+    /// Opens `repo`'s filter (closing another one), or closes it; its chips
+    /// are worked out by the next [`Self::update_shown`].
     pub fn toggle_filter_panel(&mut self, repo: &RepoRef) {
         self.open_filter = match &self.open_filter {
             Some(open) if open == repo => None,
@@ -108,12 +132,12 @@ impl OthersTab {
         }
     }
 
-    /// Works out which of `lists.others` pass their repository's filter;
-    /// only watched repositories count.
+    /// Works out which of `lists.others` pass their repository's filter
+    /// (only watched repositories count), and the chips of the open filter.
     pub fn update_shown(&mut self, lists: &QueueLists, now: i64) {
-        let review_requested = review_requested_ids(lists);
+        self.review_requested = review_requested_ids(lists);
         let context = FilterContext {
-            review_requested: &review_requested,
+            review_requested: &self.review_requested,
             now,
         };
         self.shown = lists
@@ -128,6 +152,21 @@ impl OthersTab {
             })
             .cloned()
             .collect();
+
+        // The open filter's chips, counted over its repository's pull requests.
+        self.open_filter_chips = self.open_filter.as_ref().map(|repo| {
+            let filter = self.filters.get(repo).cloned().unwrap_or_default();
+            let pull_requests: Vec<&PullRequest> = lists
+                .others
+                .iter()
+                .filter(|pull_request| &pull_request.repo == repo)
+                .collect();
+            OpenFilterChips {
+                labels: chip_counts(&filter, OthersFacet::Labels, &pull_requests, &context),
+                authors: chip_counts(&filter, OthersFacet::Authors, &pull_requests, &context),
+                marks: ChipMarks::of(&pull_requests),
+            }
+        });
     }
 
     /// The repositories in the order they show: those with open pull

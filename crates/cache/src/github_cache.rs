@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
@@ -104,10 +105,38 @@ impl GitHubCache {
         ))?;
         let rows = statement.query_map([list_key.as_str()], pull_request_from_row)?;
         let mut pull_requests = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+        // Every member's labels in one query, not one per pull request.
+        let mut labels = self.labels_of_list(list_key)?;
         for pull_request in &mut pull_requests {
-            pull_request.labels = self.labels_of(pull_request.id)?;
+            pull_request.labels = labels.remove(&pull_request.id).unwrap_or_default();
         }
         Ok(pull_requests)
+    }
+
+    /// The stored labels of every pull request in a list, by pull request
+    /// id, each in GitHub's order.
+    fn labels_of_list(&self, list_key: PullRequestListKey) -> Result<HashMap<u64, Vec<Label>>> {
+        let mut statement = self.connection.prepare_cached(
+            "SELECT b.pr_id, b.name, b.color FROM pr_labels b
+             JOIN pr_lists l ON l.pr_id = b.pr_id
+             WHERE l.list_key = ?1 ORDER BY b.pr_id, b.position",
+        )?;
+        let rows = statement.query_map([list_key.as_str()], |row| {
+            Ok((
+                read_u64(row, 0)?,
+                Label {
+                    name: row.get(1)?,
+                    color: row.get(2)?,
+                },
+            ))
+        })?;
+        let mut labels: HashMap<u64, Vec<Label>> = HashMap::new();
+        for row in rows {
+            let (id, label) = row?;
+            labels.entry(id).or_default().push(label);
+        }
+        Ok(labels)
     }
 
     /// The stored labels of pull request `id`, in GitHub's order.
@@ -297,6 +326,24 @@ mod tests {
     }
 
     /// Every field of a pull request survives a list replacement and read.
+    /// A list's pull requests come back with their own labels, in order.
+    #[test]
+    fn list_reads_each_pull_requests_labels() {
+        let mut cache = GitHubCache::open_in_memory().unwrap();
+        let label = |name: &str| Label {
+            name: name.into(),
+            color: "ffffff".into(),
+        };
+        let mut first = pull_request(1, "t");
+        first.labels = vec![label("bug"), label("ui")];
+        let second = pull_request(2, "t");
+        cache.replace_list(LIST, &[first, second]).unwrap();
+
+        let listed = cache.list(LIST).unwrap();
+        assert_eq!(listed[0].labels, [label("bug"), label("ui")]);
+        assert_eq!(listed[1].labels, Vec::<Label>::new());
+    }
+
     #[test]
     fn pull_request_fields_round_trip() {
         let mut cache = GitHubCache::open_in_memory().unwrap();

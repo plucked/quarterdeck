@@ -14,6 +14,8 @@ impl ReviewQueue {
     /// closes it; a folded repository unfolds so the filter shows.
     pub(super) fn toggle_others_filter_panel(&mut self, repo: &RepoRef, cx: &mut Context<Self>) {
         self.others_tab_mut().toggle_filter_panel(repo);
+        // The opened filter's chips are counted now, not while drawing.
+        self.update_others_shown();
         if self.is_repository_collapsed(repo) {
             self.toggle_repository_group(repo, cx);
             return;

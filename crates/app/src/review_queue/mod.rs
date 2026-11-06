@@ -20,13 +20,17 @@
 //! - `others_tab_actions.rs`: the queue's Others actions: open a filter, change it, follow the watched repositories.
 //! - `others_filtering.rs`: whether a pull request passes an Others filter, and the chips' counts.
 //! - `others_filter_rendering.rs`: renders a repository's Others filter under its header.
+//! - `open_filter_chips.rs`: `OpenFilterChips`, the open Others filter's chip rows, counted ahead of drawing.
+//! - `chip_marks.rs`: `ChipMarks`, what an Others chip shows before its name (an avatar, a label color).
 //! - `queue_row.rs`: `QueueRow`, a sidebar row (repository header, pull request, stack header, stack layer), and grouping.
 //! - `collapsed_groups.rs`: `CollapsedGroups`, the repositories and stacks folded in the sidebar.
 //! - `stack_key.rs`: `StackKey`, a stack's repository and number.
 //! - `selection_origin.rs`: `SelectionOrigin`, picked from a list or opened from a stack.
 
 mod activation_refresh;
+mod chip_marks;
 mod collapsed_groups;
+mod open_filter_chips;
 mod others_filter_rendering;
 mod others_filtering;
 mod others_tab;

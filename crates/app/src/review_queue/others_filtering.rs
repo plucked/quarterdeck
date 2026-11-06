@@ -37,12 +37,17 @@ pub fn passes(filter: &OthersFilter, pull_request: &PullRequest, context: &Filte
 pub fn chip_counts(
     filter: &OthersFilter,
     facet: OthersFacet,
-    pull_requests: &[PullRequest],
+    pull_requests: &[&PullRequest],
     context: &FilterContext,
 ) -> Vec<FacetCount<String>> {
+    let chips = match facet {
+        OthersFacet::Labels => &filter.labels,
+        OthersFacet::Authors => &filter.authors,
+    };
+
     // Count each value, and the pull requests with it that the other rows admit.
     let mut counts: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
-    for pull_request in pull_requests {
+    for pull_request in pull_requests.iter().copied() {
         let passes_rest = passes_switches(filter, pull_request, context)
             && match facet {
                 OthersFacet::Labels => filter.authors.admits(pull_request.author.login.as_str()),
@@ -63,11 +68,12 @@ pub fn chip_counts(
         }
     }
 
+    // A picked or hidden value no pull request has any more still gets its chip, so it can be undone.
+    for value in chips.only.iter().chain(&chips.hidden) {
+        counts.entry(value.as_str()).or_default();
+    }
+
     // Most matching first, so the collapsed row shows the useful ones.
-    let chips = match facet {
-        OthersFacet::Labels => &filter.labels,
-        OthersFacet::Authors => &filter.authors,
-    };
     let mut counts: Vec<FacetCount<String>> = counts
         .into_iter()
         .filter(|(value, (_, matching))| *matching > 0 || chips.is_set(*value))
@@ -200,6 +206,10 @@ mod tests {
         ]
     }
 
+    fn refs(pull_requests: &[PullRequest]) -> Vec<&PullRequest> {
+        pull_requests.iter().collect()
+    }
+
     fn shown(filter: &OthersFilter, review_requested: &HashSet<u64>) -> Vec<u64> {
         let context = FilterContext {
             review_requested,
@@ -253,7 +263,12 @@ mod tests {
             review_requested: &HashSet::new(),
             now: NOW,
         };
-        let labels = chip_counts(&filter, OthersFacet::Labels, &pull_requests(), &context);
+        let labels = chip_counts(
+            &filter,
+            OthersFacet::Labels,
+            &refs(&pull_requests()),
+            &context,
+        );
         let summary: Vec<(&str, usize, usize)> = labels
             .iter()
             .map(|count| (count.value.as_str(), count.total, count.matching))
@@ -262,7 +277,26 @@ mod tests {
 
         // A hidden value stays, so it can be shown again.
         filter.labels.toggle_hidden(&"deps".to_owned());
-        let labels = chip_counts(&filter, OthersFacet::Labels, &pull_requests(), &context);
+        let labels = chip_counts(
+            &filter,
+            OthersFacet::Labels,
+            &refs(&pull_requests()),
+            &context,
+        );
         assert!(labels.iter().any(|count| count.value == "deps"));
+
+        // A picked value no pull request has stays too.
+        filter.labels.toggle_only(&"gone".to_owned());
+        let labels = chip_counts(
+            &filter,
+            OthersFacet::Labels,
+            &refs(&pull_requests()),
+            &context,
+        );
+        assert!(
+            labels
+                .iter()
+                .any(|count| count.value == "gone" && count.total == 0)
+        );
     }
 }

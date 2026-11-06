@@ -66,8 +66,11 @@ impl GitHubClient {
     /// A client that sends `token` as a bearer token.
     pub fn new(token: impl Into<String>) -> Self {
         // Non-success statuses come back as responses so their body can be reported.
+        // A renamed repository redirects within the API host: the token goes along,
+        // so a private one answers instead of a 404.
         let agent = Agent::config_builder()
             .http_status_as_error(false)
+            .redirect_auth_headers(ureq::config::RedirectAuthHeaders::SameHost)
             .build()
             .into();
         Self {
@@ -400,12 +403,7 @@ impl GitHubClient {
         }
         let body = String::from_utf8_lossy(&bytes).into_owned();
 
-        if is_secondary_rate_limited(status, &headers, &body) {
-            return Err(GitHubError::SlowDown {
-                retry_after_seconds: header_text(&headers, "retry-after")
-                    .and_then(|seconds| seconds.parse().ok()),
-            });
-        }
+        // A used-up budget first: it says when it refills, even with a `retry-after`.
         if is_rate_limited(status, &headers) {
             let (resource, resets_at) = budget.map_or(("API", 0), |(resource, limit)| {
                 (resource.name(), limit.resets_at)
@@ -413,6 +411,12 @@ impl GitHubClient {
             return Err(GitHubError::RateLimited {
                 resource,
                 resets_at,
+            });
+        }
+        if is_secondary_rate_limited(status, &headers, &body) {
+            return Err(GitHubError::SlowDown {
+                retry_after_seconds: header_text(&headers, "retry-after")
+                    .and_then(|seconds| seconds.parse().ok()),
             });
         }
         if !status.is_success() && status != StatusCode::NOT_MODIFIED {

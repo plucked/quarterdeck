@@ -125,7 +125,7 @@ impl PullRequestDetail {
                         .child("Draft"),
                 )
             })
-            .child(div().flex_none().child(format!(
+            .child(div().min_w_0().truncate().child(format!(
                 "{} #{}  ·",
                 pull_request.repo.full_name(),
                 pull_request.number,

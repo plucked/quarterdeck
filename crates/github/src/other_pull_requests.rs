@@ -1,12 +1,15 @@
+use std::collections::HashSet;
+
 use serde::de::IgnoredAny;
 
 use crate::github_client::{API_BASE, JSON_MEDIA_TYPE, PAGE_SIZE};
 use crate::search_issue::SearchIssue;
-use crate::{GitHubClient, GitHubError, PullRequest, RepoRef};
+use crate::{GitHubClient, GitHubError, OtherPullRequestsUpdate, PullRequest, RepoRef};
 
-/// Open pull requests by anyone but the viewer, as the stack membership
-/// query searches for them; `repo:` qualifiers follow.
-const OTHERS_QUERY: &str = "is:pr is:open archived:false -author:@me";
+/// Open pull requests by anyone but the viewer, most recently updated
+/// first, as the stack membership query searches for them (GraphQL search
+/// takes its order from the text); `repo:` qualifiers follow.
+const OTHERS_QUERY: &str = "is:pr is:open archived:false -author:@me sort:updated-desc";
 /// Repositories per stack membership search.
 const REPOSITORIES_PER_SEARCH: usize = 10;
 /// Pages of 100 issues and pull requests followed per repository and
@@ -26,47 +29,80 @@ struct RepositoryIssue {
     pull_request: Option<IgnoredAny>,
 }
 
+/// The items one sync read, newest first, each once.
+struct RepositoryIssues {
+    items: Vec<RepositoryIssue>,
+    /// Whether the pages ran out before [`MAX_ISSUE_PAGES`]: every item
+    /// asked for was read.
+    is_complete: bool,
+}
+
 /// How a repository's pull requests are brought up to date.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum SyncMode {
     /// Nothing known yet: every open one, newest first.
     Full,
-    /// Only what changed at or after this time (GitHub's `updated_at` of
-    /// the newest one known), open or closed, to merge into what is known.
+    /// Only what changed at or after this time (GitHub's `updated_at`),
+    /// open or closed, to merge into what is known.
     Since(String),
 }
 
 impl SyncMode {
-    /// Full without known pull requests; else since the newest known one.
-    fn for_known(known: &[PullRequest]) -> Self {
-        known
+    /// Since the last sync's end when known; else since the newest known
+    /// pull request; else Full.
+    fn decide(known: &[PullRequest], synced_until: Option<&str>) -> Self {
+        let newest_known = known
             .iter()
             .map(|pull_request| pull_request.updated_at.as_str())
-            .max()
-            .map_or(Self::Full, |newest| Self::Since(newest.to_owned()))
+            .max();
+        synced_until
+            .or(newest_known)
+            .map_or(Self::Full, |since| Self::Since(since.to_owned()))
     }
 }
 
 impl GitHubClient {
     /// The open pull requests of `repo` that `viewer_login` did not open,
     /// most recently updated first, brought up to date from `known` (what
-    /// the last refresh found for it): with nothing known, every open one
-    /// (one request per 100 issues and pull requests); otherwise only what
-    /// changed since the newest known one, usually one request, merged in:
-    /// changed ones replace their old version, closed and merged ones go.
-    /// Uses the issues API (core budget, not search) so ids match the
-    /// search results of the other lists.
+    /// the last refresh found for it) and `synced_until` (where the last
+    /// sync of it ended, when this session knows): with neither, every open
+    /// one (one request per 100 issues and pull requests); otherwise only
+    /// what changed since then, usually one request, merged in: changed ones
+    /// replace their old version, closed and merged ones go. When more
+    /// changed than 20 pages of 100 hold, it starts over with every open
+    /// one, so no change is missed. Uses the issues API (core budget, not
+    /// search) so ids match the search results of the other lists. A renamed
+    /// or transferred repository is `GitHubError::Moved`.
     pub fn other_pull_requests(
         &self,
         repo: &RepoRef,
         known: &[PullRequest],
+        synced_until: Option<&str>,
         viewer_login: &str,
-    ) -> Result<Vec<PullRequest>, GitHubError> {
-        // Fetch every open one, or every change since the newest known.
-        let mode = SyncMode::for_known(known);
-        let changed = self.repository_issues(repo, &mode)?;
+    ) -> Result<OtherPullRequestsUpdate, GitHubError> {
+        // Fetch every change since the last sync; when that did not reach back
+        // to its start, every open one instead.
+        let mut mode = SyncMode::decide(known, synced_until);
+        let mut fetched = self.repository_issues(repo, &mode)?;
+        if !fetched.is_complete && mode != SyncMode::Full {
+            mode = SyncMode::Full;
+            fetched = self.repository_issues(repo, &mode)?;
+        }
+
+        // The next sync starts at the newest item read, issue or closed one too.
+        let next_synced_until = fetched
+            .items
+            .iter()
+            .map(|item| item.issue.updated_at.as_str())
+            .max()
+            .map(str::to_owned)
+            .or_else(|| match &mode {
+                SyncMode::Since(since) => Some(since.clone()),
+                SyncMode::Full => None,
+            });
 
         // Merge: drop the old version of anything that changed, then add the open ones.
+        let changed = fetched.items;
         let mut pull_requests: Vec<PullRequest> = match mode {
             SyncMode::Full => Vec::new(),
             SyncMode::Since(_) => known
@@ -84,16 +120,19 @@ impl GitHubClient {
                 .flatten()
         }));
         pull_requests.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
-        Ok(pull_requests)
+        Ok(OtherPullRequestsUpdate {
+            pull_requests,
+            synced_until: next_synced_until,
+        })
     }
 
     /// The issues and pull requests of `repo` that `mode` asks for, newest
-    /// first, following up to [`MAX_ISSUE_PAGES`] pages.
+    /// first, each once, following up to [`MAX_ISSUE_PAGES`] pages.
     fn repository_issues(
         &self,
         repo: &RepoRef,
         mode: &SyncMode,
-    ) -> Result<Vec<RepositoryIssue>, GitHubError> {
+    ) -> Result<RepositoryIssues, GitHubError> {
         let first_page = format!("{API_BASE}/repos/{}/{}/issues", repo.owner, repo.name);
         let mut parameters = vec![
             ("sort", "updated"),
@@ -108,19 +147,39 @@ impl GitHubClient {
             }
         }
         let mut items = Vec::new();
+        let mut seen_ids: HashSet<u64> = HashSet::new();
         let mut next = Some((first_page, parameters));
         for _ in 0..MAX_ISSUE_PAGES {
             let Some((url, parameters)) = next.take() else {
                 break;
             };
             let response = self.get(&url, &parameters, None, JSON_MEDIA_TYPE, &mut |_| {})?;
-            items.extend(serde_json::from_str::<Vec<RepositoryIssue>>(
-                &response.body,
-            )?);
+            let page = serde_json::from_str::<Vec<RepositoryIssue>>(&response.body)?;
+
+            // GitHub answers a renamed repository under its new name; say so instead of listing it apart.
+            if let Some(moved_to) = page
+                .iter()
+                .filter_map(|item| RepoRef::from_api_url(&item.issue.repository_url))
+                .find(|actual| actual != repo)
+            {
+                return Err(GitHubError::Moved {
+                    from: repo.full_name(),
+                    to: moved_to.full_name(),
+                });
+            }
+
+            // An item updated while paging moves up, so the next page can repeat one: keep it once.
+            items.extend(
+                page.into_iter()
+                    .filter(|item| seen_ids.insert(item.issue.id)),
+            );
             // The next page's URL already carries its query.
             next = response.next_page.map(|url| (url, Vec::new()));
         }
-        Ok(items)
+        Ok(RepositoryIssues {
+            items,
+            is_complete: next.is_none(),
+        })
     }
 }
 
@@ -157,15 +216,20 @@ mod tests {
         assert_eq!(queries.len(), 2);
         assert_eq!(
             queries[1],
-            "is:pr is:open archived:false -author:@me repo:o/r10 repo:o/r11"
+            "is:pr is:open archived:false -author:@me sort:updated-desc repo:o/r10 repo:o/r11"
         );
         assert_eq!(others_search_queries(&[]), Vec::<String>::new());
     }
 
-    /// With nothing known, every open pull request is fetched.
+    /// With nothing known, every open pull request is fetched; a known end
+    /// of the last sync wins over the newest known pull request.
     #[test]
-    fn fetches_everything_when_nothing_is_known() {
-        assert_eq!(SyncMode::for_known(&[]), SyncMode::Full);
+    fn syncs_from_the_last_sync_when_known() {
+        assert_eq!(SyncMode::decide(&[], None), SyncMode::Full);
+        assert_eq!(
+            SyncMode::decide(&[], Some("2026-01-02T00:00:00Z")),
+            SyncMode::Since("2026-01-02T00:00:00Z".to_owned())
+        );
     }
 
     /// An issues-API item reads as an issue or a pull request with its state.

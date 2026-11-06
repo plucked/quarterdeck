@@ -43,7 +43,7 @@ use super::side_panel_tab::SidePanelTab;
 use super::viewed_toggle::ViewedToggle;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
-use crate::avatar_images::AvatarImages;
+use crate::avatar_images::{AvatarImages, AvatarLoaded};
 use crate::diff_view::{CodeCells, CodeSegments, DiffPosition, SideSelection};
 use crate::facet_chips::ChipClick;
 use crate::fetch_stack::{cached_stack, refresh_stack};
@@ -255,7 +255,15 @@ impl PullRequestDetail {
                 .side_panel,
             _subscriptions: [
                 settings_subscription,
-                cx.observe(&AvatarImages::global(cx), |_, _, cx| cx.notify()),
+                // Only the avatars it shows redraw it, not every author the queue lists.
+                cx.subscribe(
+                    &AvatarImages::global(cx),
+                    |detail, _, event: &AvatarLoaded, cx| {
+                        if detail.shows_avatar(&event.url) {
+                            cx.notify();
+                        }
+                    },
+                ),
             ],
         };
         detail.rebuild_rows(ScrollAnchor::Top);
@@ -517,6 +525,23 @@ impl PullRequestDetail {
 
     pub(super) fn review(&self) -> &ReviewPane {
         &self.review
+    }
+
+    /// Whether the avatar at `url` shows here: the shown pull request's
+    /// author's, or a comment author's in its GitHub conversations.
+    fn shows_avatar(&self, url: &str) -> bool {
+        let is_author = self
+            .pull_request
+            .as_ref()
+            .is_some_and(|pull_request| pull_request.author.avatar_url == url);
+        let is_commenter = self.review.comments.github.as_ref().is_some_and(|state| {
+            state
+                .threads
+                .iter()
+                .flat_map(|thread| &thread.comments)
+                .any(|comment| comment.author_avatar_url == url)
+        });
+        is_author || is_commenter
     }
 
     pub(super) fn review_mut(&mut self) -> &mut ReviewPane {

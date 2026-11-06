@@ -16,6 +16,7 @@
 //! - `label.rs`: `Label`, a pull request's label.
 //! - `download_avatar.rs`: `download_avatar`, a user's avatar image from GitHub's avatar host.
 //! - `other_pull_requests.rs`: `GitHubClient::other_pull_requests`, others' open pull requests in chosen repositories.
+//! - `other_pull_requests_update.rs`: `OtherPullRequestsUpdate`, what one repository's sync found and where the next starts.
 //! - `repository_request.rs`: `GitHubClient::repository`, checks a repository exists.
 //! - `pull_request.rs`: `PullRequest`, the normalized pull request.
 //! - `pull_request_file.rs`: `PullRequestFile`, one changed file with its patch.
@@ -75,6 +76,7 @@ mod merge_outcome;
 mod merge_queries;
 mod next_page_url;
 mod other_pull_requests;
+mod other_pull_requests_update;
 mod pull_request;
 mod pull_request_file;
 mod pull_request_requests;
@@ -120,6 +122,7 @@ pub use merge_options::{
     MergeOptions, MergePermissions, MergeQueueState, MergeReadiness, PullRequestState,
 };
 pub use merge_outcome::MergeOutcome;
+pub use other_pull_requests_update::OtherPullRequestsUpdate;
 pub use pull_request::PullRequest;
 pub use pull_request_file::PullRequestFile;
 pub use pull_request_review_state::PullRequestReviewState;

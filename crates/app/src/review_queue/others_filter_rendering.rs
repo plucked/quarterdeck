@@ -1,27 +1,19 @@
-use std::collections::HashMap;
-
-use gpui::{AnyElement, ClickEvent, Context, Div, IntoElement, div, prelude::*, px, rgb};
+use gpui::{AnyElement, ClickEvent, Context, Div, IntoElement, div, prelude::*, px};
 use qd_cache::{OthersFilter, UpdatedWithin};
-use qd_file_tree::{FacetChoice, FacetCount};
-use qd_github::{PullRequest, RepoRef};
+use qd_file_tree::FacetCount;
+use qd_github::RepoRef;
 
 use super::ReviewQueue;
-use super::others_filtering::{FilterContext, OthersFacet, chip_counts, describe};
-use super::others_tab::review_requested_ids;
-use crate::avatar_images::Avatar;
+use super::chip_marks::ChipMarks;
+use super::others_filtering::{OthersFacet, describe};
 use crate::checkbox::{CheckState, Checkbox};
-use crate::display_date::unix_now;
 use crate::facet_chips::{
-    COLLAPSED_CHIPS, ChipClick, render_chip, render_chip_row, render_more_chip,
+    COLLAPSED_CHIPS, ChipClick, CollapsedChipRow, render_chip, render_chip_row, render_more_chip,
 };
 use crate::segmented_control::SegmentedControl;
 use crate::settings_window::{SettingsCategory, open_settings_window_at};
 use crate::theme;
 
-/// An author's avatar in a chip.
-const CHIP_AVATAR_SIZE: f32 = 14.;
-/// A label's color dot in a chip.
-const LABEL_DOT_SIZE: f32 = 8.;
 /// Size of the filter button on a repository's header.
 const FILTER_BUTTON_SIZE: f32 = 24.;
 /// The filter glyph: three bars, each shorter, centered.
@@ -38,22 +30,14 @@ impl ReviewQueue {
         repo: &RepoRef,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        // The chips were counted when the list or the filter changed.
         let filter = self.others_tab().filter(repo);
-        let pull_requests: Vec<_> = self
-            .lists()
-            .others
-            .iter()
-            .filter(|pull_request| &pull_request.repo == repo)
-            .cloned()
-            .collect();
-        let review_requested = review_requested_ids(self.lists());
-        let context = FilterContext {
-            review_requested: &review_requested,
-            now: unix_now(),
+        let Some(chips) = self.others_tab().open_filter_chips() else {
+            return div().into_any_element();
         };
-        let label_counts = chip_counts(&filter, OthersFacet::Labels, &pull_requests, &context);
-        let author_counts = chip_counts(&filter, OthersFacet::Authors, &pull_requests, &context);
-        let chip_marks = ChipMarks::of(&pull_requests);
+        let label_counts = &chips.labels;
+        let author_counts = &chips.authors;
+        let chip_marks = &chips.marks;
 
         div()
             .mx_2()
@@ -76,8 +60,8 @@ impl ReviewQueue {
                     repo,
                     OthersFacet::Labels,
                     &filter,
-                    &label_counts,
-                    &chip_marks,
+                    label_counts,
+                    chip_marks,
                     cx,
                 )
             }))
@@ -86,8 +70,8 @@ impl ReviewQueue {
                     repo,
                     OthersFacet::Authors,
                     &filter,
-                    &author_counts,
-                    &chip_marks,
+                    author_counts,
+                    chip_marks,
                     cx,
                 )
             }))
@@ -204,16 +188,11 @@ impl ReviewQueue {
             .take(COLLAPSED_CHIPS)
             .map(|count| count.value.as_str())
             .collect();
-        let shown: Vec<&FacetCount<String>> = counts
-            .iter()
-            .filter(|count| {
-                is_expanded
-                    || most_common.contains(&count.value.as_str())
-                    || chips_filter.choice_of(&count.value) != FacetChoice::Open
-            })
-            .collect();
-        let hidden_count = counts.len() - shown.len();
-        let mut chips: Vec<AnyElement> = shown
+        let row = CollapsedChipRow::of(counts, &most_common, is_expanded, |value| {
+            chips_filter.is_set(value)
+        });
+        let mut chips: Vec<AnyElement> = row
+            .shown
             .into_iter()
             .map(|count| {
                 let value = count.value.clone();
@@ -238,12 +217,7 @@ impl ReviewQueue {
             .collect();
 
         // The more / less link, when there is more than the collapsed row holds.
-        let more_label = match (is_expanded, hidden_count) {
-            (true, _) if counts.len() > COLLAPSED_CHIPS => Some("less".to_owned()),
-            (false, 1..) => Some(format!("+{hidden_count} more")),
-            (true | false, _) => None,
-        };
-        if let Some(label) = more_label {
+        if let Some(label) = row.more_label {
             let repo = repo.clone();
             chips.push(
                 render_more_chip(("others-more", facet_index(facet)), label)
@@ -423,58 +397,6 @@ fn filter_summary_text(parts: &[String]) -> String {
         "Click to show only · ⌥-click to hide".to_owned()
     } else {
         parts.join(" · ")
-    }
-}
-
-/// What a chip shows before its name: an author's avatar, a label's color.
-struct ChipMarks {
-    /// Avatar URL by login.
-    avatars: HashMap<String, String>,
-    /// GitHub's hex color by label name.
-    label_colors: HashMap<String, String>,
-}
-
-impl ChipMarks {
-    /// The avatars and label colors of `pull_requests`.
-    fn of(pull_requests: &[PullRequest]) -> Self {
-        let mut marks = Self {
-            avatars: HashMap::new(),
-            label_colors: HashMap::new(),
-        };
-        for pull_request in pull_requests {
-            marks
-                .avatars
-                .entry(pull_request.author.login.clone())
-                .or_insert_with(|| pull_request.author.avatar_url.clone());
-            for label in &pull_request.labels {
-                marks
-                    .label_colors
-                    .entry(label.name.clone())
-                    .or_insert_with(|| label.color.clone());
-            }
-        }
-        marks
-    }
-
-    /// The mark before `value`'s chip in `facet`'s row, when known.
-    fn mark_of(&self, facet: OthersFacet, value: &str) -> Option<AnyElement> {
-        match facet {
-            OthersFacet::Authors => self
-                .avatars
-                .get(value)
-                .map(|url| Avatar::new(url.clone(), px(CHIP_AVATAR_SIZE)).into_any_element()),
-            OthersFacet::Labels => {
-                let color = u32::from_str_radix(self.label_colors.get(value)?, 16).ok()?;
-                Some(
-                    div()
-                        .flex_none()
-                        .size(px(LABEL_DOT_SIZE))
-                        .rounded_full()
-                        .bg(rgb(color))
-                        .into_any_element(),
-                )
-            }
-        }
     }
 }
 

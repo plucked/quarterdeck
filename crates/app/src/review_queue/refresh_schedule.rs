@@ -10,12 +10,15 @@ const AUTO_REFRESH_INTERVAL: Duration = Duration::from_mins(5);
 const ACTIVATION_STALE_AFTER: Duration = Duration::from_mins(1);
 
 /// When the review queue refreshes on its own: a timer after each refresh,
-/// and on window activation once the queue is stale. Takes `now` as a
-/// parameter so the decisions are testable without a clock.
+/// and on window activation once the queue is stale; neither before GitHub
+/// allows it again after asking to slow down. Takes `now` as a parameter so
+/// the decisions are testable without a clock.
 #[derive(Default)]
 pub struct RefreshSchedule {
     /// When the last refresh finished, successfully or not.
     last_finished_at: Option<Instant>,
+    /// Until when GitHub asked not to be sent requests (its `retry-after`).
+    held_until: Option<Instant>,
 }
 
 impl RefreshSchedule {
@@ -24,16 +27,34 @@ impl RefreshSchedule {
         self.last_finished_at = Some(now);
     }
 
-    /// How long to wait from `now` until the next timed refresh is due.
+    /// Holds refreshes on their own back until `until` (GitHub's `retry-after`).
+    pub fn hold_until(&mut self, until: Instant) {
+        self.held_until = Some(until);
+    }
+
+    /// Whether refreshes on their own are held back at `now`.
+    pub fn is_held(&self, now: Instant) -> bool {
+        self.held_until.is_some_and(|until| now < until)
+    }
+
+    /// How long to wait from `now` until the next timed refresh is due: an
+    /// interval after the last one, or the end of a hold when that is later.
     pub fn delay_until_next(&self, now: Instant) -> Duration {
         let elapsed = self.elapsed_since_finished(now);
-        AUTO_REFRESH_INTERVAL.saturating_sub(elapsed)
+        let interval_delay = AUTO_REFRESH_INTERVAL.saturating_sub(elapsed);
+        let hold_delay = self
+            .held_until
+            .map_or(Duration::ZERO, |until| until.saturating_duration_since(now));
+        interval_delay.max(hold_delay)
     }
 
     /// Decides whether a window activation at `now` refreshes the queue.
     pub fn decide_on_activation(&self, status: &RefreshStatus, now: Instant) -> ActivationRefresh {
         match status {
             RefreshStatus::Refreshing => ActivationRefresh::AlreadyRefreshing,
+            RefreshStatus::Idle | RefreshStatus::Failed(_) if self.is_held(now) => {
+                ActivationRefresh::NotDue
+            }
             RefreshStatus::Idle | RefreshStatus::Failed(_) => {
                 match self
                     .elapsed_since_finished(now)
@@ -116,6 +137,19 @@ mod tests {
         assert_eq!(
             schedule.decide_on_activation(&RefreshStatus::Refreshing, Instant::now()),
             ActivationRefresh::AlreadyRefreshing
+        );
+    }
+
+    /// While GitHub asked to wait, neither the timer nor an activation refreshes.
+    #[test]
+    fn a_hold_delays_timed_and_activation_refreshes() {
+        let start = Instant::now();
+        let mut schedule = finished_at(start);
+        schedule.hold_until(start + Duration::from_mins(10));
+        assert_eq!(schedule.delay_until_next(start), Duration::from_mins(10));
+        assert_eq!(
+            schedule.decide_on_activation(&RefreshStatus::Idle, start + Duration::from_mins(2)),
+            ActivationRefresh::NotDue
         );
     }
 

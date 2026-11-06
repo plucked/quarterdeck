@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gpui::{
     App, Context, Entity, FocusHandle, ListAlignment, ListOffset, ListState, SharedString,
@@ -8,7 +8,9 @@ use gpui::{
 use qd_cache::{
     DetailScrollPosition, PanelVisibility, PullRequestListKey, QueueTab, ReviewQueueViewState,
 };
-use qd_github::{GitHubClient, PullRequest, PullRequestStack, RepoRef, StackMembership};
+use qd_github::{
+    GitHubClient, GitHubError, PullRequest, PullRequestStack, RepoRef, StackMembership,
+};
 
 use super::activation_refresh::ActivationRefresh;
 use super::collapsed_groups::CollapsedGroups;
@@ -46,22 +48,39 @@ struct PendingRestore {
     detail_scroll: DetailScrollPosition,
 }
 
-/// The lists as fetched by a refresh, with their stacks filled in.
-struct RefreshedLists {
-    lists: QueueLists,
+/// Stack memberships by repository and pull request number.
+type Memberships = HashMap<(RepoRef, u64), StackMembership>;
+
+/// The viewer's own lists as a refresh fetched them (the first part of a
+/// refresh), with their stacks filled in, and the memberships for others'.
+struct OwnLists {
+    authored: Vec<PullRequest>,
+    review_requested: Vec<PullRequest>,
+    memberships: Memberships,
     /// Why the stacks could not be read, when they could not (the lists keep the last known ones).
     stack_error: Option<String>,
+}
+
+/// Others' pull requests as a refresh fetched them (its second part).
+struct FetchedOthers {
+    pull_requests: Vec<PullRequest>,
+    /// Where each repository's next sync starts.
+    synced_until: HashMap<RepoRef, String>,
     /// Why others' pull requests could not be read, when they could not
-    /// (the Others list keeps the last known ones).
-    others_error: Option<String>,
+    /// (the repositories that failed keep the last known ones).
+    error: Option<String>,
+    /// How long GitHub asked to wait, when it asked.
+    retry_after: Option<Duration>,
 }
 
 /// What a refresh starts from besides the client: the watched repositories
 /// and what is known already, kept when part of the refresh fails.
 struct RefreshInput {
     watched: Vec<RepoRef>,
-    known_memberships: HashMap<(RepoRef, u64), StackMembership>,
+    known_memberships: Memberships,
     known_others: Vec<PullRequest>,
+    /// Where each repository's last sync this session ended.
+    others_synced_until: HashMap<RepoRef, String>,
 }
 
 /// A stack layer being fetched because it is in no list.
@@ -102,8 +121,10 @@ pub struct ReviewQueue {
     detail: Entity<PullRequestDetail>,
     /// The saved selection, until the lists it is in have loaded.
     pending_restore: Option<PendingRestore>,
-    /// The in-flight refresh; replacing it cancels the previous one.
+    /// The in-flight refresh; a new one starts only after it finished.
     refresh_task: Option<Task<()>>,
+    /// A refresh was asked for while one ran; it runs once that one finishes.
+    is_refresh_requested: bool,
     /// The timer waiting for the next timed refresh; any refresh replaces it.
     auto_refresh_task: Option<Task<()>>,
     /// A stack layer in no list, being fetched to be shown.
@@ -196,6 +217,7 @@ impl ReviewQueue {
             detail,
             pending_restore,
             refresh_task: None,
+            is_refresh_requested: false,
             auto_refresh_task: None,
             opening_layer: None,
             layer_error: None,
@@ -534,10 +556,18 @@ impl ReviewQueue {
         }
     }
 
-    /// Fetches both lists and the stacks of their pull requests from GitHub,
-    /// caches and shows them, removes cached data unused for longer than
-    /// the cache TTL, then arms the next timed refresh.
+    /// Fetches the lists and the stacks of their pull requests from GitHub,
+    /// caches and shows them (the viewer's own first, then others' in the
+    /// watched repositories), removes cached data unused for longer than the
+    /// cache TTL, then arms the next timed refresh. One refresh runs at a
+    /// time: asked for during one, it runs once that one finishes.
     pub(super) fn refresh(&mut self, cx: &mut Context<Self>) {
+        // A refresh in flight finishes first: two would send their requests at once.
+        if matches!(self.refresh_status, RefreshStatus::Refreshing) {
+            self.is_refresh_requested = true;
+            return;
+        }
+
         // Any refresh moves the timed one: it is re-armed when this one finishes.
         self.auto_refresh_task = None;
 
@@ -556,59 +586,145 @@ impl ReviewQueue {
             watched: self.others_tab.watched().to_vec(),
             known_memberships: known_memberships(&self.lists),
             known_others: self.lists.others.clone(),
+            others_synced_until: self.others_tab.synced_until().clone(),
         };
 
         self.refresh_status = RefreshStatus::Refreshing;
         cx.notify();
         self.refresh_task = Some(cx.spawn(async move |queue, cx| {
-            // Fetch and cache off the main thread: every call blocks.
-            let fetched = cx
+            // The viewer's own lists and every stack first, off the main thread
+            // (every call blocks), so they show without waiting for others'.
+            let own_client = client.clone();
+            let own_cache = cache.clone();
+            let watched = input.watched.clone();
+            let known_memberships = input.known_memberships;
+            let own = cx
                 .background_executor()
                 .spawn(async move {
-                    let refreshed = fetch_lists(&client, input)?;
-                    let mut cache = cache.lock();
-                    cache.replace_list(PullRequestListKey::AUTHORED, &refreshed.lists.authored)?;
-                    cache.replace_list(
-                        PullRequestListKey::REVIEW_REQUESTED,
-                        &refreshed.lists.review_requested,
-                    )?;
-                    cache.replace_list(PullRequestListKey::OTHERS, &refreshed.lists.others)?;
+                    fetch_own_lists(&own_client, &own_cache, &watched, known_memberships)
+                })
+                .await;
+            let own = match own {
+                Ok(own) => own,
+                Err(error) => {
+                    queue
+                        .update(cx, |queue, cx| queue.finish_refresh(Some(&error), None, cx))
+                        .ok();
+                    return;
+                }
+            };
+            let memberships = own.memberships.clone();
+            if queue
+                .update(cx, |queue, cx| queue.show_own_lists(own, cx))
+                .is_err()
+            {
+                return;
+            }
 
-                    // With the lists current, drop what has not been used within the TTL.
+            // Then others' pull requests, cached; then drop what has not been used within the TTL.
+            let others = cx
+                .background_executor()
+                .spawn(async move {
+                    let mut fetched = fetch_others(
+                        &client,
+                        &input.watched,
+                        &input.known_others,
+                        &input.others_synced_until,
+                    );
+                    fill_memberships(&mut fetched.pull_requests, &memberships);
+                    let mut cache = cache.lock();
+                    cache.replace_list(PullRequestListKey::OTHERS, &fetched.pull_requests)?;
                     cache.delete_expired(ttl)?;
-                    anyhow::Ok(refreshed)
+                    anyhow::Ok(fetched)
                 })
                 .await;
 
-            // Show the result and arm the next timed refresh; a closed view simply drops it.
+            // Show the result and arm the next refresh; a closed view simply drops it.
             queue
-                .update(cx, |queue, cx| {
-                    match fetched {
-                        Ok(refreshed) => {
-                            if let Some(error) = &refreshed.stack_error {
-                                eprintln!("stacks: keeping the last known ones: {error}");
-                            }
-                            queue.others_tab.set_error(refreshed.others_error);
-                            queue.replace_lists(refreshed.lists, cx);
-                        }
-                        Err(error) => {
-                            queue.refresh_status =
-                                RefreshStatus::Failed(format!("{error:#}").into());
-                            cx.notify();
-                        }
-                    }
-                    queue.schedule_next_refresh(cx);
+                .update(cx, |queue, cx| match others {
+                    Ok(others) => queue.show_others(others, cx),
+                    Err(error) => queue.finish_refresh(Some(&error), None, cx),
                 })
                 .ok();
         }));
     }
 
-    /// Records that a refresh finished and starts the timer for the next one.
-    /// A failed refresh is retried on the same timer, not sooner.
-    fn schedule_next_refresh(&mut self, cx: &mut Context<Self>) {
+    /// Shows the viewer's refreshed own lists, with the stacks just read
+    /// filled into the Others list known so far; the refresh goes on.
+    fn show_own_lists(&mut self, own: OwnLists, cx: &mut Context<Self>) {
+        if let Some(error) = &own.stack_error {
+            eprintln!("stacks: keeping the last known ones: {error}");
+        }
+        let mut others = self.lists.others.clone();
+        fill_memberships(&mut others, &own.memberships);
+        self.replace_lists(
+            QueueLists {
+                authored: own.authored,
+                review_requested: own.review_requested,
+                others,
+            },
+            cx,
+        );
+    }
+
+    /// Shows others' refreshed pull requests and ends the refresh.
+    fn show_others(&mut self, others: FetchedOthers, cx: &mut Context<Self>) {
+        self.others_tab.set_error(others.error);
+        self.others_tab.set_synced_until(others.synced_until);
+        let lists = QueueLists {
+            authored: std::mem::take(&mut self.lists.authored),
+            review_requested: std::mem::take(&mut self.lists.review_requested),
+            others: others.pull_requests,
+        };
+        self.replace_lists(lists, cx);
+        self.finish_refresh(None, others.retry_after, cx);
+    }
+
+    /// Ends a refresh: says why it failed (`failure`), holds the next one
+    /// back as long as GitHub asked (`retry_after`, or the failure's), then
+    /// runs a refresh asked for meanwhile or arms the timed one.
+    fn finish_refresh(
+        &mut self,
+        failure: Option<&anyhow::Error>,
+        retry_after: Option<Duration>,
+        cx: &mut Context<Self>,
+    ) {
+        // The outcome; a successful one checks the listed stacks with GitHub.
+        if let Some(error) = failure {
+            self.refresh_status = RefreshStatus::Failed(format!("{error:#}").into());
+        } else {
+            self.refresh_status = RefreshStatus::Idle;
+            self.refresh_stacks(cx);
+        }
+
+        // Record when it finished, and how long GitHub asked to wait.
         let now = Instant::now();
         self.refresh_schedule.record_finished(now);
-        let delay = self.refresh_schedule.delay_until_next(now);
+        let retry_after = retry_after.or_else(|| {
+            failure
+                .and_then(|error| error.downcast_ref::<GitHubError>())
+                .and_then(GitHubError::retry_after)
+        });
+        if let Some(wait) = retry_after {
+            self.refresh_schedule.hold_until(now + wait);
+        }
+
+        // A refresh asked for meanwhile runs now, unless GitHub asked to wait: then the timer runs it.
+        let runs_requested =
+            std::mem::take(&mut self.is_refresh_requested) && !self.refresh_schedule.is_held(now);
+        if runs_requested {
+            self.refresh(cx);
+        } else {
+            self.schedule_next_refresh(cx);
+        }
+        cx.notify();
+    }
+
+    /// Starts the timer for the next refresh: an interval after the last
+    /// one, or once GitHub allows requests again. A failed refresh is retried
+    /// on the same timer, not sooner.
+    fn schedule_next_refresh(&mut self, cx: &mut Context<Self>) {
+        let delay = self.refresh_schedule.delay_until_next(Instant::now());
 
         self.auto_refresh_task = Some(cx.spawn(async move |queue, cx| {
             // Sleep until the deadline, then refresh; a closed view simply drops it.
@@ -646,7 +762,6 @@ impl ReviewQueue {
             refreshed.as_ref(),
         );
         self.lists = lists;
-        self.refresh_status = RefreshStatus::Idle;
         self.update_others_shown();
         self.request_author_avatars(cx);
         self.rebuild_rows();
@@ -668,7 +783,6 @@ impl ReviewQueue {
 
         // A selection saved before the relaunch gets its last chance here.
         self.restore_selection(RestorePhase::RefreshedQueue, cx);
-        self.refresh_stacks(cx);
         cx.notify();
     }
 
@@ -969,7 +1083,7 @@ fn read_cached_stacks(
 }
 
 /// The stack memberships the lists know now, kept when GraphQL fails.
-fn known_memberships(lists: &QueueLists) -> HashMap<(RepoRef, u64), StackMembership> {
+fn known_memberships(lists: &QueueLists) -> Memberships {
     lists
         .iter()
         .filter_map(|pull_request| {
@@ -979,24 +1093,22 @@ fn known_memberships(lists: &QueueLists) -> HashMap<(RepoRef, u64), StackMembers
         .collect()
 }
 
-/// Fetches the lists (one search request each for the viewer's own and
-/// review requests; others' through the issues API, usually one request
-/// per watched repository) and their stacks (one GraphQL request), filling
-/// in each pull request's membership. When the stacks or others' pull
-/// requests cannot be read, what was known before is kept.
+/// Fetches the viewer's own lists (one search request each) and the
+/// stacks of every list (one GraphQL request, others' in `watched`
+/// included), fills in their memberships and caches the lists. When the
+/// stacks cannot be read, the memberships known before are kept.
 ///
 /// Blocking: runs on the background executor.
-fn fetch_lists(client: &GitHubClient, input: RefreshInput) -> anyhow::Result<RefreshedLists> {
-    // Others' pull requests may fail on their own (a watched repository gone).
-    let (others, others_error) = fetch_others(client, &input.watched, &input.known_others);
-    let mut lists = QueueLists {
-        authored: client.authored()?,
-        review_requested: client.review_requested()?,
-        others,
-    };
-
-    // Stacks for all three lists in one request.
-    let (memberships, stack_error) = match client.stack_memberships(&input.watched) {
+fn fetch_own_lists(
+    client: &GitHubClient,
+    cache: &SharedCache,
+    watched: &[RepoRef],
+    known_memberships: Memberships,
+) -> anyhow::Result<OwnLists> {
+    // Both lists, then the stacks of all three in one request.
+    let mut authored = client.authored()?;
+    let mut review_requested = client.review_requested()?;
+    let (memberships, stack_error) = match client.stack_memberships(watched) {
         Ok(listed) => (
             listed
                 .into_iter()
@@ -1004,34 +1116,47 @@ fn fetch_lists(client: &GitHubClient, input: RefreshInput) -> anyhow::Result<Ref
                 .collect(),
             None,
         ),
-        Err(error) => (input.known_memberships, Some(format!("{error:#}"))),
+        Err(error) => (known_memberships, Some(format!("{error:#}"))),
     };
-    for pull_request in lists
-        .authored
-        .iter_mut()
-        .chain(&mut lists.review_requested)
-        .chain(&mut lists.others)
-    {
+    fill_memberships(&mut authored, &memberships);
+    fill_memberships(&mut review_requested, &memberships);
+
+    // Cache them before showing them.
+    let mut cache = cache.lock();
+    cache.replace_list(PullRequestListKey::AUTHORED, &authored)?;
+    cache.replace_list(PullRequestListKey::REVIEW_REQUESTED, &review_requested)?;
+    Ok(OwnLists {
+        authored,
+        review_requested,
+        memberships,
+        stack_error,
+    })
+}
+
+/// Sets each of `pull_requests`' stack membership from `memberships`
+/// (none for a standalone one).
+fn fill_memberships(pull_requests: &mut [PullRequest], memberships: &Memberships) {
+    for pull_request in pull_requests {
         pull_request.stack = memberships
             .get(&(pull_request.repo.clone(), pull_request.number))
             .cloned();
     }
-    Ok(RefreshedLists {
-        lists,
-        stack_error,
-        others_error,
-    })
 }
 
 /// Others' open pull requests in `watched`, each repository brought up to
-/// date from what `known` has of it, most recently updated first; a
-/// repository that fails keeps what was known of it, and the first failure
-/// is returned to show.
+/// date from what `known` has of it and where its last sync ended
+/// (`synced_until`), most recently updated first. A repository that fails
+/// keeps what was known of it, and the first failure is returned to show;
+/// once GitHub refuses requests (rate limit, slow down), the rest are not
+/// asked and keep what was known too.
+///
+/// Blocking: runs on the background executor.
 fn fetch_others(
     client: &GitHubClient,
     watched: &[RepoRef],
     known: &[PullRequest],
-) -> (Vec<PullRequest>, Option<String>) {
+    synced_until: &HashMap<RepoRef, String>,
+) -> FetchedOthers {
     let known_of = |repo: &RepoRef| -> Vec<PullRequest> {
         known
             .iter()
@@ -1039,31 +1164,72 @@ fn fetch_others(
             .cloned()
             .collect()
     };
+    let mut fetched = FetchedOthers {
+        pull_requests: Vec::new(),
+        synced_until: HashMap::new(),
+        error: None,
+        retry_after: None,
+    };
     if watched.is_empty() {
-        return (Vec::new(), None);
+        return fetched;
     }
 
     // Whose pull requests to leave out: the viewer's (asked once per session).
     let viewer_login = match client.viewer_login() {
         Ok(login) => login,
-        Err(error) => return (known.to_vec(), Some(format!("{error:#}"))),
+        Err(error) => {
+            fetched.pull_requests = known.to_vec();
+            fetched.synced_until.clone_from(synced_until);
+            fetched.retry_after = error.retry_after();
+            fetched.error = Some(format!("{error:#}"));
+            return fetched;
+        }
     };
 
     // Each repository on its own, so one failure keeps the others current.
-    let mut others = Vec::new();
-    let mut first_error = None;
+    let mut is_throttled = false;
     for repo in watched {
         let known = known_of(repo);
-        match client.other_pull_requests(repo, &known, &viewer_login) {
-            Ok(pull_requests) => others.extend(pull_requests),
-            Err(error) => {
-                first_error.get_or_insert_with(|| format!("{}: {error:#}", repo.full_name()));
-                others.extend(known);
+        let last_synced = synced_until.get(repo);
+        let result = (!is_throttled).then(|| {
+            client.other_pull_requests(repo, &known, last_synced.map(String::as_str), &viewer_login)
+        });
+        match result {
+            Some(Ok(update)) => {
+                fetched.pull_requests.extend(update.pull_requests);
+                if let Some(until) = update.synced_until {
+                    fetched.synced_until.insert(repo.clone(), until);
+                }
             }
+            Some(Err(error)) => {
+                is_throttled = error.is_throttled();
+                fetched.retry_after = fetched.retry_after.or(error.retry_after());
+                fetched
+                    .error
+                    .get_or_insert_with(|| format!("{}: {error:#}", repo.full_name()));
+                keep_known(&mut fetched, repo, known, last_synced);
+            }
+            None => keep_known(&mut fetched, repo, known, last_synced),
         }
     }
-    others.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
-    (others, first_error)
+    fetched
+        .pull_requests
+        .sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+    fetched
+}
+
+/// Keeps what was known of `repo` (its pull requests and where its last
+/// sync ended) in `fetched`, when it could not be brought up to date.
+fn keep_known(
+    fetched: &mut FetchedOthers,
+    repo: &RepoRef,
+    known: Vec<PullRequest>,
+    last_synced: Option<&String>,
+) {
+    fetched.pull_requests.extend(known);
+    if let Some(until) = last_synced {
+        fetched.synced_until.insert(repo.clone(), until.clone());
+    }
 }
 
 /// Fetches a stack layer that is in no list, with the membership the stack

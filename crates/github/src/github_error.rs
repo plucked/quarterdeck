@@ -18,6 +18,10 @@ pub enum GitHubError {
     /// asks to wait, `retry_after_seconds` when it says how long.
     #[error("GitHub asked Quarterdeck to slow down; it tries again {}", retry_wording(*retry_after_seconds))]
     SlowDown { retry_after_seconds: Option<u64> },
+    /// The repository was renamed or transferred: asked for as `from`,
+    /// GitHub answered for `to` (both `owner/name`).
+    #[error("{from} is now {to}; change it in Settings → Repositories")]
+    Moved { from: String, to: String },
     /// GitHub answered with a non-success HTTP status; `body` as sent, shown
     /// by its `message` when it is GitHub's JSON error.
     #[error("GitHub API returned {status}: {}", api_message(body))]
@@ -32,6 +36,24 @@ pub enum GitHubError {
     /// The response body did not match the expected JSON shape.
     #[error("decode error: {0}")]
     Decode(#[from] serde_json::Error),
+}
+
+impl GitHubError {
+    /// How long GitHub asked to wait before the next request, when it said.
+    pub fn retry_after(&self) -> Option<std::time::Duration> {
+        match self {
+            Self::SlowDown {
+                retry_after_seconds: Some(seconds),
+            } => Some(std::time::Duration::from_secs(*seconds)),
+            _ => None,
+        }
+    }
+
+    /// Whether GitHub refuses requests for now (a used-up budget or its
+    /// secondary rate limit), so further requests would only be refused too.
+    pub fn is_throttled(&self) -> bool {
+        matches!(self, Self::RateLimited { .. } | Self::SlowDown { .. })
+    }
 }
 
 /// Whole minutes from now until `unix_seconds`, rounded up; 0 when past.

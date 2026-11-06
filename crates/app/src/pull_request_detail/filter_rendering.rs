@@ -1,11 +1,10 @@
 use gpui::{AnyElement, ClickEvent, Context, IntoElement, div, prelude::*};
-use qd_file_tree::{FacetChoice, FacetCount};
 
 use super::pull_request_detail::PullRequestDetail;
 use crate::button::Button;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::facet_chips::{
-    COLLAPSED_CHIPS, ChipClick, most_common_values, render_chip, render_chip_row, render_more_chip,
+    ChipClick, CollapsedChipRow, most_common_values, render_chip, render_chip_row, render_more_chip,
 };
 use crate::theme;
 
@@ -108,16 +107,11 @@ impl PullRequestDetail {
 
         // The most common, plus every chip that is set, so a set chip never hides behind "more".
         let most_common = most_common_values(counts);
-        let shown: Vec<&FacetCount<String>> = counts
-            .iter()
-            .filter(|count| {
-                is_expanded
-                    || most_common.contains(&count.value.as_str())
-                    || filter.file_types.choice_of(&count.value) != FacetChoice::Open
-            })
-            .collect();
-        let hidden_count = counts.len() - shown.len();
-        let mut chips: Vec<AnyElement> = shown
+        let row = CollapsedChipRow::of(counts, &most_common, is_expanded, |value| {
+            filter.file_types.is_set(value)
+        });
+        let mut chips: Vec<AnyElement> = row
+            .shown
             .into_iter()
             .map(|count| {
                 let file_type = count.value.clone();
@@ -136,12 +130,7 @@ impl PullRequestDetail {
             .collect();
 
         // The more / less chip, when there is more than the collapsed row holds.
-        let more_label = match (is_expanded, hidden_count) {
-            (true, _) if counts.len() > COLLAPSED_CHIPS => Some("less".to_owned()),
-            (false, 1..) => Some(format!("+{hidden_count} more")),
-            (true | false, _) => None,
-        };
-        if let Some(label) = more_label {
+        if let Some(label) = row.more_label {
             chips.push(
                 render_more_chip("type-more", label)
                     .on_click(cx.listener(|detail, _, _, cx| detail.toggle_types_expanded(cx)))
