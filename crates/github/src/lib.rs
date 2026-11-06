@@ -14,6 +14,7 @@
 //! - `repo_ref.rs`: `RepoRef`, an owner/name pair.
 //! - `user.rs`: `User`, a GitHub account as embedded in other objects.
 //! - `label.rs`: `Label`, a pull request's label.
+//! - `download_avatar.rs`: `download_avatar`, a user's avatar image from GitHub's avatar host.
 //! - `other_pull_requests.rs`: `GitHubClient::other_pull_requests`, others' open pull requests in chosen repositories.
 //! - `repository_request.rs`: `GitHubClient::repository`, checks a repository exists.
 //! - `pull_request.rs`: `PullRequest`, the normalized pull request.
@@ -54,6 +55,7 @@
 
 mod api_usage;
 mod conditional_response;
+mod download_avatar;
 mod download_progress;
 mod etag;
 mod file_text;
@@ -102,6 +104,7 @@ mod viewer_request;
 
 pub use api_usage::{ApiUsage, ApiUsageSnapshot};
 pub use conditional_response::ConditionalResponse;
+pub use download_avatar::download_avatar;
 pub use download_progress::DownloadProgress;
 pub use etag::ETag;
 pub use file_text::FileText;

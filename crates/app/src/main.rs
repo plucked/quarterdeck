@@ -6,6 +6,7 @@
 //! - `startup_splash/`: `StartupSplash`, the intro movie at launch, played while the main window loads.
 //! - `app_commands.rs`: app-level actions with their key bindings and menus.
 //! - `app_update/`: `AppUpdater`, checks for, downloads and installs new versions.
+//! - `avatar_images/`: `AvatarImages` and `Avatar`, people's GitHub avatars, loaded in the background.
 //! - `app_settings.rs`: `AppSettings`, the user's preferences shared by every window.
 //! - `app_services.rs`: `AppServices`, the GitHub client and cache handed to views.
 //! - `scrollbar/`: `VerticalScrollbar`, a draggable scrollbar for any scroll container.
@@ -36,6 +37,7 @@ mod app_commands;
 mod app_services;
 mod app_settings;
 mod app_update;
+mod avatar_images;
 mod bundled_fonts;
 mod button;
 mod checkbox;

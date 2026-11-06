@@ -30,6 +30,7 @@ use crate::app_commands::{
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::app_update::AppUpdater;
+use crate::avatar_images::AvatarImages;
 use crate::fetch_stack::{cached_stack, refresh_stack};
 use crate::pull_request_detail::{DetailEvent, LayerRequest, PullRequestDetail};
 use crate::shared_cache::SharedCache;
@@ -118,8 +119,8 @@ pub struct ReviewQueue {
     stacks_task: Option<Task<()>>,
     /// The Others tab: watched repositories, their filters, what passes.
     others_tab: OthersTab,
-    /// Keep the window activation, detail, updater and settings observers registered.
-    _subscriptions: [Subscription; 4],
+    /// Keep the window activation, detail, updater, settings and avatar observers registered.
+    _subscriptions: [Subscription; 5],
 }
 
 impl ReviewQueue {
@@ -212,9 +213,12 @@ impl ReviewQueue {
                 cx.observe(&AppUpdater::global(cx), |_, _, cx| cx.notify()),
                 // A change of the watched repositories refetches the Others tab.
                 cx.observe_global::<AppSettings>(Self::on_settings_changed),
+                // Author chips show avatars as they arrive.
+                cx.observe(&AvatarImages::global(cx), |_, _, cx| cx.notify()),
             ],
         };
         queue.update_others_shown();
+        queue.request_author_avatars(cx);
         queue.rebuild_rows();
         queue.restore_selection(RestorePhase::CachedQueue, cx);
         queue.refresh(cx);
@@ -644,6 +648,7 @@ impl ReviewQueue {
         self.lists = lists;
         self.refresh_status = RefreshStatus::Idle;
         self.update_others_shown();
+        self.request_author_avatars(cx);
         self.rebuild_rows();
 
         // The detail pane reloads an updated pull request and keeps its scroll.

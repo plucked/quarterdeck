@@ -88,6 +88,7 @@ impl PullRequestDetail {
                     kind.label(),
                     count,
                     filter.kinds.choice_of(&kind),
+                    None,
                 )
                 .on_click(cx.listener(move |detail, event: &ClickEvent, _, cx| {
                     detail.click_kind(kind, ChipClick::of(event), cx);
@@ -125,6 +126,7 @@ impl PullRequestDetail {
                     &count.value,
                     count,
                     filter.file_types.choice_of(&count.value),
+                    None,
                 )
                 .on_click(cx.listener(move |detail, event: &ClickEvent, _, cx| {
                     detail.click_file_type(&file_type, ChipClick::of(event), cx);

@@ -56,12 +56,14 @@ pub fn render_chip_row(label: &'static str, chips: Vec<AnyElement>) -> Div {
 
 /// One chip with what picking it would show: picked chips stand out, a
 /// hidden one is struck through, and one that would show nothing is dimmed.
-/// The caller adds the click.
+/// `leading` goes before the label (an author's avatar). The caller adds
+/// the click.
 pub fn render_chip<T>(
     id: SharedString,
     label: &str,
     count: &FacetCount<T>,
     choice: FacetChoice,
+    leading: Option<AnyElement>,
 ) -> Stateful<Div> {
     let number = match choice {
         FacetChoice::Hidden => count.total,
@@ -70,6 +72,7 @@ pub fn render_chip<T>(
     let chip = div()
         .id(id)
         .flex()
+        .items_center()
         .gap_1()
         .px_2()
         .py_0p5()
@@ -77,6 +80,7 @@ pub fn render_chip<T>(
         .border_1()
         .text_xs()
         .cursor_pointer()
+        .children(leading)
         .child(label.to_owned())
         .child(div().text_color(theme::subtle()).child(number.to_string()));
     match choice {

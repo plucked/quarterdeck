@@ -18,7 +18,7 @@ qd-markdown.workspace = true
 qd-syntax.workspace = true
 qd-update.workspace = true
 qd-video.workspace = true
-image.workspace = true
+image = { workspace = true, features = ["png", "jpeg"] }
 
 [lints]
 workspace = true

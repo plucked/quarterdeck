@@ -5,6 +5,7 @@ use qd_github::RepoRef;
 use super::ReviewQueue;
 use super::others_filtering::OthersFacet;
 use crate::app_settings::AppSettings;
+use crate::avatar_images::AvatarImages;
 use crate::display_date::unix_now;
 use crate::ui_state::UiStateRecorder;
 
@@ -44,6 +45,20 @@ impl ReviewQueue {
     ) {
         self.others_tab_mut().toggle_chip_row(repo, facet);
         cx.notify();
+    }
+
+    /// Starts loading the avatars of others' pull requests' authors (the
+    /// author chips show them); each is downloaded once per session.
+    pub(super) fn request_author_avatars(&self, cx: &mut Context<Self>) {
+        let urls: Vec<String> = self
+            .lists()
+            .others
+            .iter()
+            .map(|pull_request| pull_request.author.avatar_url.clone())
+            .collect();
+        AvatarImages::global(cx).update(cx, |images, cx| {
+            images.request(urls.iter().map(String::as_str), cx);
+        });
     }
 
     /// Works out which of others' pull requests the Others tab shows.

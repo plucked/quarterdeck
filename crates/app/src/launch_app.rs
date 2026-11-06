@@ -10,6 +10,7 @@ use crate::app_commands::install_app_commands;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::app_update::AppUpdater;
+use crate::avatar_images::AvatarImages;
 use crate::bundled_fonts::load_bundled_fonts;
 use crate::main_window::{MainWindow, MainWindowReveal};
 use crate::startup_splash::{StartupSplash, startup_video_path};
@@ -86,6 +87,7 @@ pub fn launch_app() {
         cx.set_global(services.clone());
         cx.set_global(recorder);
         AppUpdater::start(cx);
+        AvatarImages::install(cx);
 
         // The main window opens first, hidden during the splash, so the queue
         // loads and refreshes from GitHub while the movie plays.

@@ -15,7 +15,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 **Following other people's work**
 - Choose repositories in Settings → Repositories (type `owner/name` or paste a GitHub link, or pick one your queue already has), and the Others tab lists their open pull requests that you did not open.
-- Each repository has its own filter, opened from the button on its header: hide drafts, hide the ones already asking for your review, only those updated in the last 7 or 30 days, and labels and authors as chips (click to show only those, ⌥-click to hide), with counts that say what each chip would show. Filters are kept, and the header shows `4 / 12` while one narrows the list.
+- Each repository has its own filter, opened from the button on its header: hide drafts, hide the ones already asking for your review, only those updated in the last 7 or 30 days, and labels (with their GitHub colors) and authors (with their avatars) as chips (click to show only those, ⌥-click to hide), with counts that say what each chip would show; chips that would show nothing are left out. Filters are kept, and the header shows `4 / 12` while one narrows the list.
 
 **Stacked pull requests**
 - Review a stack layer by layer, or combined: every change from the bottom of the stack up to the layer you are on, as one diff.

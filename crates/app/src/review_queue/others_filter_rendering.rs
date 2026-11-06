@@ -1,11 +1,14 @@
-use gpui::{AnyElement, ClickEvent, Context, Div, IntoElement, div, prelude::*, px};
+use std::collections::HashMap;
+
+use gpui::{AnyElement, ClickEvent, Context, Div, IntoElement, div, prelude::*, px, rgb};
 use qd_cache::{OthersFilter, UpdatedWithin};
 use qd_file_tree::{FacetChoice, FacetCount};
-use qd_github::RepoRef;
+use qd_github::{PullRequest, RepoRef};
 
 use super::ReviewQueue;
 use super::others_filtering::{FilterContext, OthersFacet, chip_counts, describe};
 use super::others_tab::review_requested_ids;
+use crate::avatar_images::Avatar;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::display_date::unix_now;
 use crate::facet_chips::{
@@ -15,6 +18,10 @@ use crate::segmented_control::SegmentedControl;
 use crate::settings_window::{SettingsCategory, open_settings_window_at};
 use crate::theme;
 
+/// An author's avatar in a chip.
+const CHIP_AVATAR_SIZE: f32 = 14.;
+/// A label's color dot in a chip.
+const LABEL_DOT_SIZE: f32 = 8.;
 /// Size of the filter button on a repository's header.
 const FILTER_BUTTON_SIZE: f32 = 24.;
 /// The filter glyph: three bars, each shorter, centered.
@@ -46,6 +53,7 @@ impl ReviewQueue {
         };
         let label_counts = chip_counts(&filter, OthersFacet::Labels, &pull_requests, &context);
         let author_counts = chip_counts(&filter, OthersFacet::Authors, &pull_requests, &context);
+        let chip_marks = ChipMarks::of(&pull_requests);
 
         div()
             .mx_2()
@@ -64,10 +72,24 @@ impl ReviewQueue {
             .child(Self::render_updated_within(repo, filter.updated_within, cx))
             // A row with no chip to offer is left out.
             .children((!label_counts.is_empty()).then(|| {
-                self.render_filter_chips(repo, OthersFacet::Labels, &filter, &label_counts, cx)
+                self.render_filter_chips(
+                    repo,
+                    OthersFacet::Labels,
+                    &filter,
+                    &label_counts,
+                    &chip_marks,
+                    cx,
+                )
             }))
             .children((!author_counts.is_empty()).then(|| {
-                self.render_filter_chips(repo, OthersFacet::Authors, &filter, &author_counts, cx)
+                self.render_filter_chips(
+                    repo,
+                    OthersFacet::Authors,
+                    &filter,
+                    &author_counts,
+                    &chip_marks,
+                    cx,
+                )
             }))
             .child(Self::render_filter_summary(repo, &filter, cx))
             .into_any_element()
@@ -166,6 +188,7 @@ impl ReviewQueue {
         facet: OthersFacet,
         filter: &OthersFilter,
         counts: &[FacetCount<String>],
+        chip_marks: &ChipMarks,
         cx: &mut Context<Self>,
     ) -> Div {
         let chips_filter = match facet {
@@ -200,6 +223,7 @@ impl ReviewQueue {
                     &count.value,
                     count,
                     chips_filter.choice_of(&count.value),
+                    chip_marks.mark_of(facet, &count.value),
                 )
                 .on_click(cx.listener(move |queue, event: &ClickEvent, _, cx| {
                     let click = ChipClick::of(event);
@@ -399,6 +423,58 @@ fn filter_summary_text(parts: &[String]) -> String {
         "Click to show only · ⌥-click to hide".to_owned()
     } else {
         parts.join(" · ")
+    }
+}
+
+/// What a chip shows before its name: an author's avatar, a label's color.
+struct ChipMarks {
+    /// Avatar URL by login.
+    avatars: HashMap<String, String>,
+    /// GitHub's hex color by label name.
+    label_colors: HashMap<String, String>,
+}
+
+impl ChipMarks {
+    /// The avatars and label colors of `pull_requests`.
+    fn of(pull_requests: &[PullRequest]) -> Self {
+        let mut marks = Self {
+            avatars: HashMap::new(),
+            label_colors: HashMap::new(),
+        };
+        for pull_request in pull_requests {
+            marks
+                .avatars
+                .entry(pull_request.author.login.clone())
+                .or_insert_with(|| pull_request.author.avatar_url.clone());
+            for label in &pull_request.labels {
+                marks
+                    .label_colors
+                    .entry(label.name.clone())
+                    .or_insert_with(|| label.color.clone());
+            }
+        }
+        marks
+    }
+
+    /// The mark before `value`'s chip in `facet`'s row, when known.
+    fn mark_of(&self, facet: OthersFacet, value: &str) -> Option<AnyElement> {
+        match facet {
+            OthersFacet::Authors => self
+                .avatars
+                .get(value)
+                .map(|url| Avatar::new(url.clone(), px(CHIP_AVATAR_SIZE)).into_any_element()),
+            OthersFacet::Labels => {
+                let color = u32::from_str_radix(self.label_colors.get(value)?, 16).ok()?;
+                Some(
+                    div()
+                        .flex_none()
+                        .size(px(LABEL_DOT_SIZE))
+                        .rounded_full()
+                        .bg(rgb(color))
+                        .into_any_element(),
+                )
+            }
+        }
     }
 }
 

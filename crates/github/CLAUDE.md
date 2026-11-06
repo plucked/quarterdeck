@@ -10,6 +10,7 @@
 | `repo_ref` | `RepoRef` (owner/name) |
 | `user` | `User` |
 | `label` | `Label` (name, color), on `PullRequest::labels` from the search results |
+| `download_avatar` | `download_avatar(url, size)`: an avatar's PNG/JPEG bytes from `avatars.githubusercontent.com` only (`s=` size), without the token, at most 1 MB |
 | `other_pull_requests` | `GitHubClient::other_pull_requests(repo, known, viewer_login)`: the issues API (`GET /repos/{o}/{r}/issues`, issue ids like the search results; core budget): nothing known → every open item (`SyncMode::Full`), else changes since the newest known `updated_at` (`SyncMode::Since`, `state=all`) merged into `known`; pull requests only (`pull_request` present), open, not the viewer's; up to 20 pages of 100; `others_search_queries` for the stack membership query |
 | `repository_request` | `GitHubClient::repository(repo)`: `GET /repos/{o}/{r}`, the repository as GitHub spells it (404 when missing or invisible to the token); `RepoRef::parse_input` reads `owner/name` or a GitHub URL |
 | `pull_request` | `PullRequest`, normalized |
