@@ -47,6 +47,7 @@
 //! - `cached_stack.rs`: `CachedStack`, a stack with the tag of its response.
 //! - `stack_storage.rs`: reads and writes of cached stacks and their layers.
 //! - `comparison_storage.rs`: reads and writes of the changed files between two commits.
+//! - `file_text_storage.rs`: whole file contents by blob SHA (full or abbreviated).
 //! - `review_note.rs`: `ReviewNote`, a local note or a GitHub draft comment.
 //! - `note_id.rs`: `NoteId`, a note's id, made by the app.
 //! - `note_destination.rs`: `NoteDestination`, local or GitHub.
@@ -74,6 +75,7 @@ mod diff_view_settings_storage;
 mod display_uuid;
 mod file_set_revision;
 mod file_set_storage;
+mod file_text_storage;
 mod folded_groups;
 mod folded_groups_storage;
 mod github_cache;

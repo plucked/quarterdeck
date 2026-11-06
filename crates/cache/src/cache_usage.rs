@@ -9,6 +9,8 @@ pub struct CacheUsage {
     pub pull_request_files: CachedData,
     /// The changed files of combined stack ranges (two commits compared).
     pub comparisons: CachedData,
+    /// Whole file contents (one file per entry), for the lines around hunks.
+    pub file_texts: CachedData,
     /// The database file and its write-ahead log on disk.
     pub disk_bytes: u64,
     /// Of `disk_bytes`, space SQLite freed but the file still holds.

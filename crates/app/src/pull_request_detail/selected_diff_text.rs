@@ -62,6 +62,7 @@ mod tests {
                 additions: 1,
                 deletions: 1,
                 patch: Some(PATCH.into()),
+                sha: None,
             },
             DiffOptions::default(),
         )];

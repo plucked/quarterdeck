@@ -22,10 +22,12 @@
 | `review_submission` | `ReviewSubmission` (+ `NewReviewThread`, `NewThreadReply`, `SubmittedPart`) |
 | `merge_method` / `merge_options` / `merge_outcome` / `merge_queries` / `pull_request_requests` | `MergeMethod`, `MergeOptions` (state, `MergeReadiness`, allowed methods, `MergePermissions`, `MergeQueueState`, branches), `MergeOutcome`; `GitHubClient::merge_options`, `start_merge`, `merge_outcome`, `close_pull_request`, `delete_branch` |
 | `review_queries` / `review_requests` | the review GraphQL texts and answers; `GitHubClient::review_state`, `submit_review`, `discard_pending_review`, `update_review_comment`, `delete_review_comment`, `set_thread_resolved` |
+| `file_text` / `file_text_location` / `file_text_query` / `file_text_requests` | `FileText` (blob SHA + text), `FileTextLocation` (full blob SHA, or path in a commit); `GitHubClient::file_text`: a blob by SHA is `GET …/git/blobs/{sha}` raw (one REST request), a path is one GraphQL `object(expression: "COMMIT:PATH")` (→ the REST request when `isTruncated`); binary (NUL in the first 8000 bytes) or over 8 MB is `GitHubError::NoFileText` |
 | `etag` / `conditional_response` | `ETag`, `ConditionalResponse` (NotModified / Modified) |
 | `next_page_url` | `Link` header pagination |
 | `rate_limit` / `api_usage` | `RateLimit`, `RateLimitResource`, `ApiUsage` counts and budgets |
 
+- `PullRequestFile::sha`: the blob after the change, full from the files API, abbreviated from a whole diff's `index OLD..NEW` line (none for a deleted file).
 - Types derive `Deserialize` only where they are decoded from a GitHub response (`User`, `PullRequestFile`, `SearchIssue`); none derive `Serialize`. `qd-cache` stores every field in its own column, so a new field also needs a cache migration.
 - `pull_request_files` follows `Link: rel="next"` pages (100 per page, at most 30 pages = GitHub's 3000-file cap, `MAX_LISTED_FILES`). Past it, `compare_files(base, head)` gets every file: the compare `.diff` has no file limit, while a pull request's own `.diff` answers 406 past 300 files. The search query reads one page (100 PRs).
 - Conditional requests: `pull_request_revision(…, etag)` sends `If-None-Match`; `304` → `ConditionalResponse::NotModified`, which GitHub does not count against the rate limit. `pull_request_stack(…, etag)` works the same. The search API sends no ETag (`Cache-Control: no-cache`), so each list is always one search request (search budget: 30/min).

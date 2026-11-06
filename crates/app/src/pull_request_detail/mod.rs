@@ -49,6 +49,9 @@
 //! - `pull_request_actions.rs`: merging (also as admin), closing and deleting the branch on GitHub.
 //! - `action_panel_rendering.rs`: the merge or close panel under the header.
 //! - `activity_rendering.rs`: the loading indicators: header pill, progress line, loading card.
+//! - `context_expansion.rs`: revealing unchanged lines around hunks: fetching the file's text, rebuilding its rows.
+//! - `fetch_file_text.rs`: gets a file's text after the change from the cache by blob SHA, else from GitHub.
+//! - `context_loads.rs`: `ContextLoads`, the file texts being fetched and their tasks.
 
 mod action_panel;
 mod action_panel_rendering;
@@ -59,6 +62,8 @@ mod chip_click;
 mod comment_card_rendering;
 mod comment_editor;
 mod comment_placement;
+mod context_expansion;
+mod context_loads;
 mod detail_content;
 mod detail_event;
 mod detail_row;
@@ -66,6 +71,7 @@ mod detail_row_list;
 mod diff_selection;
 mod fetch_changed_files;
 mod fetch_combined_files;
+mod fetch_file_text;
 mod file_review_state;
 mod file_set_update;
 mod file_tree_rendering;

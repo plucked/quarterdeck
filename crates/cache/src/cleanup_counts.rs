@@ -6,4 +6,6 @@ pub struct CleanupCounts {
     /// Combined diffs between two commits.
     pub comparisons: usize,
     pub stacks: usize,
+    /// Whole file contents, by blob SHA.
+    pub file_texts: usize,
 }

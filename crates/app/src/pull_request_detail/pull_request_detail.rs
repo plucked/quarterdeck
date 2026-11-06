@@ -23,6 +23,7 @@ use super::action_panel::ActionPanel;
 use super::changed_files::ChangedFiles;
 use super::changed_rows::ChangedRows;
 use super::chip_click::ChipClick;
+use super::context_loads::ContextLoads;
 use super::detail_content::DetailContent;
 use super::detail_event::{DetailEvent, LayerRequest};
 use super::detail_row_list::DetailRowList;
@@ -97,9 +98,9 @@ struct FetchedChanges {
 }
 
 /// The syntax colors computed for one diff, matched back by the diff's `Arc`.
-struct HighlightedDiff {
-    diff: Arc<FileDiff>,
-    syntax: Option<Arc<DiffSyntax>>,
+pub(super) struct HighlightedDiff {
+    pub diff: Arc<FileDiff>,
+    pub syntax: Option<Arc<DiffSyntax>>,
 }
 
 /// The right pane: a sticky header with the shown pull request's title (and
@@ -133,6 +134,8 @@ pub struct PullRequestDetail {
     diff_task: Option<Task<()>>,
     /// The syntax highlighting of the loaded diffs.
     syntax_task: Option<Task<()>>,
+    /// File texts being fetched to reveal lines around hunks.
+    context_loads: ContextLoads,
     /// Focused when code is pressed, so cmd-c copies the diff selection.
     focus: FocusHandle,
     /// The code texts painted this frame, for mouse hit testing.
@@ -219,6 +222,7 @@ impl PullRequestDetail {
             files_task: None,
             diff_task: None,
             syntax_task: None,
+            context_loads: ContextLoads::default(),
             focus: cx.focus_handle(),
             code_segments: CodeSegments::default(),
             diff_selection: None,
@@ -398,6 +402,18 @@ impl PullRequestDetail {
         self.description
             .as_ref()
             .and_then(ParsedDescription::document)
+    }
+
+    pub(super) fn changed_files_mut(&mut self) -> Option<&mut ChangedFiles> {
+        self.changed_files.as_mut()
+    }
+
+    pub(super) fn context_loads(&self) -> &ContextLoads {
+        &self.context_loads
+    }
+
+    pub(super) fn context_loads_mut(&mut self) -> &mut ContextLoads {
+        &mut self.context_loads
     }
 
     pub(super) fn changed_files(&self) -> Option<&ChangedFiles> {
@@ -1345,6 +1361,7 @@ impl PullRequestDetail {
         self.viewed_scope = None;
         self.reset_review();
         self.syntax_task = None;
+        self.context_loads = ContextLoads::default();
         self.highlight_progress = None;
         self.rebuild_rows(ScrollAnchor::Top);
         cx.notify();
@@ -1483,7 +1500,7 @@ impl PullRequestDetail {
 
     /// Sets the syntax colors of the files whose diffs are still the ones
     /// highlighted; a diff rebuilt meanwhile waits for its own pass.
-    fn apply_syntax(&mut self, highlighted: Vec<HighlightedDiff>) {
+    pub(super) fn apply_syntax(&mut self, highlighted: Vec<HighlightedDiff>) {
         let Some(ChangedFiles::Loaded(files)) = &mut self.changed_files else {
             return;
         };

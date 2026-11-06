@@ -13,4 +13,10 @@ pub struct PullRequestFile {
     pub deletions: u64,
     /// Unified diff hunks; absent for binary or very large files.
     pub patch: Option<String>,
+    /// The git blob SHA of the file's content after the change: in full
+    /// from the files API, abbreviated (7+ hex digits) when read from a
+    /// whole diff's `index` line; `None` when unknown or deleted. Content
+    /// addressed, so text cached under it never goes stale.
+    #[serde(default)]
+    pub sha: Option<String>,
 }

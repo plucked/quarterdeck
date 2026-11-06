@@ -1,7 +1,8 @@
 //! Renders file diffs built by `qd-diff` row by row, for the virtualized
 //! detail list: file headers (status, path, counts, viewed checkbox), hunk
 //! headers, unified lines or side-by-side rows with line numbers, syntax
-//! colors and inline change marks, and notes for files without lines. Each
+//! colors and inline change marks, bars revealing the unchanged lines
+//! between hunks, and notes for files without lines. Each
 //! row draws its piece of the file's card. Also the `DiffSummaryBar` above
 //! the files; how diffs show is chosen in the settings window.
 //!
@@ -23,10 +24,14 @@
 //! - `code_cells.rs`: `CodeCells` and `SideSelection`, what a row's code cells need for selection.
 //! - `diff_summary_bar.rs`: `DiffSummaryBar`, totals and collapse/expand all.
 //! - `diff_summary.rs`: `DiffSummary`, file, line and viewed counts.
+//! - `context_gap_rendering.rs`: the bar over hidden unchanged lines, with buttons revealing them.
+//! - `gap_part.rs`: `GapPart`, which lines of a gap a click reveals.
+//! - `file_text_load.rs`: `FileTextLoad`, a file's text being fetched for its gaps, or failed.
 
 mod code_cells;
 mod code_highlights;
 mod code_segments;
+mod context_gap_rendering;
 mod diff_cell_rendering;
 mod diff_position;
 mod diff_row_style;
@@ -39,11 +44,14 @@ mod file_header_rendering;
 mod file_note;
 mod file_note_rendering;
 mod file_status_badge;
+mod file_text_load;
+mod gap_part;
 mod split_rendering;
 mod unified_rendering;
 
 pub use code_cells::{CodeCells, SideSelection};
 pub use code_segments::{CodeSegment, CodeSegments};
+pub use context_gap_rendering::{GapClickHandler, render_gap_bar};
 pub use diff_cell_rendering::{
     DIFF_CHARACTER_WIDTH, DIFF_ROW_HEIGHT, gutter_width, render_hunk_header,
 };
@@ -58,5 +66,7 @@ pub use file_header_rendering::{FileClickHandler, render_file_header};
 pub use file_note::FileNote;
 pub use file_note_rendering::render_file_note;
 pub use file_status_badge::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
+pub use file_text_load::FileTextLoad;
+pub use gap_part::{CONTEXT_STEP, GapPart};
 pub use split_rendering::render_split_row;
 pub use unified_rendering::render_unified_line;

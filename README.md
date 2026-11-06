@@ -19,6 +19,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 **Reading diffs**
 - Eight color themes made for reading code, four light and four dark (Settings → Appearance, with a live preview; Graphite by default): every color readable against its background, and diffs in blue (added) and orange (removed), which stay distinct with red-green colour blindness. Interface in Schibsted Grotesk, code in JetBrains Mono (both built in).
+- Show the unchanged code above, below and between the changes: 20 lines at a time or all of it, from the bar over each gap. The file is fetched once, on the first click, and kept.
 - Unified or side-by-side diffs, syntax highlighting, changed words highlighted inside lines, wrapping or sideways scrolling, and whitespace changes folded away (all in Settings).
 - A file tree beside the diff with added and removed lines per file and folder, and a badge for added, removed and moved files.
 - Filters by kind (code, tests, generated, moved) and by file type, with live counts, and a switch to hide viewed files.
@@ -37,7 +38,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 **Light on GitHub**
 - Everything is cached locally, so the app opens instantly and works offline with what it last saw.
-- Unchanged pull requests cost no requests: GitHub's "not modified" answers are free, and stacks and combined diffs are fetched once per commit.
+- Unchanged pull requests cost no requests: GitHub's "not modified" answers are free, and stacks and combined diffs are fetched once per commit. A file's full text is fetched only when you expand around its changes, and once per version of the file.
 
 ## Run it
 

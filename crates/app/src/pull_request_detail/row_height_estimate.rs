@@ -53,7 +53,7 @@ fn estimated_height(
         DetailRow::SummaryBar => SUMMARY_BAR_HEIGHT,
         DetailRow::FileHeader { .. } => FILE_HEADER_HEIGHT,
         DetailRow::FileNote { .. } => FILE_NOTE_HEIGHT,
-        DetailRow::HunkHeader { .. } => DIFF_ROW_HEIGHT,
+        DetailRow::HunkHeader { .. } | DetailRow::EndGap { .. } => DIFF_ROW_HEIGHT,
         DetailRow::FileEnd { .. } => FILE_END_HEIGHT,
         DetailRow::CommentCard { .. } => COMMENT_CARD_HEIGHT,
         DetailRow::Composer { .. } => COMPOSER_HEIGHT,

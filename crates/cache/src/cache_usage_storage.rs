@@ -19,6 +19,8 @@ const COMPARISON_BYTES: &str = "SELECT
         (SELECT COUNT(*) FROM compare_file_sets), COUNT(*),
         COALESCE(SUM(LENGTH(CAST(filename AS BLOB)) + COALESCE(LENGTH(CAST(patch AS BLOB)), 0)), 0)
     FROM compare_files";
+const FILE_TEXT_BYTES: &str =
+    "SELECT COUNT(*), COUNT(*), COALESCE(SUM(LENGTH(CAST(text AS BLOB))), 0) FROM file_texts";
 
 impl GitHubCache {
     /// How much each kind of cached data takes, and the database on disk.
@@ -31,6 +33,7 @@ impl GitHubCache {
             pull_requests: cached_data(connection, PULL_REQUEST_BYTES)?,
             pull_request_files: cached_data(connection, FILE_SET_BYTES)?,
             comparisons: cached_data(connection, COMPARISON_BYTES)?,
+            file_texts: cached_data(connection, FILE_TEXT_BYTES)?,
             disk_bytes: page_size * pages + write_ahead_log_bytes(connection)?,
             free_bytes: page_size * free_pages,
         })

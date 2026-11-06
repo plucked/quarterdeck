@@ -8,8 +8,8 @@ use crate::{CleanupCounts, GitHubCache};
 impl GitHubCache {
     /// Removes cached data not used for longer than `ttl`: changed files and
     /// combined diffs not read or refetched since, stacks not read or
-    /// confirmed since, and pull requests no longer in any list and not
-    /// fetched since. Pull requests still in a list (the queue) stay.
+    /// confirmed since, file contents not read since, and pull requests no
+    /// longer in any list and not fetched since. Pull requests still in a list (the queue) stay.
     pub fn delete_expired(&mut self, ttl: Duration) -> Result<CleanupCounts> {
         let ttl_seconds = i64::try_from(ttl.as_secs()).unwrap_or(i64::MAX);
         let cutoff = unix_now().saturating_sub(ttl_seconds);
@@ -24,6 +24,8 @@ impl GitHubCache {
         )?;
         let stacks =
             transaction.execute("DELETE FROM pr_stacks WHERE last_used_at < ?1", [cutoff])?;
+        let file_texts =
+            transaction.execute("DELETE FROM file_texts WHERE last_used_at < ?1", [cutoff])?;
         let pull_requests = transaction.execute(
             "DELETE FROM pull_requests
              WHERE fetched_at < ?1 AND id NOT IN (SELECT pr_id FROM pr_lists)",
@@ -35,6 +37,7 @@ impl GitHubCache {
             pull_requests,
             comparisons,
             stacks,
+            file_texts,
         })
     }
 
@@ -47,6 +50,7 @@ impl GitHubCache {
         self.connection().execute("DELETE FROM pr_stacks", [])?;
         self.connection()
             .execute("DELETE FROM compare_file_sets", [])?;
+        self.connection().execute("DELETE FROM file_texts", [])?;
 
         // SQLite keeps the freed pages in the file; give them back to the disk.
         self.connection()
@@ -106,6 +110,7 @@ mod tests {
             additions: 1,
             deletions: 0,
             patch: None,
+            sha: None,
         }
     }
 

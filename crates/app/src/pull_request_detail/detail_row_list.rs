@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::ops::Range;
 
 use qd_cache::{DiffLayout, DiffViewSettings};
-use qd_diff::WhitespaceMode;
+use qd_diff::{GapPlace, WhitespaceMode};
 use qd_github::LineSide;
 
 use super::changed_files::ChangedFiles;
@@ -115,6 +115,11 @@ impl DetailRowList {
                         }
                     }
                 }
+            }
+
+            // The lines below the last hunk, when the diff leaves some out.
+            if loaded.gap_at(GapPlace::End).is_some() {
+                rows.push(DetailRow::EndGap { file });
             }
 
             // Cards no line took (outdated conversations, lines not in the diff) go under the header.
@@ -262,6 +267,7 @@ mod tests {
                 additions: 1,
                 deletions: 1,
                 patch: patch.map(Into::into),
+                sha: None,
             },
             DiffOptions::default(),
         )
@@ -284,7 +290,8 @@ mod tests {
         })
     }
 
-    /// A unified file is its header, a hunk header, one row per line, and its end.
+    /// A unified file is its header, a hunk header, one row per line, the
+    /// bar over the lines below its hunk, and its end.
     #[test]
     fn builds_unified_rows() {
         let files = [loaded("a.rs", Some(PATCH))];
@@ -311,6 +318,7 @@ mod tests {
                     hunk: 0,
                     line: 2
                 },
+                DetailRow::EndGap { file: 0 },
                 DetailRow::FileEnd { file: 0 },
             ]
         );
@@ -371,8 +379,8 @@ mod tests {
         );
         let replaced = list.replace_file(0, rows).unwrap();
 
-        assert_eq!(replaced.len(), 6);
-        assert_eq!(list.file_start(1), Some(second_start - 4));
+        assert_eq!(replaced.len(), 7);
+        assert_eq!(list.file_start(1), Some(second_start - 5));
         assert_eq!(
             list.get(list.file_start(1).unwrap()),
             Some(DetailRow::FileHeader { file: 1 })
@@ -421,6 +429,17 @@ mod tests {
             file: 0,
             note: FileNote::RenamedWithoutChanges
         }));
+    }
+
+    /// An added file shows whole, so it has no bar over hidden lines below it.
+    #[test]
+    fn added_file_has_no_end_gap() {
+        let mut file = (*loaded("new.rs", Some("@@ -0,0 +1,2 @@\n+a\n+b\n")).file).clone();
+        file.status = "added".into();
+        let files = [LoadedFile::build(file, DiffOptions::default())];
+        let review = FileReviewState::for_loaded(&files, &[]);
+        let list = build(&files, &review, DiffViewSettings::default());
+        assert!(!list.rows.contains(&DetailRow::EndGap { file: 0 }));
     }
 
     /// A file without a patch shows a note instead of lines.

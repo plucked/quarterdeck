@@ -17,6 +17,9 @@ pub enum GitHubError {
     /// The request did not complete (DNS, TLS, connection, body read).
     #[error("http error: {0}")]
     Http(#[from] ureq::Error),
+    /// A file's text cannot be shown, and why (binary, too large, missing).
+    #[error("the file cannot be shown: {reason}")]
+    NoFileText { reason: &'static str },
     /// The response body did not match the expected JSON shape.
     #[error("decode error: {0}")]
     Decode(#[from] serde_json::Error),

@@ -36,6 +36,10 @@ pub enum DetailRow {
         hunk: usize,
         row: SplitRow,
     },
+    /// The bar over the hidden lines below a file's last hunk.
+    EndGap {
+        file: usize,
+    },
     /// The strip closing a file's card.
     FileEnd {
         file: usize,

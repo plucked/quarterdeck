@@ -348,6 +348,19 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         ))
     );
 ",
+    r"
+    -- Each changed file's blob SHA after the change (full from the files
+    -- API, abbreviated from a whole diff); NULL for rows cached before.
+    ALTER TABLE pr_files ADD COLUMN sha TEXT;
+    ALTER TABLE compare_files ADD COLUMN sha TEXT;
+    -- Whole file contents by blob SHA, for the lines around a diff's hunks.
+    -- Content addressed: a row never goes stale, it only expires unused.
+    CREATE TABLE file_texts (
+        blob_sha      TEXT    PRIMARY KEY CHECK (length(blob_sha) = 40),
+        text          TEXT    NOT NULL,
+        last_used_at  INTEGER NOT NULL
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

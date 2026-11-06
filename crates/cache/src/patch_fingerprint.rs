@@ -54,6 +54,7 @@ mod tests {
             additions: 1,
             deletions: 1,
             patch: Some(patch.into()),
+            sha: None,
         }
     }
 

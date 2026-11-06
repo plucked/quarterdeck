@@ -6,6 +6,7 @@ use gpui::{
     list, prelude::*, px,
 };
 use qd_cache::{DiffLayout, LineWrapping, PanelVisibility};
+use qd_diff::{GapPlace, LineOrigin};
 use qd_github::LineSide;
 
 use super::changed_files::ChangedFiles;
@@ -14,9 +15,9 @@ use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
 use crate::app_commands::Copy;
 use crate::diff_view::{
-    DiffRowStyle, DiffSide, DiffSummary, DiffSummaryBar, FileClickHandler, render_file_end,
-    render_file_header, render_file_note, render_hunk_header, render_split_row,
-    render_unified_line,
+    DiffRowStyle, DiffSide, DiffSummary, DiffSummaryBar, FileClickHandler, GapClickHandler,
+    GapPart, render_file_end, render_file_header, render_file_note, render_gap_bar,
+    render_hunk_header, render_split_row, render_unified_line,
 };
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
@@ -145,13 +146,18 @@ impl PullRequestDetail {
             DetailRow::FileNote { file, note } => {
                 render_file_note(file, note, Self::toggle_collapsed_handler(file, cx))
             }
-            DetailRow::HunkHeader { file, hunk } => self.render_hunk_header_row(file, hunk),
+            DetailRow::HunkHeader { file, hunk } => {
+                self.render_hunk_header_row(index, file, hunk, cx)
+            }
+            DetailRow::EndGap { file } => self.render_end_gap_row(index, file, cx),
             DetailRow::UnifiedLine { file, hunk, line } => {
                 let cells = self.code_cells(index);
                 let numbers = self
                     .loaded_files()
                     .get(file)
                     .and_then(|loaded| loaded.diff.hunks().get(hunk)?.lines.get(line))
+                    // GitHub takes comments only on lines of the patch.
+                    .filter(|diff_line| diff_line.origin == LineOrigin::Patch)
                     .map_or_else(RowLines::default, |diff_line| RowLines {
                         old: diff_line.old_number,
                         new: diff_line.new_number,
@@ -172,6 +178,11 @@ impl PullRequestDetail {
                     .loaded_files()
                     .get(file)
                     .and_then(|loaded| loaded.diff.hunks().get(hunk))
+                    // GitHub takes comments only on lines of the patch.
+                    .filter(|hunk| {
+                        let line = row.new.or(row.old).and_then(|index| hunk.lines.get(index));
+                        line.is_some_and(|line| line.origin == LineOrigin::Patch)
+                    })
                     .map_or_else(RowLines::default, |hunk| RowLines {
                         old: row.old.and_then(|index| hunk.lines.get(index)?.old_number),
                         new: row.new.and_then(|index| hunk.lines.get(index)?.new_number),
@@ -266,16 +277,51 @@ impl PullRequestDetail {
         .into_any_element()
     }
 
-    /// A hunk's `@@` header, indented past the gutters.
-    fn render_hunk_header_row(&self, file: usize, hunk: usize) -> AnyElement {
+    /// A hunk's `@@` header, indented past the gutters; with the buttons
+    /// revealing the hidden lines above it, when there are some.
+    fn render_hunk_header_row(
+        &self,
+        row: usize,
+        file: usize,
+        hunk: usize,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(loaded) = self.loaded_files().get(file) else {
             return div().into_any_element();
         };
+        let header = &loaded.diff.hunks()[hunk].header;
+        let place = GapPlace::AboveHunk(hunk);
+        if let Some(gap) = loaded.gap_at(place) {
+            let on_click = Self::gap_click_handler(file, place, cx);
+            let load = self.context_loads().load_of(file);
+            return render_gap_bar(row, gap, Some(header), load, &on_click).into_any_element();
+        }
         let indent = match self.diff_settings().layout {
             DiffLayout::Unified => 2. * loaded.gutter_width,
             DiffLayout::Split => loaded.gutter_width,
         };
-        render_hunk_header(&loaded.diff.hunks()[hunk].header, indent).into_any_element()
+        render_hunk_header(header, indent).into_any_element()
+    }
+
+    /// The bar over the hidden lines below file `file`'s last hunk.
+    fn render_end_gap_row(&self, row: usize, file: usize, cx: &mut Context<Self>) -> AnyElement {
+        let Some(gap) = self
+            .loaded_files()
+            .get(file)
+            .and_then(|loaded| loaded.gap_at(GapPlace::End))
+        else {
+            return div().into_any_element();
+        };
+        let on_click = Self::gap_click_handler(file, GapPlace::End, cx);
+        let load = self.context_loads().load_of(file);
+        render_gap_bar(row, gap, None, load, &on_click).into_any_element()
+    }
+
+    /// Reveals the clicked part of the gap at `place` in file `file`.
+    fn gap_click_handler(file: usize, place: GapPlace, cx: &mut Context<Self>) -> GapClickHandler {
+        Rc::new(cx.listener(move |detail, part: &GapPart, _, cx| {
+            detail.expand_context(file, place, *part, cx);
+        }))
     }
 
     /// A diff row of file `file` drawn by `render`, which scrolls the

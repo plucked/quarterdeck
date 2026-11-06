@@ -40,11 +40,19 @@
 //! - `merge_outcome.rs`: `MergeOutcome`, how an asynchronous merge ended or that it runs.
 //! - `merge_queries.rs`: the merge options query and the asynchronous merge answers.
 //! - `pull_request_requests.rs`: `GitHubClient`'s merge, close and branch deletion calls.
+//! - `file_text.rs`: `FileText`, a file's whole content with its blob SHA.
+//! - `file_text_location.rs`: `FileTextLocation`, a blob SHA or a path in a commit.
+//! - `file_text_query.rs`: the GraphQL query of a file at a path, and its answer.
+//! - `file_text_requests.rs`: `GitHubClient::file_text`, by blob (REST) or path (GraphQL).
 
 mod api_usage;
 mod conditional_response;
 mod download_progress;
 mod etag;
+mod file_text;
+mod file_text_location;
+mod file_text_query;
+mod file_text_requests;
 mod github_client;
 mod github_error;
 mod graphql_response;
@@ -82,6 +90,9 @@ pub use api_usage::{ApiUsage, ApiUsageSnapshot};
 pub use conditional_response::ConditionalResponse;
 pub use download_progress::DownloadProgress;
 pub use etag::ETag;
+pub use file_text::FileText;
+pub use file_text_location::FileTextLocation;
+pub use file_text_requests::MAX_FILE_TEXT_BYTES;
 pub use github_client::{GitHubClient, MAX_LISTED_FILES};
 pub use github_error::GitHubError;
 pub use line_side::LineSide;

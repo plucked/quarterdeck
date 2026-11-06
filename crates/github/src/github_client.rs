@@ -27,6 +27,8 @@ const JSON_MEDIA_TYPE: &str = "application/vnd.github+json";
 /// A comparison as one `git diff` text: every file, unlike the JSON
 /// comparison, which stops at 300.
 const DIFF_MEDIA_TYPE: &str = "application/vnd.github.diff";
+/// A blob's content as it is, not base64 in JSON.
+pub(crate) const RAW_MEDIA_TYPE: &str = "application/vnd.github.raw+json";
 /// GitHub's maximum page size.
 const PAGE_SIZE: &str = "100";
 /// GitHub lists at most 3000 changed files per pull request: 30 pages of 100.
@@ -40,9 +42,9 @@ const AUTHORED_QUERY: &str = "is:pr is:open archived:false author:@me";
 const READ_CHUNK_BYTES: usize = 64 * 1024;
 
 /// One answer from GitHub, read whole.
-struct HttpResponse {
+pub(crate) struct HttpResponse {
     status: StatusCode,
-    body: String,
+    pub body: String,
     etag: Option<ETag>,
     next_page: Option<String>,
 }
@@ -305,7 +307,7 @@ impl GitHubClient {
 
     /// Sends an authenticated GET for `accept`, conditional on `etag` when
     /// given, and reads the answer whole.
-    fn get(
+    pub(crate) fn get(
         &self,
         url: &str,
         query: &[(&str, &str)],

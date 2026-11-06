@@ -121,6 +121,11 @@ fn render_cache_breakdown(usage: CacheUsage) -> impl IntoElement {
             usage.comparisons,
         ))
         .child(line(
+            "Full file texts",
+            format!("{} files", usage.file_texts.files).into(),
+            usage.file_texts,
+        ))
+        .child(line(
             "Pull requests",
             format!("{} pull requests", usage.pull_requests.entries).into(),
             usage.pull_requests,

@@ -47,7 +47,7 @@ impl GitHubCache {
         )?;
 
         let mut statement = self.connection().prepare(
-            "SELECT filename, previous_filename, status, additions, deletions, patch
+            "SELECT filename, previous_filename, status, additions, deletions, patch, sha
              FROM pr_files WHERE pr_id = ?1 ORDER BY position",
         )?;
         let rows = statement.query_map([pr_id], pull_request_file_from_row)?;
@@ -62,6 +62,25 @@ impl GitHubCache {
             },
             files: rows.collect::<rusqlite::Result<_>>()?,
         }))
+    }
+
+    /// The commits the cached files of a pull request were fetched for,
+    /// without reading the files. `None` when none are cached.
+    pub fn file_set_commits(&self, pull_request_id: u64) -> Result<Option<PullRequestRevision>> {
+        let commits = self
+            .connection()
+            .query_row(
+                "SELECT head_sha, base_sha FROM pr_file_sets WHERE pr_id = ?1",
+                [sql_integer(pull_request_id)?],
+                |row| {
+                    Ok(PullRequestRevision {
+                        head_sha: row.get(0)?,
+                        base_sha: row.get(1)?,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(commits)
     }
 
     /// Stores the changed files of `pull_request` as fetched for `revision`,
@@ -98,8 +117,9 @@ impl GitHubCache {
         for (position, file) in files.iter().enumerate() {
             transaction.execute(
                 "INSERT INTO pr_files (
-                    pr_id, position, filename, previous_filename, status, additions, deletions, patch)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    pr_id, position, filename, previous_filename, status, additions, deletions,
+                    patch, sha)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     pr_id,
                     i64::try_from(position)?,
@@ -108,7 +128,8 @@ impl GitHubCache {
                     file.status,
                     sql_integer(file.additions)?,
                     sql_integer(file.deletions)?,
-                    file.patch
+                    file.patch,
+                    file.sha
                 ],
             )?;
         }
@@ -149,6 +170,7 @@ pub(crate) fn pull_request_file_from_row(row: &Row<'_>) -> rusqlite::Result<Pull
         additions: read_u64(row, 3)?,
         deletions: read_u64(row, 4)?,
         patch: row.get(5)?,
+        sha: row.get(6)?,
     })
 }
 
@@ -189,6 +211,7 @@ mod tests {
             additions: 3,
             deletions: 1,
             patch: Some("@@ -1 +1 @@".into()),
+            sha: None,
         }
     }
 
@@ -227,6 +250,10 @@ mod tests {
             .unwrap();
 
         let set = cache.file_set(1).unwrap().unwrap();
+        assert_eq!(
+            cache.file_set_commits(1).unwrap(),
+            Some(set.revision.commits.clone())
+        );
         assert_eq!(set.files, [file("b.rs"), file("a.rs")]);
         assert_eq!(set.revision, revision("head1", "tag1"));
         assert!(set.is_current_for(&pull_request));

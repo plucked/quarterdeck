@@ -6,6 +6,8 @@ const FILE_HEADER: &str = "diff --git ";
 const HUNK_HEADER: &str = "@@";
 /// The path `git` writes for the missing side of an added or deleted file.
 const NO_FILE: &str = "/dev/null";
+/// The extended header naming the blobs before and after: `index OLD..NEW [mode]`.
+const INDEX_HEADER: &str = "index ";
 
 /// Splits a whole `git diff` (GitHub's `application/vnd.github.diff`
 /// answer) into one changed file per section, shaped like the files API's
@@ -55,6 +57,7 @@ fn file_of_section(section: &[&str]) -> Option<PullRequestFile> {
         additions: u64::try_from(additions).ok()?,
         deletions: u64::try_from(deletions).ok()?,
         patch: (!hunks.is_empty()).then(|| hunks.join("\n")),
+        sha: header.new_blob.clone(),
     })
 }
 
@@ -90,10 +93,13 @@ struct SectionHeader {
     old_path: Option<String>,
     /// From `rename to` / `copy to` or `+++ b/…`.
     new_path: Option<String>,
+    /// The abbreviated blob after the change, from `index OLD..NEW`; `None`
+    /// for a deleted file (all zeros) or without the line.
+    new_blob: Option<String>,
 }
 
 impl SectionHeader {
-    /// Takes in one header line; lines it does not know (`index`, modes,
+    /// Takes in one header line; lines it does not know (modes,
     /// `similarity index`, `Binary files …`) change nothing.
     fn read(&mut self, line: &str) {
         if line.starts_with("new file mode") {
@@ -116,6 +122,8 @@ impl SectionHeader {
             self.old_path = self.old_path.take().or_else(|| side_path(path, "a/"));
         } else if let Some(path) = line.strip_prefix("+++ ") {
             self.new_path = self.new_path.take().or_else(|| side_path(path, "b/"));
+        } else if let Some(blobs) = line.strip_prefix(INDEX_HEADER) {
+            self.new_blob = new_blob_of_index(blobs);
         }
     }
 
@@ -133,6 +141,15 @@ impl SectionHeader {
         };
         Some((filename, Some(old_path)))
     }
+}
+
+/// The blob after the change in an `index OLD..NEW [mode]` line's
+/// `OLD..NEW [mode]`; `None` when it is all zeros (the file was deleted).
+fn new_blob_of_index(blobs: &str) -> Option<String> {
+    let (_, new) = blobs.split_whitespace().next()?.split_once("..")?;
+    let is_hex = !new.is_empty() && new.bytes().all(|byte| byte.is_ascii_hexdigit());
+    let is_deleted = new.bytes().all(|byte| byte == b'0');
+    (is_hex && !is_deleted).then(|| new.to_owned())
 }
 
 /// The path of a `---`/`+++` line without its `a/`/`b/` prefix; `None` for
@@ -242,6 +259,23 @@ Binary files a/logo.png and b/logo.png differ
         );
         assert_eq!(files[3].previous_filename.as_deref(), Some("old/name.rs"));
         assert_eq!(files[0].previous_filename, None);
+    }
+
+    /// The blob after the change comes from the `index` line; deleted files and renames without one have none.
+    #[test]
+    fn reads_the_new_blob_from_the_index_line() {
+        let files = files_of_unified_diff(DIFF);
+        let blobs: Vec<Option<&str>> = files.iter().map(|file| file.sha.as_deref()).collect();
+        assert_eq!(
+            blobs,
+            [
+                Some("2222222"),
+                Some("3333333"),
+                None,
+                None,
+                Some("6666666")
+            ]
+        );
     }
 
     /// The patch starts at the first hunk header, like the files API's.

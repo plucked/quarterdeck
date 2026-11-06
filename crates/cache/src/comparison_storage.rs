@@ -27,7 +27,7 @@ impl GitHubCache {
             return Ok(None);
         }
         let mut statement = self.connection().prepare(
-            "SELECT filename, previous_filename, status, additions, deletions, patch
+            "SELECT filename, previous_filename, status, additions, deletions, patch, sha
              FROM compare_files
              WHERE repo_owner = ?1 AND repo_name = ?2 AND base_sha = ?3 AND head_sha = ?4
              ORDER BY position",
@@ -66,8 +66,8 @@ impl GitHubCache {
             transaction.execute(
                 "INSERT INTO compare_files (
                     repo_owner, repo_name, base_sha, head_sha, position, filename,
-                    previous_filename, status, additions, deletions, patch)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    previous_filename, status, additions, deletions, patch, sha)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     repo.owner,
                     repo.name,
@@ -79,7 +79,8 @@ impl GitHubCache {
                     file.status,
                     sql_integer(file.additions)?,
                     sql_integer(file.deletions)?,
-                    file.patch
+                    file.patch,
+                    file.sha
                 ],
             )?;
         }
@@ -100,6 +101,7 @@ mod tests {
             additions: 1,
             deletions: 2,
             patch: Some("@@ -1 +1 @@".into()),
+            sha: None,
         }
     }
 
