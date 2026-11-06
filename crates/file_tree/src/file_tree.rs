@@ -74,6 +74,16 @@ impl FileTree {
         files
     }
 
+    /// The paths of every folder in the tree, as `visible_rows` takes
+    /// collapsed folders, in no particular order.
+    pub fn folder_paths(&self) -> Vec<String> {
+        self.nodes
+            .iter()
+            .filter(|node| matches!(node.kind, TreeNodeKind::Folder { .. }))
+            .map(|node| node.path.clone())
+            .collect()
+    }
+
     /// The rows to show: expanded folders show their children, folders whose
     /// path is in `collapsed` do not, and only files `is_shown` accepts
     /// appear. A folder without any shown file under it is left out.

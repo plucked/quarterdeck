@@ -2,7 +2,7 @@
 
 | Module | Holds |
 |---|---|
-| `file_tree` | `FileTree::build(paths)`: folders first, name order ignoring case, single-folder chains compacted; `file_order()`, `files_under(node)`, `visible_rows(collapsed folder paths, is_shown)` |
+| `file_tree` | `FileTree::build(paths)`: folders first, name order ignoring case, single-folder chains compacted; `file_order()`, `files_under(node)`, `folder_paths()` (every folder, for collapse all), `visible_rows(collapsed folder paths, is_shown)` |
 | `tree_node` / `node_id` / `tree_row` | `TreeNode` (`name` as shown, full `path`), `TreeNodeKind`, `NodeId`, `TreeRow` |
 | `file_filter` / `filtered_file` | `FileFilter`: `hide_viewed` switch + two chip rows (`kinds`, `file_types`) that must both admit a file; faceted counts (`kind_counts`, `file_type_counts` (alphabetical, ignoring the leading dot and case): each chip's total and what the other row lets through) and `describe()`; `FilteredFile` is what it looks at (the file's `FileFacets`, viewed) |
 | `file_facets` | `FileFacets`: a file's kind and type, worked out once from its path (the app keeps them per loaded file; path analysis per refresh was 0.3 s for 17k files) |

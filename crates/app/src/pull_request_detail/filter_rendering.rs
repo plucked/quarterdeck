@@ -6,6 +6,7 @@ use qd_file_tree::{FacetChoice, FacetCount};
 
 use super::chip_click::ChipClick;
 use super::pull_request_detail::PullRequestDetail;
+use crate::button::Button;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::theme;
 
@@ -15,14 +16,23 @@ const COLLAPSED_TYPE_CHIPS: usize = 8;
 const ROW_LABEL_WIDTH: f32 = 38.;
 
 impl PullRequestDetail {
-    /// The filter under the progress bar: the viewed switch, the kind and
-    /// type chip rows with live counts, and a line saying what is shown.
+    /// The filter under the progress bar: the viewed switch (with the
+    /// button folding every folder beside it), the kind and type chip rows
+    /// with live counts, and a line saying what is shown.
     pub(super) fn render_filter_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
             .gap_1p5()
-            .child(self.render_hide_viewed_switch(cx))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_2()
+                    .child(self.render_hide_viewed_switch(cx))
+                    .children(self.render_fold_all_button(cx)),
+            )
             .child(self.render_kind_row(cx))
             .child(self.render_type_row(cx))
             .child(self.render_filter_summary(cx))
@@ -45,6 +55,25 @@ impl PullRequestDetail {
             .child(Checkbox::new(CheckState::from_bool(is_on)))
             .child("Hide viewed")
             .child(div().text_color(theme::subtle()).child(viewed.to_string()))
+    }
+
+    /// `Collapse all` while a folder is expanded, else `Expand all`: folds
+    /// or unfolds every folder of the tree at once. None for a flat list.
+    fn render_fold_all_button(&self, cx: &mut Context<Self>) -> Option<Button> {
+        let tree = self.file_tree();
+        if !tree.has_folders() {
+            return None;
+        }
+        let label = if tree.has_expanded_folder() {
+            "Collapse all"
+        } else {
+            "Expand all"
+        };
+        Some(
+            Button::new("fold-all-folders", label)
+                .ghost()
+                .on_click(cx.listener(|detail, _, _, cx| detail.toggle_all_folders(cx))),
+        )
     }
 
     /// The kind chips: Code, Tests, Generated, Moved (those present).

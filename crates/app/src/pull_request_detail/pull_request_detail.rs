@@ -1106,6 +1106,17 @@ impl PullRequestDetail {
     }
 
     /// Collapses or expands a folder of the tree.
+    /// Collapses every folder of the tree while one is expanded, else expands them all.
+    pub(super) fn toggle_all_folders(&mut self, cx: &mut Context<Self>) {
+        if self.file_tree.has_expanded_folder() {
+            self.file_tree.collapse_all_folders();
+        } else {
+            self.file_tree.expand_all_folders();
+        }
+        self.refresh_tree_rows();
+        cx.notify();
+    }
+
     pub(super) fn toggle_folder(&mut self, path: &str, cx: &mut Context<Self>) {
         self.file_tree.toggle_folder(path);
         self.refresh_tree_rows();

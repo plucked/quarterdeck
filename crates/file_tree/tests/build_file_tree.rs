@@ -60,6 +60,23 @@ fn visible_rows_respect_collapsing_and_filters() {
     assert_eq!(rows, ["src", "Cargo.toml", "README.md"]);
 }
 
+/// Collapsing every folder path leaves only the top level, and compacted chains count as one folder.
+#[test]
+fn folder_paths_collapse_every_folder() {
+    let tree = FileTree::build(&PATHS);
+    let mut paths = tree.folder_paths();
+    paths.sort();
+    assert_eq!(paths, ["docs", "src", "src/app/views"]);
+
+    let collapsed: HashSet<String> = paths.into_iter().collect();
+    let rows: Vec<_> = tree
+        .visible_rows(&collapsed, |_| true)
+        .into_iter()
+        .map(|row| tree.node(row.node).name.clone())
+        .collect();
+    assert_eq!(rows, ["docs", "src", "Cargo.toml", "README.md"]);
+}
+
 /// A folder's files are everything under it, in tree order.
 #[test]
 fn files_under_a_folder() {

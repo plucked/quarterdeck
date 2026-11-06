@@ -23,6 +23,8 @@ pub struct FileTreeState {
     filter: FileFilter,
     /// Folders collapsed in the tree, by path; folders start expanded.
     collapsed_folders: HashSet<String>,
+    /// Every folder's path in the tree, for collapsing them all.
+    folder_paths: Vec<String>,
     rows: Vec<TreeRow>,
     /// The kind chips' counts, as of the last row refresh.
     kind_counts: Vec<FacetCount<FileKind>>,
@@ -56,6 +58,7 @@ impl FileTreeState {
                 file_types: FacetFilter::default(),
             },
             collapsed_folders: HashSet::new(),
+            folder_paths: Vec::new(),
             rows: Vec::new(),
             kind_counts: Vec::new(),
             type_counts: Vec::new(),
@@ -135,6 +138,7 @@ impl FileTreeState {
     /// expanded, no chip picked and no type hidden (the viewed switch and
     /// hidden kinds stay).
     pub fn reset_for(&mut self, tree: FileTree) {
+        self.folder_paths = tree.folder_paths();
         self.tree = tree;
         self.collapsed_folders.clear();
         self.filter.kinds.only.clear();
@@ -265,6 +269,26 @@ impl FileTreeState {
         self.filter.shows(&filtered_file(loaded, review))
     }
 
+    /// Whether the tree has folders at all (a flat list has nothing to fold).
+    pub fn has_folders(&self) -> bool {
+        !self.folder_paths.is_empty()
+    }
+
+    /// Whether some folder is expanded, so collapsing all would change something.
+    pub fn has_expanded_folder(&self) -> bool {
+        self.collapsed_folders.len() < self.folder_paths.len()
+    }
+
+    /// Collapses every folder, nested ones too, leaving the top level.
+    pub fn collapse_all_folders(&mut self) {
+        self.collapsed_folders = self.folder_paths.iter().cloned().collect();
+    }
+
+    /// Expands every folder.
+    pub fn expand_all_folders(&mut self) {
+        self.collapsed_folders.clear();
+    }
+
     pub fn toggle_folder(&mut self, path: &str) {
         if !self.collapsed_folders.remove(path) {
             self.collapsed_folders.insert(path.to_owned());
@@ -336,5 +360,35 @@ fn filtered_file<'file>(
     FilteredFile {
         facets: &loaded.facets,
         is_viewed: review.is_viewed(loaded.filename()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Collapsing all folds every folder, nested ones too; expanding all
+    /// unfolds them, and a flat list has nothing to fold.
+    #[test]
+    fn folds_every_folder_at_once() {
+        let mut state = FileTreeState::new(ReviewLayoutState::default());
+        state.reset_for(FileTree::build(&[
+            "src/app/main.rs",
+            "src/lib.rs",
+            "docs/a.md",
+        ]));
+        assert!(state.has_folders());
+        assert!(state.has_expanded_folder());
+
+        state.collapse_all_folders();
+        assert!(!state.has_expanded_folder());
+        assert!(state.is_folder_collapsed("src/app"));
+
+        state.expand_all_folders();
+        assert!(state.has_expanded_folder());
+        assert!(!state.is_folder_collapsed("src"));
+
+        state.reset_for(FileTree::build(&["a.rs", "b.rs"]));
+        assert!(!state.has_folders());
     }
 }
