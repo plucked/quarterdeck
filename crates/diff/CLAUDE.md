@@ -10,8 +10,11 @@
 | `parse_patch` | GitHub per-file patch → hunks (tabs → 4 spaces, `\ No newline` dropped) |
 | `refine_changes` | whitespace folding (`git diff -w` semantics), then inline marks |
 | `change_block` | removed run + added run; pairs by position |
+| `line_origin` | `LineOrigin`: a line of the patch, or one revealed from the file's text (`DiffLine::origin`) |
+| `source_lines` / `revealed_lines` / `context_gap` | `SourceLines` (the new file's text as numbered lines, tabs expanded), `RevealedLines` (merged new-side ranges shown), `ContextGap` + `GapPlace` (hidden lines above a hunk or below the last; `top`/`bottom`/`all` parts) |
+| `hunk_context` | `FileDiff::gaps(line_count)` and `FileDiff::with_context(source, revealed)`: revealed lines join the hunks they touch, headers worked out again; `None` when the text does not match the patch's new side |
 | `inline_changes` | `InlineChanges::between`: word (code-aware split) or char diff via `similar`, skipped below 0.4 similarity, 5 ms timeout |
 
-- UI-free; the app's `diff_view` renders it. Patches come from GitHub; no full-file diffing here.
+- UI-free; the app's `diff_view` renders it. Patches come from GitHub; no full-file diffing here: context lines come from the new file's text, numbered on the old side by the gap's fixed offset (nothing changes in a gap). `DiffHunk` keeps its header's `old_start`/`new_start` (for a side without lines, the line after which it sits).
 - Whitespace Ignore: a removed/added pair equal without whitespace becomes one context line (new text, both numbers); hunks left without changes are dropped.
 - Public-API tests in `tests/build_file_diff.rs`.

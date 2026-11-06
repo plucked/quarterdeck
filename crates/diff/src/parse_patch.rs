@@ -1,4 +1,4 @@
-use crate::{DiffHunk, DiffLine, DiffLineKind};
+use crate::{DiffHunk, DiffLine, DiffLineKind, LineOrigin};
 
 /// What a tab shows as; tabs are expanded so highlight ranges match what is drawn.
 const TAB_AS_SPACES: &str = "    ";
@@ -21,6 +21,8 @@ pub(crate) fn parse_patch(patch: &str) -> Vec<DiffHunk> {
             (old_number, new_number) = hunk_starts(line).unwrap_or((1, 1));
             hunks.push(DiffHunk {
                 header: line.to_owned(),
+                old_start: old_number,
+                new_start: new_number,
                 lines: Vec::new(),
             });
             continue;
@@ -51,6 +53,7 @@ pub(crate) fn parse_patch(patch: &str) -> Vec<DiffHunk> {
             new_number: new,
             text,
             changed_ranges: Vec::new(),
+            origin: LineOrigin::Patch,
         });
     }
     hunks

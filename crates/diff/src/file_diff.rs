@@ -18,6 +18,11 @@ impl FileDiff {
         }
     }
 
+    /// A diff of hunks already built (lines numbered, changes marked).
+    pub(crate) fn from_hunks(hunks: Vec<DiffHunk>) -> Self {
+        Self { hunks }
+    }
+
     pub fn hunks(&self) -> &[DiffHunk] {
         &self.hunks
     }

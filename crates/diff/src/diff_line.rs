@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::DiffLineKind;
+use crate::{DiffLineKind, LineOrigin};
 
 /// One line of a hunk.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,4 +18,6 @@ pub struct DiffLine {
     /// lines, unpaired lines, lines rewritten too much to compare, and when
     /// highlighting whole lines only.
     pub changed_ranges: Vec<Range<usize>>,
+    /// The patch, or the file's text around it.
+    pub origin: LineOrigin,
 }

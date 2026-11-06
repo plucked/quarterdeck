@@ -1,6 +1,6 @@
 use crate::change_block::ChangeBlock;
 use crate::inline_changes::InlineChanges;
-use crate::{DiffHunk, DiffLine, DiffLineKind, DiffOptions, WhitespaceMode};
+use crate::{DiffHunk, DiffLine, DiffLineKind, DiffOptions, LineOrigin, WhitespaceMode};
 
 /// Applies `options` to freshly parsed hunks: folds whitespace-only changes
 /// into context when ignoring whitespace (dropping hunks left without
@@ -52,6 +52,7 @@ fn fold_whitespace_changes(lines: &[DiffLine]) -> Vec<DiffLine> {
                         new_number: added.new_number,
                         text: added.text.clone(),
                         changed_ranges: Vec::new(),
+                        origin: LineOrigin::Patch,
                     });
                 }
                 (removed, added) => {

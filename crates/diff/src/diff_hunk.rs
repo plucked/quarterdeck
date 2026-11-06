@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crate::{DiffLine, DiffLineKind, SplitRow};
 
 /// A run of changed lines with their context, from one `@@` header.
@@ -5,10 +7,40 @@ use crate::{DiffLine, DiffLineKind, SplitRow};
 pub struct DiffHunk {
     /// The `@@ -a,b +c,d @@ section` header line as written.
     pub header: String,
+    /// The header's `a` and `c`: where each side starts, or, for a side
+    /// with no lines, the line after which the hunk sits.
+    pub old_start: u32,
+    pub new_start: u32,
     pub lines: Vec<DiffLine>,
 }
 
 impl DiffHunk {
+    /// The new side's line numbers this hunk covers (end exclusive). A
+    /// hunk with no new lines covers none, at the place after `new_start`.
+    pub fn new_lines(&self) -> Range<u32> {
+        side_lines(
+            self.lines.iter().filter_map(|line| line.new_number),
+            self.new_start,
+        )
+    }
+
+    /// The old side's line numbers this hunk covers (end exclusive).
+    pub fn old_lines(&self) -> Range<u32> {
+        side_lines(
+            self.lines.iter().filter_map(|line| line.old_number),
+            self.old_start,
+        )
+    }
+
+    /// The text after the header's closing `@@` (often the enclosing
+    /// function), with its leading space; empty when there is none.
+    pub fn section(&self) -> &str {
+        self.header
+            .strip_prefix("@@")
+            .and_then(|rest| rest.split_once("@@"))
+            .map_or("", |(_, section)| section)
+    }
+
     /// The rows of a side-by-side view: context lines on both sides, and in
     /// each block of changes the n-th removed line beside the n-th added line.
     pub fn split_rows(&self) -> Vec<SplitRow> {
@@ -51,4 +83,16 @@ impl DiffHunk {
             .iter()
             .any(|line| line.kind != DiffLineKind::Context)
     }
+}
+
+/// The range from the first of a side's line `numbers` to one past the
+/// last; for a side without lines, the empty range after `start` (a
+/// header's start of an empty side names the line before it).
+fn side_lines(mut numbers: impl Iterator<Item = u32>, start: u32) -> Range<u32> {
+    let Some(first) = numbers.next() else {
+        let place = start.saturating_add(1);
+        return place..place;
+    };
+    let last = numbers.last().unwrap_or(first);
+    first..last.saturating_add(1)
 }
