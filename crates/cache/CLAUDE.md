@@ -27,7 +27,7 @@
 | `comparison_storage` | `compare_file_sets` + `compare_files`: files between two commits (combined stack diffs) |
 
 - One database file; each store opens its own connection.
-- Schema changes append a new entry to `SCHEMA_MIGRATIONS`; never edit a shipped one.
+- Schema changes append a new entry to `SCHEMA_MIGRATIONS`; never edit a shipped one. A database whose `user_version` is past the known migrations (a newer app ran) is refused, not opened.
 - Every field is its own typed column; nothing is stored as JSON. Changed files are `pr_file_sets` (version tag) + `pr_files` (one row per file, `position` keeps GitHub's order).
 - Adding a field to a `qd-github` type means a migration adding its column and updating the row mapping in `github_cache.rs`.
 - UI state tables hold one row (`id = 1`); `review_queue_view.selected_pr_id`, `viewed_files.pr_id` and `combined_viewed_files` have no foreign key (the PR may be gone or refetched; the user's state stays). Combined marks are keyed by repo + first and last layer number.

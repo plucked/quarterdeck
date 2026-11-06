@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use rusqlite::Connection;
 
 /// The schema history, append-only: entry `n` (0-based) moves `PRAGMA
@@ -372,11 +372,20 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in
-/// its own transaction, so a failed migration leaves the previous version intact.
+/// its own transaction, so a failed migration leaves the previous version
+/// intact. A database a newer app migrated past this one's schema is
+/// refused, not opened: this app's queries may no longer fit it, and the
+/// newer app can still use it.
 pub(crate) fn apply_schema_migrations(connection: &mut Connection) -> Result<()> {
     // Read where this database stands; a fresh file is at version 0.
     let current_version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     let applied_count = usize::try_from(current_version).context("negative schema version")?;
+    if applied_count > SCHEMA_MIGRATIONS.len() {
+        bail!(
+            "the database was written by a newer version of Quarterdeck (schema {applied_count}, this version knows {}); install the newest version",
+            SCHEMA_MIGRATIONS.len()
+        );
+    }
 
     // Apply the rest in order, bumping the version inside the same transaction.
     for (index, sql) in SCHEMA_MIGRATIONS.iter().enumerate().skip(applied_count) {
@@ -389,4 +398,28 @@ pub(crate) fn apply_schema_migrations(connection: &mut Connection) -> Result<()>
         transaction.commit()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A database migrated by a newer app is refused, and left as it is.
+    #[test]
+    fn refuses_a_newer_schema() {
+        // Set up: a database one migration ahead of this app.
+        let mut connection = Connection::open_in_memory().unwrap();
+        let newer = i64::try_from(SCHEMA_MIGRATIONS.len() + 1).unwrap();
+        connection
+            .pragma_update(None, "user_version", newer)
+            .unwrap();
+
+        // Act and expect: refused, the version untouched.
+        let error = apply_schema_migrations(&mut connection).unwrap_err();
+        assert!(error.to_string().contains("newer version of Quarterdeck"));
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, newer);
+    }
 }
