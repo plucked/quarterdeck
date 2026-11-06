@@ -2,14 +2,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use futures::StreamExt as _;
+use futures::channel::mpsc::{self, TryRecvError};
 use gpui::{
-    Animation, AnimationExt as _, App, Bounds, Context, DisplayId, MouseButton, RenderImage, Task,
-    Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, div,
-    ease_in_out, img, prelude::*, px, size,
+    Animation, AnimationExt as _, AnyWindowHandle, App, Bounds, Context, DisplayId, MouseButton,
+    RenderImage, Task, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
+    WindowOptions, div, ease_in_out, img, prelude::*, px, size,
 };
 
 use super::decode_splash_frames::decode_splash_frames;
+use super::splash_frame::SplashFrame;
+use super::splash_playback::{FramePoll, PlaybackStep, SplashPlayback, TimedFrame};
 use crate::main_window::MainWindow;
 
 /// How long the splash fades out while the main window fades in.
@@ -18,13 +20,21 @@ pub const STARTUP_FADE: Duration = Duration::from_secs(1);
 const SPLASH_WIDTH: f32 = 1000.;
 const SPLASH_HEIGHT: f32 = 300.;
 const SPLASH_CORNER_RADIUS: f32 = 16.;
+/// How long the fade waits for the main window's first frame at most (it
+/// draws none while on another space), before it starts anyway.
+const MAX_FIRST_DRAW_WAIT: Duration = Duration::from_millis(500);
 
 /// Where the splash is in its life.
 enum SplashPhase {
     /// The movie plays; the main window waits hidden.
     Playing,
-    /// The movie ended or was clicked away: the splash fades out (on its
-    /// last frame) while the main window fades in, then it closes.
+    /// The movie ended or was clicked away: the main window is shown, still
+    /// see-through, and draws its first frame, which takes a moment with a
+    /// loaded queue. The splash keeps its picture meanwhile, so the fade
+    /// does not start with a jump.
+    Revealing,
+    /// The splash fades out (on its last frame) while the main window fades
+    /// in, then it closes.
     FadingOut,
 }
 
@@ -38,9 +48,15 @@ pub struct StartupSplash {
     frame: Option<Arc<RenderImage>>,
     phase: SplashPhase,
     main_window: WindowHandle<MainWindow>,
-    /// Shows each frame on time, then starts the fade. Dropping it (with the
-    /// window) stops the decoding.
-    _playback_task: Task<()>,
+    /// Frames from the decoding thread; dropping it (with the window) stops
+    /// the decoding.
+    frames: mpsc::Receiver<SplashFrame>,
+    /// Picks the frame to show on each screen refresh.
+    playback: SplashPlayback<Arc<RenderImage>>,
+    /// The splash window, closed once the fade is over.
+    window_handle: AnyWindowHandle,
+    /// Starts the fade if the main window's first frame does not come.
+    reveal_wait_task: Option<Task<()>>,
     /// Closes the window once the fade is over.
     close_task: Option<Task<()>>,
 }
@@ -78,44 +94,51 @@ impl StartupSplash {
         }
     }
 
-    /// Starts playing the movie as it decodes.
+    /// Starts decoding the movie, and playing it in step with the screen's
+    /// refreshes once a few frames are ready.
     fn new(
         video: PathBuf,
         main_window: WindowHandle<MainWindow>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let playback_task = cx.spawn_in(window, async move |this, cx| {
-            let mut frames = decode_splash_frames(video);
-            // The clock starts with the first decoded frame: when it showed, and its movie time.
-            let mut clock: Option<(Instant, Duration)> = None;
-            while let Some(frame) = frames.next().await {
-                // Wait until the frame is due. A late frame shows at once, and the
-                // frames after it catch up within one redraw.
-                let (started, first_time) =
-                    *clock.get_or_insert((Instant::now(), frame.presentation_time));
-                let due = started + frame.presentation_time.saturating_sub(first_time);
-                let wait = due.saturating_duration_since(Instant::now());
-                if !wait.is_zero() {
-                    cx.background_executor().timer(wait).await;
-                }
-                let shown = this.update_in(cx, |splash, window, cx| {
-                    splash.show_frame(frame.image, window, cx);
-                });
-                if shown.is_err() {
-                    return;
-                }
-            }
-            // The movie ended, or could not be read: on to the app either way.
-            this.update_in(cx, Self::fade_out).ok();
-        });
+        cx.on_next_frame(window, Self::on_screen_refresh);
         Self {
             frame: None,
             phase: SplashPhase::Playing,
             main_window,
-            _playback_task: playback_task,
+            frames: decode_splash_frames(video),
+            playback: SplashPlayback::default(),
+            window_handle: window.window_handle(),
+            reveal_wait_task: None,
             close_task: None,
         }
+    }
+
+    /// Runs before each frame the screen draws (gpui calls it in step with
+    /// the display): shows the frame due now, and asks to run again on the
+    /// next refresh until the movie is over, which starts the fade (also
+    /// when it could not be read).
+    fn on_screen_refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Take decoded frames without waiting; the decoder runs ahead on its own thread.
+        let frames = &mut self.frames;
+        let mut poll = || match frames.try_recv() {
+            Ok(frame) => FramePoll::Frame(TimedFrame {
+                frame: frame.image,
+                time: frame.presentation_time,
+            }),
+            Err(TryRecvError::Empty) => FramePoll::Pending,
+            Err(TryRecvError::Closed) => FramePoll::Finished,
+        };
+        match self.playback.tick(Instant::now(), &mut poll) {
+            PlaybackStep::Show(image) => self.show_frame(image, window, cx),
+            PlaybackStep::Hold => {}
+            PlaybackStep::Ended => {
+                self.fade_out(window, cx);
+                return;
+            }
+        }
+        cx.on_next_frame(window, Self::on_screen_refresh);
     }
 
     /// Puts `image` on screen and frees the previous frame's copy on the
@@ -127,18 +150,53 @@ impl StartupSplash {
         cx.notify();
     }
 
-    /// Fades the splash out and the main window in, then closes the splash;
-    /// called when the movie ends and on a click. The movie keeps playing
-    /// under the fade when a click cut it short.
+    /// Shows the main window, then fades the splash out once the main
+    /// window has drawn its first frame (as the main window fades in), and
+    /// closes the splash; called when the movie ends and on a click. The
+    /// movie keeps playing under the fade when a click cut it short.
     fn fade_out(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if matches!(self.phase, SplashPhase::FadingOut) {
+        if !matches!(self.phase, SplashPhase::Playing) {
+            return;
+        }
+        self.phase = SplashPhase::Revealing;
+        reveal_main_window(self.main_window, cx);
+
+        // The main window's second refresh comes after its first frame is drawn.
+        let splash = cx.entity().downgrade();
+        let is_waiting = self
+            .main_window
+            .update(cx, |_, main_window, _| {
+                main_window.on_next_frame(move |main_window, _| {
+                    main_window.on_next_frame(move |_, cx| {
+                        splash.update(cx, Self::start_fade).ok();
+                    });
+                });
+            })
+            .is_ok();
+        if !is_waiting {
+            self.start_fade(cx);
+            return;
+        }
+
+        // A main window that draws nothing (on another space) must not hold the splash up.
+        self.reveal_wait_task = Some(cx.spawn_in(window, async move |splash, cx| {
+            cx.background_executor().timer(MAX_FIRST_DRAW_WAIT).await;
+            splash.update(cx, Self::start_fade).ok();
+        }));
+    }
+
+    /// Fades the splash out over [`STARTUP_FADE`], then closes it; once.
+    fn start_fade(&mut self, cx: &mut Context<Self>) {
+        if !matches!(self.phase, SplashPhase::Revealing) {
             return;
         }
         self.phase = SplashPhase::FadingOut;
-        reveal_main_window(self.main_window, cx);
-        self.close_task = Some(cx.spawn_in(window, async move |_, cx| {
+        let window_handle = self.window_handle;
+        self.close_task = Some(cx.spawn(async move |_, cx| {
             cx.background_executor().timer(STARTUP_FADE).await;
-            cx.update(|window, _| window.remove_window()).ok();
+            window_handle
+                .update(cx, |_, window, _| window.remove_window())
+                .ok();
         }));
         cx.notify();
     }
@@ -164,7 +222,7 @@ impl Render for StartupSplash {
                 cx.listener(|splash, _, window, cx| splash.fade_out(window, cx)),
             );
         match self.phase {
-            SplashPhase::Playing => picture.into_any_element(),
+            SplashPhase::Playing | SplashPhase::Revealing => picture.into_any_element(),
             SplashPhase::FadingOut => picture
                 .with_animation(
                     "startup-splash-fade-out",

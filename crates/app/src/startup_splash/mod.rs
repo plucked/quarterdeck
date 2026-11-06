@@ -7,10 +7,12 @@
 //! - `startup_splash.rs`: `StartupSplash`, the splash window: playback, fade-out, revealing the main window.
 //! - `decode_splash_frames.rs`: decodes the movie on its own thread into a channel of frames.
 //! - `splash_frame.rs`: `SplashFrame`, a decoded frame ready to draw and its time.
+//! - `splash_playback.rs`: `SplashPlayback`, which frame to show on each screen refresh.
 //! - `startup_video_path.rs`: where the movie is (in the app bundle, else the source tree).
 
 mod decode_splash_frames;
 mod splash_frame;
+mod splash_playback;
 mod startup_splash;
 mod startup_video_path;
 

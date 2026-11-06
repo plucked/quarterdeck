@@ -6,10 +6,11 @@ use qd_video::VideoReader;
 
 use super::splash_frame::SplashFrame;
 
-/// How many decoded frames may wait for their turn (each is 1.2 MB for a
-/// 1000×300 movie): enough to cover a slow frame, without decoding the whole
-/// movie into memory.
-const FRAMES_AHEAD: usize = 4;
+/// How many decoded frames may wait in the channel (each is 1.2 MB for a
+/// 1000×300 movie), on top of the playback's preload: about half a second
+/// ahead, enough to ride out a busy moment of a loaded machine, without
+/// decoding the whole movie into memory.
+const FRAMES_AHEAD: usize = 20;
 
 /// Decodes the movie at `path` into a channel of frames, in display order.
 /// The channel ends after the last frame, or early when the movie cannot be
