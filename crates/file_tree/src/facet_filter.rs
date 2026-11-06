@@ -72,6 +72,15 @@ impl<T: Ord + Clone> FacetFilter<T> {
         }
     }
 
+    /// Whether `value` is picked or hidden (`value` may be borrowed).
+    pub fn is_set<Q>(&self, value: &Q) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.only.contains(value) || self.hidden.contains(value)
+    }
+
     /// Whether this row narrows anything.
     pub fn is_active(&self) -> bool {
         !self.only.is_empty() || !self.hidden.is_empty()

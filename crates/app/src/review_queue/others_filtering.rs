@@ -29,10 +29,11 @@ pub fn passes(filter: &OthersFilter, pull_request: &PullRequest, context: &Filte
         && filter.authors.admits(pull_request.author.login.as_str())
 }
 
-/// The chips of one row for `pull_requests` (one repository's), those the
-/// rest of the filter lets through most first (so chips that would show
-/// nothing sink to the end), then the most common, then by name: how many
-/// have each value, and how many of those the rest of the filter lets through.
+/// The chips of one row for `pull_requests` (one repository's): how many
+/// have each value, and how many of those the rest of the filter lets
+/// through. A chip that would show nothing is left out unless it is picked
+/// or hidden (so it can be undone). Most matching first, then the most
+/// common, then by name.
 pub fn chip_counts(
     filter: &OthersFilter,
     facet: OthersFacet,
@@ -63,8 +64,13 @@ pub fn chip_counts(
     }
 
     // Most matching first, so the collapsed row shows the useful ones.
+    let chips = match facet {
+        OthersFacet::Labels => &filter.labels,
+        OthersFacet::Authors => &filter.authors,
+    };
     let mut counts: Vec<FacetCount<String>> = counts
         .into_iter()
+        .filter(|(value, (_, matching))| *matching > 0 || chips.is_set(*value))
         .map(|(value, (total, matching))| FacetCount {
             value: value.to_owned(),
             total,
@@ -237,7 +243,8 @@ mod tests {
         assert_eq!(shown(&filter, &HashSet::new()), [1, 2, 4]);
     }
 
-    /// Chip counts: most matching first, and what the other row lets through.
+    /// Chip counts: most matching first, what the other row lets through,
+    /// and none for a value that would show nothing unless it is set.
     #[test]
     fn counts_chips_given_the_other_row() {
         let mut filter = OthersFilter::default();
@@ -251,6 +258,11 @@ mod tests {
             .iter()
             .map(|count| (count.value.as_str(), count.total, count.matching))
             .collect();
-        assert_eq!(summary, [("bug", 2, 1), ("ui", 1, 1), ("deps", 1, 0)]);
+        assert_eq!(summary, [("bug", 2, 1), ("ui", 1, 1)]);
+
+        // A hidden value stays, so it can be shown again.
+        filter.labels.toggle_hidden(&"deps".to_owned());
+        let labels = chip_counts(&filter, OthersFacet::Labels, &pull_requests(), &context);
+        assert!(labels.iter().any(|count| count.value == "deps"));
     }
 }

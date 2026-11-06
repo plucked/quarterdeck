@@ -62,16 +62,13 @@ impl ReviewQueue {
             .bg(theme::surface())
             .child(Self::render_filter_switches(repo, &filter, cx))
             .child(Self::render_updated_within(repo, filter.updated_within, cx))
+            // A row with no chip to offer is left out.
             .children((!label_counts.is_empty()).then(|| {
                 self.render_filter_chips(repo, OthersFacet::Labels, &filter, &label_counts, cx)
             }))
-            .child(self.render_filter_chips(
-                repo,
-                OthersFacet::Authors,
-                &filter,
-                &author_counts,
-                cx,
-            ))
+            .children((!author_counts.is_empty()).then(|| {
+                self.render_filter_chips(repo, OthersFacet::Authors, &filter, &author_counts, cx)
+            }))
             .child(Self::render_filter_summary(repo, &filter, cx))
             .into_any_element()
     }
