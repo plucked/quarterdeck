@@ -20,7 +20,9 @@
 #   - notary credentials stored under the profile name below:
 #       xcrun notarytool store-credentials quarterdeck-notary \
 #         --apple-id <apple id> --team-id 97ZZEC8R43 --password <app-specific password>
-#   - gh logged in with push access to plucked/quarterdeck.
+#   - gh logged in (gh auth login) with push access to plucked/quarterdeck.
+#     The script uses gh's own login, never GITHUB_TOKEN or GH_TOKEN: those
+#     often hold a token for Quarterdeck itself that cannot create releases.
 # Before each release: bump [workspace.package] version in Cargo.toml,
 # commit, and push.
 set -eu
@@ -46,6 +48,11 @@ fail() {
 	exit 1
 }
 
+# gh with its own stored login: a token in the environment would take precedence.
+github() {
+	env -u GITHUB_TOKEN -u GH_TOKEN gh "$@"
+}
+
 # Options.
 NOTES_SOURCE=""
 DRY_RUN=0
@@ -62,7 +69,9 @@ done
 if [ "$DRY_RUN" = 0 ]; then
 	git diff --quiet && git diff --cached --quiet || fail "the working tree has uncommitted changes"
 	[ -n "$(git branch -r --contains HEAD)" ] || fail "HEAD is not pushed"
-	! gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1 || fail "$TAG is already released; bump the version in Cargo.toml"
+	[ "$(github api "repos/$REPOSITORY" --jq .permissions.push 2>/dev/null)" = "true" ] \
+		|| fail "gh's login cannot push to $REPOSITORY (run gh auth login)"
+	! github release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1 || fail "$TAG is already released; bump the version in Cargo.toml"
 	xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 \
 		|| fail "no notary credentials under the profile $NOTARY_PROFILE (see the header of this script)"
 fi
@@ -136,12 +145,12 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 # Publish: a draft with every file first, then public in one step.
-gh release create "$TAG" "$ZIP" "$DMG" "$MANIFEST" \
+github release create "$TAG" "$ZIP" "$DMG" "$MANIFEST" \
 	--repo "$REPOSITORY" \
 	--target "$(git rev-parse HEAD)" \
 	--title "Quarterdeck $VERSION" \
 	--notes-file "$NOTES" \
 	--draft
-gh release edit "$TAG" --repo "$REPOSITORY" --draft=false --latest
+github release edit "$TAG" --repo "$REPOSITORY" --draft=false --latest
 git fetch --tags --quiet
 echo "Released $TAG: https://github.com/$REPOSITORY/releases/tag/$TAG"
