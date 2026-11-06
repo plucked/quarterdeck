@@ -1,4 +1,4 @@
-use gpui::{Rgba, rgb};
+use gpui::{Rgba, rgb, rgba};
 use qd_syntax::SyntaxKind;
 
 use super::active_theme::active_colors;
@@ -87,6 +87,13 @@ pub fn syntax(kind: SyntaxKind) -> Rgba {
 /// Text on a `label_colors` background, in every theme.
 pub fn on_label() -> Rgba {
     rgb(0xff_ff_ff)
+}
+
+/// Small text over the startup movie (its version), in every theme: the
+/// movie's background is dark whatever the theme, so this is a fixed,
+/// half-transparent white.
+pub fn on_splash() -> Rgba {
+    rgba(0xff_ff_ff_8c)
 }
 
 /// Muted hues that tell repositories apart (each repository keeps one,

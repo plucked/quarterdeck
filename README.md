@@ -5,7 +5,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 ## Features
 
 **Starting up**
-- A short intro movie plays while Quarterdeck loads your queue and syncs with GitHub, then fades into the app. Click it to skip.
+- A short intro movie plays while Quarterdeck loads your queue and syncs with GitHub, then fades into the app. Click it to skip. Its bottom right corner shows the version.
 
 **Your review queue**
 - Two lists: **Mine** (pull requests you opened) and **Review** (those asking for your review), with counts.

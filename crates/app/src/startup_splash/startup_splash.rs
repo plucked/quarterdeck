@@ -13,6 +13,7 @@ use super::decode_splash_frames::decode_splash_frames;
 use super::splash_frame::SplashFrame;
 use super::splash_playback::{FramePoll, PlaybackStep, SplashPlayback, TimedFrame};
 use crate::main_window::MainWindow;
+use crate::theme;
 
 /// How long the splash fades out while the main window fades in.
 pub const STARTUP_FADE: Duration = Duration::from_secs(1);
@@ -20,6 +21,11 @@ pub const STARTUP_FADE: Duration = Duration::from_secs(1);
 const SPLASH_WIDTH: f32 = 1000.;
 const SPLASH_HEIGHT: f32 = 300.;
 const SPLASH_CORNER_RADIUS: f32 = 16.;
+/// The running version, shown in the splash's bottom right corner.
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+/// How far the version sits from the splash's right and bottom edges.
+const VERSION_INSET_RIGHT: f32 = 20.;
+const VERSION_INSET_BOTTOM: f32 = 14.;
 /// How long the fade waits for the main window's first frame at most (it
 /// draws none while on another space), before it starts anyway.
 const MAX_FIRST_DRAW_WAIT: Duration = Duration::from_millis(500);
@@ -209,13 +215,27 @@ fn reveal_main_window(main_window: WindowHandle<MainWindow>, cx: &mut App) {
 
 impl Render for StartupSplash {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The movie, with the version in its bottom right corner once it shows.
         let picture = div()
+            .relative()
             .size_full()
             .children(
                 self.frame
                     .clone()
                     .map(|image| img(image).size_full().rounded(px(SPLASH_CORNER_RADIUS))),
             )
+            .when(self.frame.is_some(), |picture| {
+                picture.child(
+                    div()
+                        .absolute()
+                        .right(px(VERSION_INSET_RIGHT))
+                        .bottom(px(VERSION_INSET_BOTTOM))
+                        .font_family(theme::UI_FONT)
+                        .text_xs()
+                        .text_color(theme::on_splash())
+                        .child(format!("v{APP_VERSION}")),
+                )
+            })
             // A click skips the rest of the movie.
             .on_mouse_down(
                 MouseButton::Left,
