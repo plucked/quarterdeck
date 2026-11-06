@@ -80,7 +80,7 @@ impl PullRequestDetail {
             .pt_3()
             .pb_2p5()
             .child(title_row)
-            .child(self.render_meta_line(pull_request))
+            .child(Self::render_meta_line(pull_request))
             .children(self.render_stack_bar(cx))
             .children(self.render_action_panel(cx))
             .when(is_expanded, |header| {
@@ -100,9 +100,9 @@ impl PullRequestDetail {
         )
     }
 
-    /// The metadata under the title: draft, where, who, when, and how far
-    /// the review is.
-    fn render_meta_line(&self, pull_request: &PullRequest) -> impl IntoElement {
+    /// The metadata under the title: draft, where, who and when. How far
+    /// the review is shows in the side panel's file tree.
+    fn render_meta_line(pull_request: &PullRequest) -> impl IntoElement {
         div()
             .pl_8()
             .flex()
@@ -122,23 +122,12 @@ impl PullRequestDetail {
                 )
             })
             .child(div().min_w_0().truncate().child(format!(
-                "{} #{}  ·  {}  ·  updated {}{}",
+                "{} #{}  ·  {}  ·  updated {}",
                 pull_request.repo.full_name(),
                 pull_request.number,
                 pull_request.author.login,
                 short_date(&pull_request.updated_at),
-                self.viewed_progress_text()
             )))
-    }
-
-    /// ` · 3/12 viewed` once files are loaded.
-    fn viewed_progress_text(&self) -> String {
-        let files = self.loaded_files();
-        if files.is_empty() {
-            return String::new();
-        }
-        let viewed = self.file_review().viewed_count();
-        format!("  ·  {viewed}/{} viewed", files.len())
     }
 
     /// The description, scrolling inside the header past its maximum height.

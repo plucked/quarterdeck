@@ -9,8 +9,8 @@ use crate::theme;
 /// What a summary bar link does when clicked.
 type LinkHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 
-/// The quiet line above the changed files: totals and viewed progress, with
-/// links to collapse or expand every file. How diffs look is chosen in the
+/// The quiet line above the changed files: totals, with links to collapse
+/// or expand every file. Viewed progress shows in the side panel instead. How diffs look is chosen in the
 /// settings window, not here, to keep the main view uncluttered.
 #[derive(IntoElement)]
 pub struct DiffSummaryBar {
@@ -61,10 +61,7 @@ impl RenderOnce for DiffSummaryBar {
                     .text_color(theme::removed())
                     .child(format!("−{}", summary.deletions)),
             )
-            .child(div().flex_1().min_w_0().child(format!(
-                "{}/{} viewed",
-                summary.viewed_count, summary.file_count
-            )))
+            .child(div().flex_1())
             .child(
                 Button::new("collapse-all", "Collapse all")
                     .ghost()

@@ -239,7 +239,6 @@ impl PullRequestDetail {
         let files = self.loaded_files();
         let summary = DiffSummary {
             file_count: files.len(),
-            viewed_count: self.file_review().viewed_count(),
             additions: files.iter().map(|loaded| loaded.file.additions).sum(),
             deletions: files.iter().map(|loaded| loaded.file.deletions).sum(),
         };

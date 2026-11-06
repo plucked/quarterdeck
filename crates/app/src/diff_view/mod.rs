@@ -23,7 +23,7 @@
 //! - `code_segments.rs`: `CodeSegments`, the code texts painted this frame, for hit testing.
 //! - `code_cells.rs`: `CodeCells` and `SideSelection`, what a row's code cells need for selection.
 //! - `diff_summary_bar.rs`: `DiffSummaryBar`, totals and collapse/expand all.
-//! - `diff_summary.rs`: `DiffSummary`, file, line and viewed counts.
+//! - `diff_summary.rs`: `DiffSummary`, file and line counts.
 //! - `context_gap_rendering.rs`: the bar over hidden unchanged lines, with buttons revealing them.
 //! - `gap_part.rs`: `GapPart`, which lines of a gap a click reveals.
 //! - `file_text_load.rs`: `FileTextLoad`, a file's text being fetched for its gaps, or failed.
