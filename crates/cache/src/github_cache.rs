@@ -5,9 +5,7 @@ use qd_github::{PullRequest, RepoRef, StackMembership, User};
 use rusqlite::{Connection, Row, Transaction, params};
 
 use crate::PullRequestListKey;
-use crate::database_connection::{
-    default_database_path, move_former_data_directory, open_database,
-};
+use crate::database_connection::{default_database_path, open_database, prepare_data_directory};
 use crate::sql_integers::{read_u64, sql_integer};
 use crate::unix_now::unix_now;
 
@@ -27,7 +25,7 @@ pub struct GitHubCache {
 impl GitHubCache {
     /// Opens (creating if needed) the default database file.
     pub fn open_default() -> Result<Self> {
-        move_former_data_directory()?;
+        prepare_data_directory()?;
         Self::open(&default_database_path()?)
     }
 

@@ -4,7 +4,7 @@
 |---|---|
 | `github_cache` | `GitHubCache`: cached pull requests, lists and changed files, with row mapping |
 | `ui_state_store` | `UiStateStore`: window placement and review queue state |
-| `database_connection` | database path and connection setup (WAL, foreign keys, migrations) |
+| `database_connection` | database path (`Quarterdeck/`, or `Quarterdeck Dev/` in debug builds, seeded once by `VACUUM INTO` from the release database) and connection setup (WAL, foreign keys, migrations); `prepare_data_directory` runs before the default database opens |
 | `schema_migrations` | append-only `SCHEMA_MIGRATIONS` and their runner (`PRAGMA user_version`) |
 | `pull_request_list_key` | `PullRequestListKey` newtype (`REVIEW_REQUESTED`) |
 | `window_placement` / `window_mode` / `display_uuid` | `WindowPlacement` (bounds relative to its display), `WindowMode` (SQL text mapping), `DisplayUuid` |

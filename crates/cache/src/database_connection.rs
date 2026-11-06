@@ -5,24 +5,64 @@ use rusqlite::Connection;
 
 use crate::schema_migrations::apply_schema_migrations;
 
+/// The data folder of release builds.
 const APP_DIRECTORY: &str = "Quarterdeck";
+/// The data folder of development (debug) builds, so a development build a
+/// schema migration ahead never upgrades the database the installed
+/// release uses (which would then refuse it as written by a newer version).
+const DEVELOPMENT_APP_DIRECTORY: &str = "Quarterdeck Dev";
 /// Where the app kept its data before it was named Quarterdeck.
 const FORMER_APP_DIRECTORY: &str = "quick-check";
 const DATABASE_FILE: &str = "cache.sqlite";
 
-/// `~/Library/Application Support/Quarterdeck/cache.sqlite` on macOS: the one
-/// database file every store in this crate opens its own connection to.
+/// `~/Library/Application Support/Quarterdeck/cache.sqlite` on macOS
+/// (`Quarterdeck Dev/` in a debug build): the one database file every store
+/// in this crate opens its own connection to.
 pub(crate) fn default_database_path() -> Result<PathBuf> {
     let data_directory = dirs::data_dir().context("no data directory")?;
-    Ok(data_directory.join(APP_DIRECTORY).join(DATABASE_FILE))
+    Ok(data_directory.join(build_directory()).join(DATABASE_FILE))
 }
 
-/// Moves the data kept under the app's former name (`quick-check`) to the
-/// current directory, once; the stores call it before opening the default
-/// database.
-pub(crate) fn move_former_data_directory() -> Result<()> {
+/// Gets the data folder ready before the default database opens; the
+/// stores call it first. A release build moves the data kept under the
+/// app's former name (`quick-check`) once; a debug build starts its own
+/// folder, once, from a copy of the release build's database, so viewed
+/// marks, notes and settings carry over.
+pub(crate) fn prepare_data_directory() -> Result<()> {
     let data_directory = dirs::data_dir().context("no data directory")?;
-    move_former_directory(&data_directory)
+    if cfg!(debug_assertions) {
+        seed_development_directory(&data_directory)
+    } else {
+        move_former_directory(&data_directory)
+    }
+}
+
+/// The data folder of this build.
+fn build_directory() -> &'static str {
+    if cfg!(debug_assertions) {
+        DEVELOPMENT_APP_DIRECTORY
+    } else {
+        APP_DIRECTORY
+    }
+}
+
+/// Copies the release database into the development folder when that has
+/// none yet. `VACUUM INTO` writes one consistent file, whatever the release
+/// app is doing; the copy is migrated when the development build opens it,
+/// the release database never is.
+fn seed_development_directory(data_directory: &Path) -> Result<()> {
+    let release = data_directory.join(APP_DIRECTORY).join(DATABASE_FILE);
+    let development = data_directory.join(DEVELOPMENT_APP_DIRECTORY);
+    let target = development.join(DATABASE_FILE);
+    if target.exists() || !release.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&development)?;
+    let source = Connection::open(&release)?;
+    source
+        .execute("VACUUM INTO ?1", [target.to_string_lossy()])
+        .with_context(|| format!("copying {} to {}", release.display(), target.display()))?;
+    Ok(())
 }
 
 /// Renames the former data directory to the current one, so the cache and
@@ -74,11 +114,40 @@ mod tests {
         std::fs::remove_dir_all(directory).ok();
     }
 
-    /// The default database sits in the app's own data directory.
+    /// The default database sits in the app's own data directory; tests
+    /// are debug builds, so in the development one.
     #[test]
     fn default_path_is_app_scoped() {
         let path = default_database_path().unwrap();
-        assert!(path.ends_with("Quarterdeck/cache.sqlite"));
+        assert!(path.ends_with("Quarterdeck Dev/cache.sqlite"));
+    }
+
+    /// The development folder starts from a copy of the release database,
+    /// once; later changes to either stay apart.
+    #[test]
+    fn seeds_the_development_directory_once() {
+        // Set up: a release database holding one row.
+        let data = std::env::temp_dir().join(format!("qd-seed-test-{}", std::process::id()));
+        let release = data.join(APP_DIRECTORY).join(DATABASE_FILE);
+        std::fs::create_dir_all(release.parent().unwrap()).unwrap();
+        let connection = Connection::open(&release).unwrap();
+        connection
+            .execute_batch("CREATE TABLE marks (value TEXT); INSERT INTO marks VALUES ('viewed');")
+            .unwrap();
+
+        // Act: seed, change the release database, seed again.
+        seed_development_directory(&data).unwrap();
+        connection.execute("DELETE FROM marks", []).unwrap();
+        seed_development_directory(&data).unwrap();
+
+        // Expect: the copy kept the row from the first seed.
+        let copy =
+            Connection::open(data.join(DEVELOPMENT_APP_DIRECTORY).join(DATABASE_FILE)).unwrap();
+        let count: i64 = copy
+            .query_row("SELECT count(*) FROM marks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+        std::fs::remove_dir_all(data).ok();
     }
 
     /// The former data directory moves to the current name once; a current

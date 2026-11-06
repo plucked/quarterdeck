@@ -115,4 +115,4 @@ bacon
 
 ## Data
 
-The cache and what the app remembers (viewed files, notes, layout) live in `~/Library/Application Support/Quarterdeck/`. Settings → GitHub shows how much space it takes and clears the cache. Deleting the folder resets everything.
+The cache and what the app remembers (viewed files, notes, layout) live in `~/Library/Application Support/Quarterdeck/`. Development builds (`bacon`, `cargo run`) keep their own copy in `Quarterdeck Dev/`, started from the installed app's data the first time, so trying a newer build never changes what the installed app uses. Settings → GitHub shows how much space it takes and clears the cache. Deleting the folder resets everything.
