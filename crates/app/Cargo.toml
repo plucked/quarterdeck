@@ -16,6 +16,7 @@ qd-file-tree.workspace = true
 qd-github.workspace = true
 qd-markdown.workspace = true
 qd-syntax.workspace = true
+qd-update.workspace = true
 qd-video.workspace = true
 image.workspace = true
 

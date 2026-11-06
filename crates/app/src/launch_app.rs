@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Command;
 
 use gpui::{
     App, Application, Bounds, DisplayId, Pixels, Size, TitlebarOptions, WindowBackgroundAppearance,
@@ -8,6 +9,7 @@ use gpui::{
 use crate::app_commands::install_app_commands;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
+use crate::app_update::AppUpdater;
 use crate::bundled_fonts::load_bundled_fonts;
 use crate::main_window::{MainWindow, MainWindowReveal};
 use crate::startup_splash::{StartupSplash, startup_video_path};
@@ -70,6 +72,7 @@ pub fn launch_app() {
         Ok(opened) => opened,
         Err(error) => {
             eprintln!("failed to initialize: {error:#}");
+            show_startup_failure(&format!("{error:#}"));
             std::process::exit(1);
         }
     };
@@ -82,6 +85,7 @@ pub fn launch_app() {
         cx.set_global(AppSettings::load(&recorder));
         cx.set_global(services.clone());
         cx.set_global(recorder);
+        AppUpdater::start(cx);
 
         // The main window opens first, hidden during the splash, so the queue
         // loads and refreshes from GitHub while the movie plays.
@@ -157,4 +161,25 @@ fn restore_window(recorder: &UiStateRecorder, min_size: Size<Pixels>, cx: &App) 
             ))
         });
     RestoredWindow { bounds, display_id }
+}
+
+/// Tells the user why the app cannot start, in a system alert: an app
+/// started from Finder has no terminal for the error. Runs before gpui, so
+/// the alert comes from `osascript`; `reason` is passed as an argument, never
+/// as script text.
+fn show_startup_failure(reason: &str) {
+    let shown = Command::new("/usr/bin/osascript")
+        .args([
+            "-e",
+            "on run arguments",
+            "-e",
+            "display alert \"Quarterdeck cannot start\" message (item 1 of arguments) as critical",
+            "-e",
+            "end run",
+            reason,
+        ])
+        .output();
+    if let Err(error) = shown {
+        eprintln!("cannot show the startup failure: {error}");
+    }
 }

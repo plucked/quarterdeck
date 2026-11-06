@@ -1,9 +1,12 @@
 /// Every way a GitHub call can fail.
 #[derive(Debug, thiserror::Error)]
 pub enum GitHubError {
-    /// Neither `GITHUB_TOKEN` nor `gh auth token` produced a token.
-    #[error("no GitHub token found (set GITHUB_TOKEN or run `gh auth login`)")]
+    /// No token in `GITHUB_TOKEN`, the Keychain or the `gh` CLI.
+    #[error("not signed in to GitHub (sign in from Settings → GitHub, or run `gh auth login`)")]
     NoToken,
+    /// The login Keychain could not be read or written.
+    #[error("Keychain error: {message}")]
+    Keychain { message: String },
     /// The budget for this kind of request is used up until `resets_at`
     /// (seconds since the Unix epoch).
     #[error("GitHub {resource} rate limit reached; it refills in {} min", minutes_until(*resets_at))]

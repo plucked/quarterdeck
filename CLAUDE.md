@@ -1,9 +1,9 @@
 # Quarterdeck
 
-macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: the viewer's own and review-requested ones, including GitHub stacks (layer by layer or combined), with line comments that either form a GitHub review (approve / request changes / comment) or stay local to copy for an AI agent. Personal tool; macOS only for now.
+macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: the viewer's own and review-requested ones, including GitHub stacks (layer by layer or combined), with line comments that either form a GitHub review (approve / request changes / comment) or stay local to copy for an AI agent. Personal tool shared with colleagues: macOS on Apple silicon only, distributed as signed, notarized GitHub releases that update themselves.
 
 ## Workflow
-- Remote `origin`: `git@github.com:plucked/quarterdeck.git` (private). Work directly on `main` and push it. Small atomic commits, prefixed `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`/`style:`/`test:`.
+- Remote `origin`: `git@github.com:plucked/quarterdeck.git` (public). Work directly on `main` and push it. Small atomic commits, prefixed `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`/`style:`/`test:`.
 - Rust conventions: skill `knowledge-writing-rust-in-quarterdeck` (`.claude/skills/`). Load it before touching `.rs` or `Cargo.toml`.
 - Keep this file and each crate's `CLAUDE.md` current in the same commit as the change. Compact: facts only.
 - `README.md` describes the features and how to run the app for people; update it when a user-facing feature or the way to run it changes.
@@ -19,6 +19,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: 
 | `qd-diff` | `crates/diff` | per-file patch → hunks, side-by-side rows, inline word/char changes, whitespace folding (`similar`) |
 | `qd-file-tree` | `crates/file_tree` | changed files as a folder tree (shared file order), test/generated detection, file filters |
 | `qd-video` | `crates/video` | movie frames decoded by macOS AVFoundation into BGRA (the startup splash) |
+| `qd-update` | `crates/update` | self-update: release manifest (`latest.json`), download with SHA-256 check, signature check, bundle swap, relaunch |
 
 Only the app depends on gpui. Library crates are blocking and UI-free; the app runs them on `cx.background_executor()`. No tokio.
 
@@ -33,13 +34,17 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 ```
 
-App bundle: `packaging/macos/bundle.sh [--universal]` → `target/bundle/Quarterdeck.app`; `--dev` keeps `target/debug/Quarterdeck.app` (debug binary hard-linked, icon remade only when `AppIcon.png` changes, startup movie copied into `Resources`), which bacon's `app` job runs so the app has its icon and name (`de.plucked.quarterdeck`, `Info.plist` template, version from `[workspace.package]`, `AppIcon.icns` from the 1024 px `AppIcon.png`, ad hoc signed; no Developer ID or notarization yet). Started from Finder the app gets launchd's environment: no `GITHUB_TOKEN`, no Homebrew `PATH`.
+App bundle: `packaging/macos/bundle.sh` → `target/bundle/Quarterdeck.app` (`aarch64-apple-darwin` only, ad hoc signed); `--dev` keeps `target/debug/Quarterdeck.app` (debug binary hard-linked, icon remade only when `AppIcon.png` changes, startup movie copied into `Resources`), which bacon's `app` job runs so the app has its icon and name (`de.plucked.quarterdeck`, `Info.plist` template, version from `[workspace.package]`, `AppIcon.icns` from the 1024 px `AppIcon.png`). Started from Finder the app gets launchd's environment: no `GITHUB_TOKEN`, no Homebrew `PATH`.
+
+Release: `packaging/macos/release.sh [--notes FILE] [--dry-run]`, run locally (no CI): checks (clean tree, HEAD pushed, tag `v<version>` unused, notary profile `quarterdeck-notary`, movie not an LFS pointer), `bundle.sh`, re-signs with `Developer ID Application: Rainer Heynke (97ZZEC8R43)` (hardened runtime, timestamp; no entitlements needed), notarizes + staples the app (zip) and the DMG, writes `latest.json` (version, notes, `zip_url`, `zip_sha256`, `zip_size`, via `plutil`), and publishes GitHub release `v<version>` as a draft first, then public, so `releases/latest/download/latest.json` always has its zip. Output in `target/release-artifacts/<version>/`. Notes default to the `feat:`/`fix:` subjects since the last `v*` tag.
 
 Devbox: `devbox.json` pins rustup, bacon, gh, sqlite; `devbox run app | dev | check | test`. `devbox.lock` pins the resolved versions (Devbox 0.19); `devbox update` moves them.
 
 ## Facts
 - gpui 0.2.2 from crates.io, `default-features = false`, features `font-kit` + `runtime_shaders` (no Metal Toolchain needed to build).
-- Token: `GITHUB_TOKEN`, else `gh auth token`. Without one the app shows cached data only.
+- Token: `GITHUB_TOKEN`, else the token saved in the login Keychain from Settings → GitHub (generic password, service `de.plucked.quarterdeck`, account `github-token`; checked with `GET /user` first; the app restarts to use it), else `gh auth token` (`gh` on `PATH`, `/opt/homebrew/bin`, `/usr/local/bin`). Without one the app shows cached data only.
+- Updates: `AppUpdater` checks `github.com/plucked/quarterdeck/releases/latest/download/latest.json` (no API budget) 15 s after launch and every 4 h; a newer version is downloaded to `~/Library/Caches/de.plucked.quarterdeck/updates`, SHA-256 and size checked, unpacked with `ditto` into `.Quarterdeck.app-update` beside the bundle, verified (`codesign` against the Developer ID requirement of team `97ZZEC8R43`, `spctl` for notarization, `CFBundleShortVersionString`), and installed by two renames on quit or on Restart to update (relaunch by a detached `sh` that waits for the process to exit, then `open`s the bundle). Off when not running from a release-signed bundle (dev builds, `cargo run`), when translocated, or when the bundle's folder is not writable.
+- A database migrated past the app's `SCHEMA_MIGRATIONS` (a newer app ran) is refused; startup failures show in an `osascript` alert, since a Finder launch has no terminal.
 - Database: `~/Library/Application Support/Quarterdeck/cache.sqlite` (delete to reset cache and UI state). The app was called quick-check before; opening the default database moves `…/quick-check` there once.
 - Everything stored is typed SQLite columns, cached GitHub data included; never JSON (see the skill's Persistence section).
 - Queue refresh: at launch, `cmd-r`, every 5 min after the last refresh, and on window activation when older than 1 min. Two search requests (mine, review requested) and one GraphQL request (stack memberships; the search API lacks them) each.

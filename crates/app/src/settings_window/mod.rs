@@ -11,14 +11,21 @@
 //! - `theme_preview.rs`: a small pull request diff drawn in any theme's colors.
 //! - `file_diff_page.rs`: the File Diff category's settings.
 //! - `github_page.rs`: the GitHub category: cache TTL, clearing the cache, API usage.
+//! - `github_sign_in.rs`: the GitHub category's account rows: signing in with a token, signing out.
+//! - `sign_in_status.rs`: `SignInStatus`, where signing in with a token stands.
+//! - `updates_page.rs`: the Updates category: the version, update status, release notes, restart.
 
 mod appearance_page;
 mod file_diff_page;
 mod github_page;
+mod github_sign_in;
 mod open_settings_window;
 mod setting_row;
 mod settings_category;
 mod settings_window;
+mod sign_in_status;
 mod theme_preview;
+mod updates_page;
 
-pub use open_settings_window::open_settings_window;
+pub use open_settings_window::{open_settings_window, open_settings_window_at};
+pub use settings_category::SettingsCategory;

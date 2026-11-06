@@ -73,11 +73,6 @@ impl GitHubClient {
         }
     }
 
-    /// A client using the token [`crate::resolve_token`] finds.
-    pub fn from_env() -> Result<Self, GitHubError> {
-        Ok(Self::new(crate::resolve_token()?))
-    }
-
     /// The requests this client (and its clones) sent and the budgets left.
     pub fn usage(&self) -> &ApiUsage {
         &self.usage
@@ -296,7 +291,7 @@ impl GitHubClient {
     }
 
     /// Sends an authenticated GET and decodes the JSON body.
-    fn get_json<T: DeserializeOwned>(
+    pub(crate) fn get_json<T: DeserializeOwned>(
         &self,
         url: &str,
         query: &[(&str, &str)],

@@ -1,23 +1,27 @@
 use gpui::{
-    App, Context, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window, div,
-    prelude::*, px,
+    App, Context, Entity, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window,
+    div, prelude::*, px,
 };
 use qd_cache::{CacheUsage, ColorTheme};
 
 use super::file_diff_page::render_file_diff_page;
 use super::github_page::render_github_page;
 use super::settings_category::SettingsCategory;
+use super::sign_in_status::SignInStatus;
+use super::updates_page::render_updates_page;
 use crate::app_commands::CloseWindow;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
+use crate::app_update::AppUpdater;
+use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
 
 /// Width of the category list.
 const CATEGORY_LIST_WIDTH: f32 = 180.;
 
 /// The settings window's view: the categories on the left, the chosen
-/// category's settings on the right. Redraws when [`AppSettings`] changes,
-/// wherever the change came from.
+/// category's settings on the right. Redraws when [`AppSettings`] or the
+/// [`AppUpdater`]'s status changes, wherever the change came from.
 pub struct SettingsWindow {
     focus: FocusHandle,
     category: SettingsCategory,
@@ -30,23 +34,44 @@ pub struct SettingsWindow {
     usage_task: Option<Task<()>>,
     /// The theme card under the pointer, previewed instead of the active theme.
     previewed_theme: Option<ColorTheme>,
-    /// Keeps the observer of [`AppSettings`] registered for the view's lifetime.
-    _settings_subscription: Subscription,
+    /// Where a GitHub token is pasted to sign in.
+    pub(super) token_input: Entity<TextArea>,
+    pub(super) sign_in_status: SignInStatus,
+    /// The token check or sign-out in flight.
+    pub(super) sign_in_task: Option<Task<()>>,
+    /// Keep the observers of [`AppSettings`], the updater and the token field
+    /// registered for the view's lifetime.
+    _subscriptions: [Subscription; 3],
 }
 
 impl SettingsWindow {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(category: SettingsCategory, window: &mut Window, cx: &mut Context<Self>) -> Self {
         // Focus the view so cmd-w reaches it.
         let focus = cx.focus_handle();
         window.focus(&focus);
+
+        // cmd-enter in the token field signs in, like the button.
+        let token_input = cx.new(|cx| TextArea::new("ghp_…", cx));
+        let subscriptions = [
+            cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
+            cx.observe(&AppUpdater::global(cx), |_, _, cx| cx.notify()),
+            cx.subscribe(&token_input, |settings, _, event: &TextAreaEvent, cx| {
+                if *event == TextAreaEvent::Submit {
+                    settings.sign_in(cx);
+                }
+            }),
+        ];
         let mut settings = Self {
             focus,
-            category: SettingsCategory::default(),
+            category,
             has_cleared_cache: false,
             cache_usage: None,
             usage_task: None,
             previewed_theme: None,
-            _settings_subscription: cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
+            token_input,
+            sign_in_status: SignInStatus::default(),
+            sign_in_task: None,
+            _subscriptions: subscriptions,
         };
         settings.read_cache_usage(cx);
         settings
@@ -93,7 +118,7 @@ impl SettingsWindow {
         cx.notify();
     }
 
-    fn select_category(&mut self, category: SettingsCategory, cx: &mut Context<Self>) {
+    pub(super) fn select_category(&mut self, category: SettingsCategory, cx: &mut Context<Self>) {
         self.category = category;
         cx.notify();
     }
@@ -171,9 +196,17 @@ impl Render for SettingsWindow {
                 let clear_cache = move |_: &mut Window, cx: &mut App| {
                     settings.update(cx, |_, cx| Self::clear_cache(cx)).ok();
                 };
-                render_github_page(self.has_cleared_cache, self.cache_usage, clear_cache, cx)
-                    .into_any_element()
+                let account_rows = self.render_account_rows(cx);
+                render_github_page(
+                    account_rows,
+                    self.has_cleared_cache,
+                    self.cache_usage,
+                    clear_cache,
+                    cx,
+                )
+                .into_any_element()
             }
+            SettingsCategory::Updates => render_updates_page(cx).into_any_element(),
         };
         div()
             .track_focus(&self.focus)

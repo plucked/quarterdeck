@@ -27,6 +27,7 @@ use crate::app_commands::{
 };
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
+use crate::app_update::AppUpdater;
 use crate::fetch_stack::{cached_stack, refresh_stack};
 use crate::pull_request_detail::{DetailEvent, LayerRequest, PullRequestDetail};
 use crate::shared_cache::SharedCache;
@@ -102,8 +103,8 @@ pub struct ReviewQueue {
     stacks: HashMap<StackKey, PullRequestStack>,
     /// The check of those stacks with GitHub; replacing it cancels the previous one.
     stacks_task: Option<Task<()>>,
-    /// Keep the window activation and detail observers registered.
-    _subscriptions: [Subscription; 2],
+    /// Keep the window activation, detail and updater observers registered.
+    _subscriptions: [Subscription; 3],
 }
 
 impl ReviewQueue {
@@ -185,7 +186,12 @@ impl ReviewQueue {
             sidebar_width,
             stacks,
             stacks_task: None,
-            _subscriptions: [activation_subscription, detail_subscription],
+            _subscriptions: [
+                activation_subscription,
+                detail_subscription,
+                // The top bar offers the restart once an update is ready.
+                cx.observe(&AppUpdater::global(cx), |_, _, cx| cx.notify()),
+            ],
         };
         queue.rebuild_rows();
         queue.restore_selection(RestorePhase::CachedQueue, cx);

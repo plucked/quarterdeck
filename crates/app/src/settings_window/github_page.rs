@@ -13,9 +13,11 @@ use crate::theme;
 /// Width of a breakdown line's name column.
 const BREAKDOWN_NAME_WIDTH: f32 = 160.;
 
-/// The GitHub page: how long cached data is kept, what the cache holds and
-/// clearing it, and how much of the API this session used.
+/// The GitHub page: the account (`account_rows`), how long cached data is
+/// kept, what the cache holds and clearing it, and how much of the API
+/// this session used.
 pub fn render_github_page(
+    account_rows: impl IntoElement,
     has_cleared_cache: bool,
     cache_usage: Option<CacheUsage>,
     on_clear_cache: impl Fn(&mut gpui::Window, &mut App) + 'static,
@@ -32,6 +34,7 @@ pub fn render_github_page(
     div()
         .flex()
         .flex_col()
+        .child(account_rows)
         .child(SettingRow::new(
             "Keep cached data for",
             "Pull requests and files not used for this long are removed from the local cache.",

@@ -1,6 +1,7 @@
 use gpui::{App, KeyBinding, Menu, MenuItem, SystemMenuType, actions};
 
-use crate::settings_window::open_settings_window;
+use crate::app_update::AppUpdater;
+use crate::settings_window::{SettingsCategory, open_settings_window, open_settings_window_at};
 use crate::text_area::bind_text_area_keys;
 
 /// The key context of the review queue; single-letter keys only act inside it.
@@ -15,6 +16,7 @@ actions!(
     [
         Quit,
         OpenSettings,
+        CheckForUpdates,
         CloseWindow,
         Refresh,
         Copy,
@@ -36,6 +38,10 @@ pub fn install_app_commands(cx: &mut App) {
     // Quit and Settings work from any window; the others go to the focused view.
     cx.on_action(|_: &Quit, cx| cx.quit());
     cx.on_action(|_: &OpenSettings, cx| open_settings_window(cx));
+    cx.on_action(|_: &CheckForUpdates, cx| {
+        AppUpdater::global(cx).update(cx, AppUpdater::check_now);
+        open_settings_window_at(SettingsCategory::Updates, cx);
+    });
     cx.bind_keys([
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
@@ -62,6 +68,7 @@ pub fn install_app_commands(cx: &mut App) {
         Menu {
             name: "Quarterdeck".into(),
             items: vec![
+                MenuItem::action("Check for Updates…", CheckForUpdates),
                 MenuItem::action("Settings…", OpenSettings),
                 MenuItem::separator(),
                 MenuItem::os_submenu("Services", SystemMenuType::Services),

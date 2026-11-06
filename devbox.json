@@ -9,12 +9,13 @@
   "shell": {
     "init_hook": [
       "rustup show active-toolchain >/dev/null 2>&1 || rustup toolchain install",
-      "echo 'Quarterdeck: devbox run app | dev | check | test'"
+      "echo 'Quarterdeck: devbox run app | dev | check | test | release'"
     ],
     "scripts": {
       "app": "cargo run --release",
       "dev": "bacon",
       "test": "cargo test --workspace",
+      "release": "packaging/macos/release.sh",
       "check": [
         "cargo fmt --all --check",
         "cargo clippy --workspace --all-targets -- -D warnings",

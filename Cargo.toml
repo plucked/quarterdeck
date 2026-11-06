@@ -16,6 +16,7 @@ qd-file-tree = { path = "crates/file_tree" }
 qd-github = { path = "crates/github" }
 qd-markdown = { path = "crates/markdown" }
 qd-syntax = { path = "crates/syntax" }
+qd-update = { path = "crates/update" }
 qd-video = { path = "crates/video" }
 
 # external
@@ -31,8 +32,10 @@ objc2-core-video = { version = "0.3", default-features = false, features = ["std
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSString", "NSURL", "NSValue", "objc2-core-foundation"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 rusqlite = { version = "0.41", features = ["bundled"] }
+security-framework = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.11"
 similar = "3"
 syntect = { version = "5", default-features = false, features = ["parsing", "dump-load", "regex-fancy"] }
 thiserror = "2"

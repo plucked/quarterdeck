@@ -3689,6 +3689,7 @@ version = "0.1.0"
 name = "qd-github"
 version = "0.1.0"
 dependencies = [
+ "security-framework",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -3709,6 +3710,18 @@ dependencies = [
  "qd-diff",
  "syntect",
  "two-face",
+]
+
+[[package]]
+name = "qd-update"
+version = "0.1.0"
+dependencies = [
+ "dirs 7.0.0",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+ "ureq",
 ]
 
 [[package]]
@@ -3746,6 +3759,7 @@ dependencies = [
  "qd-github",
  "qd-markdown",
  "qd-syntax",
+ "qd-update",
  "qd-video",
 ]
 

@@ -6,7 +6,11 @@
 //! Files:
 //! - `github_client.rs`: `GitHubClient`, the authenticated REST client.
 //! - `github_error.rs`: `GitHubError`, every way a call can fail.
-//! - `resolve_token.rs`: finds the token from the environment or the `gh` CLI.
+//! - `resolve_token.rs`: finds the token: the environment, the Keychain, then the `gh` CLI.
+//! - `resolved_token.rs`: `ResolvedToken`, a token and where it was found.
+//! - `token_source.rs`: `TokenSource`, the environment, the Keychain or the `gh` CLI.
+//! - `keychain_token.rs`: the token saved in the login Keychain: read, save, remove.
+//! - `viewer_request.rs`: `GitHubClient::viewer`, the account the token belongs to.
 //! - `repo_ref.rs`: `RepoRef`, an owner/name pair.
 //! - `user.rs`: `User`, a GitHub account as embedded in other objects.
 //! - `pull_request.rs`: `PullRequest`, the normalized pull request.
@@ -56,6 +60,7 @@ mod file_text_requests;
 mod github_client;
 mod github_error;
 mod graphql_response;
+mod keychain_token;
 mod line_side;
 mod listed_stack_membership;
 mod merge_method;
@@ -72,6 +77,7 @@ mod pull_request_stack;
 mod rate_limit;
 mod repo_ref;
 mod resolve_token;
+mod resolved_token;
 mod review_event;
 mod review_queries;
 mod review_requests;
@@ -83,8 +89,10 @@ mod search_response;
 mod stack_layer;
 mod stack_membership;
 mod stack_membership_query;
+mod token_source;
 mod unified_diff;
 mod user;
+mod viewer_request;
 
 pub use api_usage::{ApiUsage, ApiUsageSnapshot};
 pub use conditional_response::ConditionalResponse;
@@ -94,6 +102,7 @@ pub use file_text::FileText;
 pub use file_text_location::FileTextLocation;
 pub use github_client::{GitHubClient, MAX_LISTED_FILES};
 pub use github_error::GitHubError;
+pub use keychain_token::{delete_stored_token, store_token, stored_token};
 pub use line_side::LineSide;
 pub use listed_stack_membership::ListedStackMembership;
 pub use merge_method::MergeMethod;
@@ -109,10 +118,12 @@ pub use pull_request_stack::PullRequestStack;
 pub use rate_limit::{RateLimit, RateLimitResource};
 pub use repo_ref::RepoRef;
 pub use resolve_token::resolve_token;
+pub use resolved_token::ResolvedToken;
 pub use review_event::ReviewEvent;
 pub use review_submission::{NewReviewThread, NewThreadReply, ReviewSubmission, SubmittedPart};
 pub use review_thread::{ReviewThread, ThreadComment, ThreadPermissions};
 pub use revision_check::RevisionCheck;
 pub use stack_layer::StackLayer;
 pub use stack_membership::StackMembership;
+pub use token_source::TokenSource;
 pub use user::User;

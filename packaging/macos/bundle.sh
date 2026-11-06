@@ -1,13 +1,13 @@
 #!/bin/sh
-# Builds Quarterdeck.app: the binary, Info.plist with the workspace's
-# version, and the icon made from AppIcon.png.
+# Builds Quarterdeck.app for Apple silicon: the binary, Info.plist with the
+# workspace's version, and the icon made from AppIcon.png.
 #
-#   packaging/macos/bundle.sh              # release build, this Mac's architecture
-#   packaging/macos/bundle.sh --universal  # release build, Apple Silicon and Intel in one binary
+#   packaging/macos/bundle.sh              # release build
 #   packaging/macos/bundle.sh --dev        # debug build for development (bacon's app job)
 #
 # Release output: target/bundle/Quarterdeck.app, signed ad hoc (enough to
-# run on this Mac; distribution signing and notarization come later).
+# run on this Mac); packaging/macos/release.sh signs it with the Developer
+# ID, notarizes and publishes it.
 # Dev output: target/debug/Quarterdeck.app, updated in place on every run:
 # the debug binary is hard-linked in (no copy) and the icon is only remade
 # when AppIcon.png changed, so a rebuild stays quick. Running its
@@ -65,22 +65,12 @@ case "${1:-}" in
 		lay_out_bundle "$ROOT/target/debug/Quarterdeck.app" "$ROOT/target/debug/quarterdeck" link
 		exit 0
 		;;
-	--universal)
-		rustup target add aarch64-apple-darwin x86_64-apple-darwin >/dev/null
-		cargo build --release -p quarterdeck --target aarch64-apple-darwin
-		cargo build --release -p quarterdeck --target x86_64-apple-darwin
-		BINARY="$ROOT/target/bundle/quarterdeck-universal"
-		mkdir -p "$ROOT/target/bundle"
-		lipo -create -output "$BINARY" \
-			"$ROOT/target/aarch64-apple-darwin/release/quarterdeck" \
-			"$ROOT/target/x86_64-apple-darwin/release/quarterdeck"
-		;;
 	"")
-		cargo build --release -p quarterdeck
-		BINARY="$ROOT/target/release/quarterdeck"
+		cargo build --release -p quarterdeck --target aarch64-apple-darwin
+		BINARY="$ROOT/target/aarch64-apple-darwin/release/quarterdeck"
 		;;
 	*)
-		echo "usage: $0 [--universal | --dev]" >&2
+		echo "usage: $0 [--dev]" >&2
 		exit 2
 		;;
 esac

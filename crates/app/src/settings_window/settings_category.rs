@@ -6,12 +6,19 @@ pub enum SettingsCategory {
     Appearance,
     /// How changed files are shown.
     FileDiff,
-    /// The local cache of GitHub data and API usage.
+    /// The GitHub account, the local cache of GitHub data and API usage.
     GitHub,
+    /// The running version and updates.
+    Updates,
 }
 
 impl SettingsCategory {
-    pub const ALL: [Self; 3] = [Self::Appearance, Self::FileDiff, Self::GitHub];
+    pub const ALL: [Self; 4] = [
+        Self::Appearance,
+        Self::FileDiff,
+        Self::GitHub,
+        Self::Updates,
+    ];
 
     /// The category's name in the list and as the page title.
     pub fn title(self) -> &'static str {
@@ -19,6 +26,7 @@ impl SettingsCategory {
             Self::Appearance => "Appearance",
             Self::FileDiff => "File Diff",
             Self::GitHub => "GitHub",
+            Self::Updates => "Updates",
         }
     }
 }

@@ -40,7 +40,15 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Everything is cached locally, so the app opens instantly and works offline with what it last saw.
 - Unchanged pull requests cost no requests: GitHub's "not modified" answers are free, and stacks and combined diffs are fetched once per commit. A file's full text is fetched only when you expand around its changes, and once per version of the file.
 
-## Run it
+## Install
+
+Download `Quarterdeck-<version>.dmg` from the [latest release](https://github.com/plucked/quarterdeck/releases/latest), open it and drag Quarterdeck into Applications. It needs a Mac with Apple silicon and macOS 13 or later; it is signed and notarized, so it opens like any other app.
+
+**Signing in.** Quarterdeck uses the [GitHub CLI](https://cli.github.com)'s login when `gh` is installed and logged in (`gh auth login`). Otherwise open Settings → GitHub, paste a [personal access token](https://github.com/settings/tokens/new?scopes=repo,read:org&description=Quarterdeck) with the `repo` and `read:org` scopes and click Sign in: it is checked with GitHub, saved in your Keychain, and the app restarts with it.
+
+**Updates.** Quarterdeck looks for a new version shortly after launch and every few hours, downloads and checks it in the background (it must be signed by the same developer and notarized), and installs it when you quit. To install it at once, click **Restart to update** in the top bar, or in Settings → Updates, which also shows what's new. Quarterdeck → Check for Updates… checks right away. Updates need the app to be in a folder you can write to, such as Applications.
+
+## Run it from source
 
 You need macOS, [Rust](https://rustup.rs) (stable; `rust-toolchain.toml` picks it), [Git LFS](https://git-lfs.com) for the intro movie (without it the app starts without the intro), and access to GitHub through either the [GitHub CLI](https://cli.github.com) or a token:
 
@@ -49,16 +57,26 @@ gh auth login              # or: export GITHUB_TOKEN=<a token with repo access>
 cargo run --release
 ```
 
-Quarterdeck uses `GITHUB_TOKEN` when it is set, otherwise the GitHub CLI's login. Without either it shows what it has cached.
+Quarterdeck uses `GITHUB_TOKEN` when it is set, then a token saved in Settings → GitHub, then the GitHub CLI's login (found on `PATH` or where Homebrew installs it). Without any it shows what it has cached. Builds from source don't update themselves.
 
 ### As a Mac app
 
 ```bash
-packaging/macos/bundle.sh               # builds target/bundle/Quarterdeck.app
-packaging/macos/bundle.sh --universal   # one app for Apple Silicon and Intel Macs
+packaging/macos/bundle.sh               # builds target/bundle/Quarterdeck.app (Apple silicon)
 ```
 
-Drag `Quarterdeck.app` into Applications. It is signed for this Mac only (not notarized yet). Started from Finder or the Dock it does not see your terminal's `GITHUB_TOKEN` or `PATH`, so for now start it with `open target/bundle/Quarterdeck.app` from a terminal where `gh` or the token works.
+It is signed for this Mac only; releases are signed and notarized by the release script.
+
+### Releasing
+
+Releases are built, signed, notarized and published from a Mac with the Developer ID certificate, no CI:
+
+```bash
+packaging/macos/release.sh --dry-run    # build and sign only, to try it
+packaging/macos/release.sh              # release the version in Cargo.toml
+```
+
+Bump `version` under `[workspace.package]` in `Cargo.toml`, commit and push, then run the script. It builds the app, signs it (Developer ID, hardened runtime), has Apple notarize the app and the disk image, writes the release notes from the `feat:` and `fix:` commits since the last release (or takes `--notes FILE`), and publishes the GitHub release `v<version>` with the zip, the disk image and `latest.json`, which running apps read to update. The script's header lists the one-time setup (the notary credentials).
 
 ### With Devbox
 

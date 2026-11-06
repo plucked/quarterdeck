@@ -3,6 +3,7 @@ use gpui::{
     px, size,
 };
 
+use super::settings_category::SettingsCategory;
 use super::settings_window::SettingsWindow;
 
 const WINDOW_TITLE: &str = "Settings";
@@ -18,11 +19,28 @@ impl Global for OpenSettingsWindow {}
 
 /// Opens the settings window, or brings it to the front when it is open.
 pub fn open_settings_window(cx: &mut App) {
+    show_settings_window(None, cx);
+}
+
+/// Opens the settings window on `category`, or brings the open one to the
+/// front showing it.
+pub fn open_settings_window_at(category: SettingsCategory, cx: &mut App) {
+    show_settings_window(Some(category), cx);
+}
+
+/// Brings the open settings window to the front (on `category`, when
+/// given), or opens one (on `category`, else the first).
+fn show_settings_window(category: Option<SettingsCategory>, cx: &mut App) {
     // A closed window no longer updates, so a failed update means opening a new one.
     if let Some(OpenSettingsWindow(handle)) = cx.try_global::<OpenSettingsWindow>()
         && let handle = *handle
         && handle
-            .update(cx, |_, window, _| window.activate_window())
+            .update(cx, |settings, window, cx| {
+                window.activate_window();
+                if let Some(category) = category {
+                    settings.select_category(category, cx);
+                }
+            })
             .is_ok()
     {
         return;
@@ -40,7 +58,7 @@ pub fn open_settings_window(cx: &mut App) {
             is_minimizable: false,
             ..Default::default()
         },
-        |window, cx| cx.new(|cx| SettingsWindow::new(window, cx)),
+        |window, cx| cx.new(|cx| SettingsWindow::new(category.unwrap_or_default(), window, cx)),
     );
     match opened {
         Ok(handle) => cx.set_global(OpenSettingsWindow(handle)),
