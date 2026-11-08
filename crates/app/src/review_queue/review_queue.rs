@@ -69,7 +69,8 @@ struct FetchedOthers {
     /// Why others' pull requests could not be read, when they could not
     /// (the repositories that failed keep the last known ones).
     error: Option<String>,
-    /// How long GitHub asked to wait, when it asked.
+    /// How long to wait before asking GitHub again (a used-up budget or a
+    /// `retry-after`), when known.
     retry_after: Option<Duration>,
 }
 
@@ -681,7 +682,8 @@ impl ReviewQueue {
     }
 
     /// Ends a refresh: says why it failed (`failure`), holds the next one
-    /// back as long as GitHub asked (`retry_after`, or the failure's), then
+    /// back while GitHub refuses requests (`retry_after`, or the failure's:
+    /// until a used-up budget refills or as long as GitHub asked), then
     /// runs a refresh asked for meanwhile or arms the timed one.
     fn finish_refresh(
         &mut self,
@@ -697,7 +699,7 @@ impl ReviewQueue {
             self.refresh_stacks(cx);
         }
 
-        // Record when it finished, and how long GitHub asked to wait.
+        // Record when it finished, and how long GitHub refuses requests.
         let now = Instant::now();
         self.refresh_schedule.record_finished(now);
         let retry_after = retry_after.or_else(|| {
@@ -709,7 +711,7 @@ impl ReviewQueue {
             self.refresh_schedule.hold_until(now + wait);
         }
 
-        // A refresh asked for meanwhile runs now, unless GitHub asked to wait: then the timer runs it.
+        // A refresh asked for meanwhile runs now, unless GitHub refuses requests: then the timer runs it.
         let runs_requested =
             std::mem::take(&mut self.is_refresh_requested) && !self.refresh_schedule.is_held(now);
         if runs_requested {

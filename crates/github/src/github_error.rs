@@ -39,9 +39,21 @@ pub enum GitHubError {
 }
 
 impl GitHubError {
-    /// How long GitHub asked to wait before the next request, when it said.
+    /// How long to wait before the next request: until a used-up budget
+    /// refills, or as long as GitHub asked after a burst; `None` when that
+    /// is unknown or already over.
     pub fn retry_after(&self) -> Option<std::time::Duration> {
+        self.retry_after_from(unix_now())
+    }
+
+    /// How long to wait from `now` (seconds since the Unix epoch) before the
+    /// next request; `retry_after` with the clock passed in, so it is testable.
+    fn retry_after_from(&self, now: u64) -> Option<std::time::Duration> {
         match self {
+            Self::RateLimited { resets_at, .. } => resets_at
+                .checked_sub(now)
+                .filter(|seconds| *seconds > 0)
+                .map(std::time::Duration::from_secs),
             Self::SlowDown {
                 retry_after_seconds: Some(seconds),
             } => Some(std::time::Duration::from_secs(*seconds)),
@@ -56,12 +68,16 @@ impl GitHubError {
     }
 }
 
+/// Seconds since the Unix epoch now; 0 when the clock is before it.
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs())
+}
+
 /// Whole minutes from now until `unix_seconds`, rounded up; 0 when past.
 fn minutes_until(unix_seconds: u64) -> u64 {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs());
-    unix_seconds.saturating_sub(now).div_ceil(60)
+    unix_seconds.saturating_sub(unix_now()).div_ceil(60)
 }
 
 /// When the next attempt comes, after a secondary rate limit.
@@ -97,5 +113,33 @@ mod tests {
             body: "oops".to_owned(),
         };
         assert_eq!(error.to_string(), "GitHub API returned 500: oops");
+    }
+
+    /// A used-up budget says to wait until it refills; one with an unknown
+    /// or past reset, or another error, gives no wait.
+    #[test]
+    fn a_used_up_budget_waits_until_it_refills() {
+        let now = 1_000_000;
+        let rate_limited = |resets_at| GitHubError::RateLimited {
+            resource: "core",
+            resets_at,
+        };
+        assert_eq!(
+            rate_limited(now + 600).retry_after_from(now),
+            Some(std::time::Duration::from_secs(600))
+        );
+        assert_eq!(rate_limited(now).retry_after_from(now), None);
+        assert_eq!(rate_limited(0).retry_after_from(now), None);
+        let slow_down = GitHubError::SlowDown {
+            retry_after_seconds: Some(60),
+        };
+        assert_eq!(
+            slow_down.retry_after_from(now),
+            Some(std::time::Duration::from_secs(60))
+        );
+        let slow_down = GitHubError::SlowDown {
+            retry_after_seconds: None,
+        };
+        assert_eq!(slow_down.retry_after_from(now), None);
     }
 }
