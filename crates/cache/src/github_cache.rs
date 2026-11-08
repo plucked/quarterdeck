@@ -325,7 +325,6 @@ mod tests {
         assert_eq!(listed[1].updated_at, "t2");
     }
 
-    /// Every field of a pull request survives a list replacement and read.
     /// A list's pull requests come back with their own labels, in order.
     #[test]
     fn list_reads_each_pull_requests_labels() {
@@ -344,6 +343,7 @@ mod tests {
         assert_eq!(listed[1].labels, Vec::<Label>::new());
     }
 
+    /// Every field of a pull request survives a list replacement and read.
     #[test]
     fn pull_request_fields_round_trip() {
         let mut cache = GitHubCache::open_in_memory().unwrap();
