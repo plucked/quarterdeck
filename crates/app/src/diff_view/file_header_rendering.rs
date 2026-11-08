@@ -8,27 +8,24 @@ use super::file_status_badge::render_file_status_badge;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::fold_chevron::{FoldChevron, FoldState};
 use crate::theme;
+use crate::tree_locate_button::TreeLocateButton;
 
 /// A click handler shared by several elements of one file.
 pub type FileClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 /// The file's header row, the top of its card: chevron, status, path
-/// (old → new for renames), line counts and the viewed checkbox. Clicking
-/// the row collapses or expands the file; clicking the checkbox only
-/// toggles viewed.
+/// (old → new for renames) with the button showing the file in the file
+/// tree right after it, line counts and the viewed checkbox. Clicking the
+/// row collapses or expands the file; clicking the button or the checkbox
+/// does only what it says.
 pub fn render_file_header(
     index: usize,
     file: &PullRequestFile,
     state: FileDiffState,
     on_toggle_collapsed: FileClickHandler,
     on_toggle_viewed: FileClickHandler,
+    on_show_in_tree: FileClickHandler,
 ) -> Stateful<Div> {
-    let (directory, name) = split_path(&file.filename);
-    let renamed_from = file
-        .previous_filename
-        .as_ref()
-        .filter(|previous| **previous != file.filename);
-
     div()
         .id(("file-header", index))
         .flex()
@@ -48,33 +45,19 @@ pub fn render_file_header(
             FoldState::of(state.is_collapsed),
         ))
         .child(render_file_status_badge(&file.status))
+        // The path, cut at the right when too long, with the tree button right after it.
         .child(
             div()
                 .flex_1()
                 .min_w_0()
                 .flex()
-                .items_baseline()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .children(renamed_from.map(|previous| {
-                    div()
-                        .flex_none()
-                        .text_color(theme::subtle())
-                        .child(format!("{previous} → "))
-                }))
-                .child(
-                    div()
-                        .flex_none()
-                        .text_color(theme::muted())
-                        .child(directory.to_owned()),
-                )
-                .child(
-                    div()
-                        .flex_none()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(theme::text())
-                        .child(name.to_owned()),
-                ),
+                .items_center()
+                .gap_1()
+                .child(render_file_path(file))
+                .child(TreeLocateButton::new(
+                    ("show-in-tree", index),
+                    move |event, window, cx| on_show_in_tree(event, window, cx),
+                )),
         )
         .child(
             div()
@@ -118,6 +101,41 @@ pub fn render_file_header(
                 })
                 .child(Checkbox::new(CheckState::from_bool(state.is_viewed)))
                 .child("Viewed"),
+        )
+}
+
+/// The file's path on one line, cut at the right when too long: the old
+/// path for a rename, the directory muted and the name in full color.
+fn render_file_path(file: &PullRequestFile) -> Div {
+    let (directory, name) = split_path(&file.filename);
+    let renamed_from = file
+        .previous_filename
+        .as_ref()
+        .filter(|previous| **previous != file.filename);
+    div()
+        .min_w_0()
+        .flex()
+        .items_baseline()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .children(renamed_from.map(|previous| {
+            div()
+                .flex_none()
+                .text_color(theme::subtle())
+                .child(format!("{previous} → "))
+        }))
+        .child(
+            div()
+                .flex_none()
+                .text_color(theme::muted())
+                .child(directory.to_owned()),
+        )
+        .child(
+            div()
+                .flex_none()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(theme::text())
+                .child(name.to_owned()),
         )
 }
 

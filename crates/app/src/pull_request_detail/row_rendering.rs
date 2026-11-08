@@ -257,7 +257,8 @@ impl PullRequestDetail {
             })
     }
 
-    /// File `file`'s header, wired to its collapse and viewed toggles.
+    /// File `file`'s header, wired to its collapse and viewed toggles and
+    /// to showing it in the file tree.
     fn render_file_header_row(&self, file: usize, cx: &mut Context<Self>) -> AnyElement {
         let Some(loaded) = self.loaded_files().get(file) else {
             return div().into_any_element();
@@ -266,12 +267,17 @@ impl PullRequestDetail {
             Rc::new(cx.listener(move |detail, _: &ClickEvent, _, cx| {
                 detail.toggle_file_viewed(file, cx);
             }));
+        let on_show_in_tree: FileClickHandler =
+            Rc::new(cx.listener(move |detail, _: &ClickEvent, _, cx| {
+                detail.show_file_in_tree(file, cx);
+            }));
         render_file_header(
             file,
             &loaded.file,
             self.file_review().state_of(loaded),
             Self::toggle_collapsed_handler(file, cx),
             on_toggle_viewed,
+            on_show_in_tree,
         )
         .into_any_element()
     }

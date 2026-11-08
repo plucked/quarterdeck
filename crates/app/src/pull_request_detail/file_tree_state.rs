@@ -232,6 +232,31 @@ impl FileTreeState {
         self.visibility = self.visibility.toggled();
     }
 
+    /// Shows the panel; returns whether it was hidden, so the caller saves the change.
+    pub fn show_panel(&mut self) -> bool {
+        let was_hidden = self.visibility != PanelVisibility::Shown;
+        self.visibility = PanelVisibility::Shown;
+        was_hidden
+    }
+
+    /// Expands every collapsed folder above the file at `path`, so its row shows
+    /// once the rows are refreshed.
+    pub fn expand_folders_above(&mut self, path: &str) {
+        self.collapsed_folders.retain(|folder| {
+            !path
+                .strip_prefix(folder.as_str())
+                .is_some_and(|rest| rest.starts_with('/'))
+        });
+    }
+
+    /// The visible row of file `file`, as of the last row refresh; none while
+    /// the filter hides it or a folder above it is collapsed.
+    pub fn row_of_file(&self, file: usize) -> Option<usize> {
+        self.rows.iter().position(|row| {
+            matches!(self.tree.node(row.node).kind, TreeNodeKind::File { file: shown } if shown == file)
+        })
+    }
+
     /// Hides viewed files, or shows them again.
     pub fn toggle_hide_viewed(&mut self) {
         self.filter.hide_viewed = !self.filter.hide_viewed;
@@ -390,5 +415,31 @@ mod tests {
 
         state.reset_for(FileTree::build(&["a.rs", "b.rs"]));
         assert!(!state.has_folders());
+    }
+
+    /// Showing a file in the tree expands only the folders above it, and its
+    /// row is found once the rows are refreshed.
+    #[test]
+    fn expands_the_folders_above_a_file() {
+        // Set up: every folder collapsed, so only the top-level rows show.
+        let mut state = FileTreeState::new(ReviewLayoutState::default());
+        let paths = ["src/app/main.rs", "src/lib.rs", "docs/a.md", "srcx/b.rs"];
+        state.reset_for(FileTree::build(&paths));
+        state.collapse_all_folders();
+        state.rows = state.tree.visible_rows(&state.collapsed_folders, |_| true);
+        // A file's index is its place in the paths the tree was built from.
+        let main_file = 0;
+        assert_eq!(state.row_of_file(main_file), None);
+
+        // Act: expand what lies above `src/app/main.rs`.
+        state.expand_folders_above("src/app/main.rs");
+        state.rows = state.tree.visible_rows(&state.collapsed_folders, |_| true);
+
+        // Expect: `src` and `src/app` open, `docs` and `srcx` still collapsed.
+        assert!(!state.is_folder_collapsed("src"));
+        assert!(!state.is_folder_collapsed("src/app"));
+        assert!(state.is_folder_collapsed("docs"));
+        assert!(state.is_folder_collapsed("srcx"));
+        assert!(state.row_of_file(main_file).is_some());
     }
 }

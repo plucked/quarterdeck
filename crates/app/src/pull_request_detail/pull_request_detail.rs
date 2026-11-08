@@ -5,7 +5,8 @@ use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::{
     ClipboardItem, Context, EventEmitter, FocusHandle, ListAlignment, ListOffset, ListState,
-    Pixels, Point, ScrollHandle, ScrollWheelEvent, SharedString, Subscription, Task, Window, px,
+    Pixels, Point, ScrollHandle, ScrollStrategy, ScrollWheelEvent, SharedString, Subscription,
+    Task, Window, px,
 };
 use qd_cache::{
     DetailScrollPosition, DiffViewSettings, LineWrapping, PanelVisibility, ReviewLayoutState,
@@ -1185,6 +1186,38 @@ impl PullRequestDetail {
     pub(super) fn current_file(&self) -> Option<usize> {
         self.rows
             .file_at_row(self.list.logical_scroll_top().item_ix)
+    }
+
+    /// Shows file `file` in the file tree (the file header's tree button):
+    /// opens the side panel on its Files tab, expands the folders above the
+    /// file, scrolls the diff to its header so the tree highlights it, and
+    /// scrolls the tree to its row.
+    pub(super) fn show_file_in_tree(&mut self, file: usize, cx: &mut Context<Self>) {
+        let Some(filename) = self
+            .loaded_files()
+            .get(file)
+            .map(|loaded| loaded.filename().to_owned())
+        else {
+            return;
+        };
+        // Open the panel (saved, as cmd-b would) on the Files tab.
+        if self.file_tree.show_panel() {
+            UiStateRecorder::record_review_layout(cx, self.review_layout());
+        }
+        if self.review().tab != SidePanelTab::Files {
+            self.show_side_panel_tab(SidePanelTab::Files, cx);
+        }
+        // Unfold the folders above the file, so its row exists.
+        self.file_tree.expand_folders_above(&filename);
+        self.refresh_tree_rows();
+        // The tree highlights the file at the top of the diff: put this one there.
+        self.reveal_file(file, cx);
+        if let Some(row) = self.file_tree.row_of_file(file) {
+            self.file_tree
+                .scroll()
+                .scroll_to_item(row, ScrollStrategy::Center);
+        }
+        cx.notify();
     }
 
     /// Scrolls the diff to file `file`'s header; nothing while it is hidden.

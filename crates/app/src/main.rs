@@ -14,6 +14,7 @@
 //! - `fetch_stack.rs`: gets a stack's layers from the cache, and checks them with GitHub.
 //! - `word_range_at.rs`: the word around an offset, for double-click selection.
 //! - `theme.rs`: the color palette (Graphite) and fonts.
+//! - `tree_locate_button.rs`: `TreeLocateButton`, the file header's icon button showing the file in the file tree.
 //! - `bundled_fonts.rs`: registers the fonts built into the binary (`Schibsted Grotesk`, `JetBrains Mono`).
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
@@ -62,6 +63,7 @@ mod shared_cache;
 mod startup_splash;
 mod text_area;
 mod theme;
+mod tree_locate_button;
 mod ui_state;
 mod word_range_at;
 

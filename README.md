@@ -25,7 +25,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Eight color themes made for reading code, four light and four dark (Settings → Appearance, with a live preview; Graphite by default): every color readable against its background, and diffs in blue (added) and orange (removed), which stay distinct with red-green colour blindness. Interface in Schibsted Grotesk, code in JetBrains Mono (both built in).
 - Show the unchanged code above, below and between the changes: 20 lines at a time or all of it, from the bar over each gap. The file is fetched once, on the first click, and kept.
 - Unified or side-by-side diffs, syntax highlighting, changed words highlighted inside lines, wrapping or sideways scrolling, and whitespace changes folded away (all in Settings).
-- A file tree beside the diff with added and removed lines per file and folder, and a badge for added, removed and moved files. Fold folders one by one, or all at once with Collapse all / Expand all.
+- A file tree beside the diff with added and removed lines per file and folder, and a badge for added, removed and moved files. Fold folders one by one, or all at once with Collapse all / Expand all. The tree icon in a file's diff header jumps to that file in the tree.
 - Filters by kind (code, tests, generated, moved) and by file type, with live counts, and a switch to hide viewed files.
 - Mark files viewed (`v` marks the current one and jumps to the next); marks are kept, and drop off when a file changes again.
 - Large and generated files start folded. Pull requests with thousands of files stay responsive, including those over GitHub's 3,000-file list limit (loaded as one diff).
