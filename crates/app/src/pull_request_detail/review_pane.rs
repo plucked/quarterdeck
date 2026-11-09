@@ -26,8 +26,13 @@ pub struct ReviewPane {
     pub summary_subscription: Option<Subscription>,
     /// Reading GitHub's conversations.
     pub load_task: Option<Task<()>>,
-    /// A submission, an edit or a deletion on GitHub.
+    /// An edit, a deletion or resolving on GitHub.
     pub action_task: Option<Task<()>>,
+    /// The review's submission while it runs. Kept apart from `action_task`
+    /// and through a file reload, so nothing cancels it halfway: a cancelled
+    /// submission would keep the drafts GitHub took, and they would be
+    /// posted again.
+    pub submission: Option<Task<()>>,
 }
 
 impl Default for ReviewPane {
@@ -44,6 +49,7 @@ impl Default for ReviewPane {
             summary_subscription: None,
             load_task: None,
             action_task: None,
+            submission: None,
         }
     }
 }

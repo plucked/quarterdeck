@@ -630,8 +630,13 @@ impl PullRequestDetail {
 
     /// Submits the GitHub review: the drafts and replies, the verdict and the
     /// summary. Drafts GitHub took are dropped as it takes them, so a retry
-    /// after a failure does not post them twice.
+    /// after a failure does not post them twice. Does nothing while a
+    /// submission runs: its drafts are still there, and a second click would
+    /// post them as a second review.
     pub(super) fn submit_review(&mut self, cx: &mut Context<Self>) {
+        if self.review().submission.is_some() {
+            return;
+        }
         let (Some(state), Ok(client)) = (
             self.review().comments.github.clone(),
             self.services().github.clone(),
@@ -679,19 +684,34 @@ impl PullRequestDetail {
             }
             let submitted = submitted.await;
 
-            // Say how it went and read the conversations again.
             detail
                 .update(cx, |detail, cx| {
+                    // This task ends here: let go of its handle without cancelling it.
+                    if let Some(task) = detail.review_mut().submission.take() {
+                        task.detach();
+                    }
+
+                    // The saved summary of a submitted review goes, whatever shows now.
+                    if submitted.is_ok() {
+                        UiStateRecorder::record_review_change(
+                            cx,
+                            ReviewChange::DeleteSummary(pull_request_id),
+                        );
+                    }
+
+                    // Another pull request or range shows now: its review stays as it is.
+                    if detail.review_scope() != Some(&ReviewScope::PullRequest(pull_request_id)) {
+                        cx.notify();
+                        return;
+                    }
+
+                    // Say how it went and read the conversations again.
                     detail.review_mut().status = match submitted {
                         Ok(()) => {
                             detail.review_mut().comments.summary = ReviewSummary::default();
                             if let Some(area) = detail.review().summary_editor.clone() {
                                 area.update(cx, |area, cx| area.set_text("", cx));
                             }
-                            UiStateRecorder::record_review_change(
-                                cx,
-                                ReviewChange::DeleteSummary(pull_request_id),
-                            );
                             ReviewStatus::Done("Review submitted.".into())
                         }
                         Err(error) => ReviewStatus::Failed(format!("{error:#}").into()),
@@ -702,7 +722,8 @@ impl PullRequestDetail {
                 })
                 .ok();
         });
-        self.review_mut().action_task = Some(task);
+        self.review_mut().submission = Some(task);
+        cx.notify();
     }
 
     /// The GitHub review to submit from the drafts and the summary, with

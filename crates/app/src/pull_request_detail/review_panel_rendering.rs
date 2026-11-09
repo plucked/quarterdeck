@@ -201,10 +201,13 @@ impl PullRequestDetail {
         };
 
         let count = drafts.len();
-        let submit_label = match count {
-            0 => "Submit review".to_owned(),
-            1 => "Submit review (1 comment)".to_owned(),
-            _ => format!("Submit review ({count} comments)"),
+        // While a submission runs the button says so and takes no clicks.
+        let is_submitting = self.review().submission.is_some();
+        let submit_label = match (&self.review().submission, count) {
+            (Some(_), _) => "Submitting…".to_owned(),
+            (None, 0) => "Submit review".to_owned(),
+            (None, 1) => "Submit review (1 comment)".to_owned(),
+            (None, _) => format!("Submit review ({count} comments)"),
         };
         div()
             .flex()
@@ -233,7 +236,7 @@ impl PullRequestDetail {
                 div().flex().justify_end().child(
                     Button::new("submit-review", submit_label)
                         .primary()
-                        .disabled(!can_submit)
+                        .disabled(!can_submit || is_submitting)
                         .on_click(cx.listener(|detail, _, _, cx| detail.submit_review(cx))),
                 ),
             )
