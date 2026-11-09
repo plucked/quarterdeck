@@ -416,6 +416,209 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         (SELECT queue_tab FROM saved_queue_tab WHERE saved_queue_tab.id = review_queue_view.id);
     DROP TABLE saved_queue_tab;
 ",
+    r"
+    -- AI-written briefs: user data (paid for), never expired, kept when the
+    -- cache is cleared. The latest brief per review scope: a pull request
+    -- (pr_id), or a combined range of stack layers (repo + layer numbers).
+    CREATE TABLE briefs (
+        id              INTEGER PRIMARY KEY,
+        pr_id           INTEGER,
+        repo_owner      TEXT,
+        repo_name       TEXT,
+        first_number    INTEGER,
+        last_number     INTEGER,
+        repository      TEXT    NOT NULL,
+        number          INTEGER NOT NULL,
+        url             TEXT    NOT NULL,
+        subject         TEXT    NOT NULL,
+        head_sha        TEXT,
+        reader          TEXT    NOT NULL CHECK (reader IN ('expert', 'overview', 'newcomer')),
+        code_access     TEXT    NOT NULL CHECK (code_access IN ('workspace', 'diff_only')),
+        diff_only_reason TEXT,
+        prompt          TEXT    NOT NULL,
+        lead            TEXT    NOT NULL,
+        cost_usd        REAL,
+        session_id      TEXT,
+        model           TEXT,
+        duration_ms     INTEGER NOT NULL CHECK (duration_ms >= 0),
+        written_at      INTEGER NOT NULL,
+        CHECK ((pr_id IS NOT NULL AND repo_owner IS NULL AND repo_name IS NULL
+                    AND first_number IS NULL AND last_number IS NULL)
+            OR (pr_id IS NULL AND repo_owner IS NOT NULL AND repo_name IS NOT NULL
+                    AND first_number IS NOT NULL AND last_number IS NOT NULL)),
+        CHECK ((code_access = 'diff_only') = (diff_only_reason IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX briefs_by_pull_request ON briefs (pr_id) WHERE pr_id IS NOT NULL;
+    CREATE UNIQUE INDEX briefs_by_range ON briefs (repo_owner, repo_name, first_number, last_number)
+        WHERE pr_id IS NULL;
+
+    CREATE TABLE brief_layers (
+        brief_id  INTEGER NOT NULL REFERENCES briefs (id) ON DELETE CASCADE,
+        position  INTEGER NOT NULL CHECK (position >= 0),
+        number    INTEGER NOT NULL,
+        title     TEXT    NOT NULL,
+        PRIMARY KEY (brief_id, position)
+    );
+    CREATE TABLE brief_pages (
+        brief_id  INTEGER NOT NULL REFERENCES briefs (id) ON DELETE CASCADE,
+        position  INTEGER NOT NULL CHECK (position >= 0),
+        title     TEXT    NOT NULL,
+        summary   TEXT    NOT NULL,
+        PRIMARY KEY (brief_id, position)
+    );
+    -- One row per widget, numbered across the brief; the fields every kind
+    -- shares here, the rest in the tables below.
+    CREATE TABLE brief_widgets (
+        brief_id       INTEGER NOT NULL REFERENCES briefs (id) ON DELETE CASCADE,
+        position       INTEGER NOT NULL CHECK (position >= 0),
+        page_position  INTEGER NOT NULL CHECK (page_position >= 0),
+        kind           TEXT    NOT NULL CHECK (kind IN ('section', 'callout', 'code_excerpt',
+                           'code_compare', 'table', 'trace', 'scope', 'tour', 'graph', 'sequence')),
+        title          TEXT,
+        body           TEXT,
+        tone           TEXT CHECK (tone IS NULL OR tone IN ('note', 'constraint', 'verdict', 'evidence')),
+        PRIMARY KEY (brief_id, position)
+    );
+    CREATE TABLE brief_anchors (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        slot             TEXT    NOT NULL CHECK (slot IN ('excerpt', 'before', 'after')),
+        path             TEXT    NOT NULL,
+        side             TEXT    NOT NULL CHECK (side IN ('base', 'head')),
+        first_line       INTEGER NOT NULL CHECK (first_line > 0),
+        last_line        INTEGER NOT NULL CHECK (last_line >= first_line),
+        PRIMARY KEY (brief_id, widget_position, slot),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_table_columns (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        position         INTEGER NOT NULL CHECK (position >= 0),
+        name             TEXT    NOT NULL,
+        PRIMARY KEY (brief_id, widget_position, position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_table_cells (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        row_position     INTEGER NOT NULL CHECK (row_position >= 0),
+        column_position  INTEGER NOT NULL CHECK (column_position >= 0),
+        text             TEXT    NOT NULL,
+        PRIMARY KEY (brief_id, widget_position, row_position, column_position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_scope_items (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        list             TEXT    NOT NULL CHECK (list IN ('changes', 'unchanged', 'mechanical')),
+        position         INTEGER NOT NULL CHECK (position >= 0),
+        text             TEXT    NOT NULL,
+        PRIMARY KEY (brief_id, widget_position, list, position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    -- Anchors of steps, boxes and messages: path, side, first and last line; all NULL for none.
+    CREATE TABLE brief_tour_steps (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        position         INTEGER NOT NULL CHECK (position >= 0),
+        title            TEXT    NOT NULL,
+        explanation      TEXT    NOT NULL,
+        weight           TEXT    NOT NULL CHECK (weight IN ('core', 'supporting', 'mechanical')),
+        anchor_path      TEXT,
+        anchor_side      TEXT CHECK (anchor_side IS NULL OR anchor_side IN ('base', 'head')),
+        anchor_first     INTEGER,
+        anchor_last      INTEGER,
+        PRIMARY KEY (brief_id, widget_position, position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_graph_groups (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        position         INTEGER NOT NULL CHECK (position >= 0),
+        label            TEXT    NOT NULL,
+        PRIMARY KEY (brief_id, widget_position, position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_graph_nodes (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        position         INTEGER NOT NULL CHECK (position >= 0),
+        label            TEXT    NOT NULL,
+        detail           TEXT    NOT NULL,
+        role             TEXT    NOT NULL CHECK (role IN ('actor', 'owner', 'transport', 'store',
+                             'constraint', 'external')),
+        group_position   INTEGER,
+        change           TEXT    NOT NULL CHECK (change IN ('same', 'added', 'removed')),
+        anchor_path      TEXT,
+        anchor_side      TEXT CHECK (anchor_side IS NULL OR anchor_side IN ('base', 'head')),
+        anchor_first     INTEGER,
+        anchor_last      INTEGER,
+        PRIMARY KEY (brief_id, widget_position, position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_graph_edges (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        position         INTEGER NOT NULL CHECK (position >= 0),
+        from_position    INTEGER NOT NULL,
+        to_position      INTEGER NOT NULL,
+        label            TEXT    NOT NULL,
+        style            TEXT    NOT NULL CHECK (style IN ('control', 'data', 'async', 'optional')),
+        change           TEXT    NOT NULL CHECK (change IN ('same', 'added', 'removed')),
+        PRIMARY KEY (brief_id, widget_position, position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_sequence_lanes (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        position         INTEGER NOT NULL CHECK (position >= 0),
+        label            TEXT    NOT NULL,
+        role             TEXT    NOT NULL CHECK (role IN ('actor', 'owner', 'transport', 'store',
+                             'constraint', 'external')),
+        PRIMARY KEY (brief_id, widget_position, position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_sequence_messages (
+        brief_id         INTEGER NOT NULL,
+        widget_position  INTEGER NOT NULL,
+        position         INTEGER NOT NULL CHECK (position >= 0),
+        from_lane        INTEGER NOT NULL,
+        to_lane          INTEGER NOT NULL,
+        label            TEXT    NOT NULL,
+        style            TEXT    NOT NULL CHECK (style IN ('call', 'reply', 'async')),
+        note             TEXT,
+        anchor_path      TEXT,
+        anchor_side      TEXT CHECK (anchor_side IS NULL OR anchor_side IN ('base', 'head')),
+        anchor_first     INTEGER,
+        anchor_last      INTEGER,
+        PRIMARY KEY (brief_id, widget_position, position),
+        FOREIGN KEY (brief_id, widget_position)
+            REFERENCES brief_widgets (brief_id, position) ON DELETE CASCADE
+    );
+    CREATE TABLE brief_rejected (
+        brief_id  INTEGER NOT NULL REFERENCES briefs (id) ON DELETE CASCADE,
+        position  INTEGER NOT NULL CHECK (position >= 0),
+        widget    TEXT    NOT NULL,
+        reason    TEXT    NOT NULL,
+        PRIMARY KEY (brief_id, position)
+    );
+    CREATE TABLE brief_tool_calls (
+        brief_id  INTEGER NOT NULL REFERENCES briefs (id) ON DELETE CASCADE,
+        position  INTEGER NOT NULL CHECK (position >= 0),
+        tool      TEXT    NOT NULL,
+        input     TEXT    NOT NULL,
+        PRIMARY KEY (brief_id, position)
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

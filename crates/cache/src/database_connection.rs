@@ -5,6 +5,8 @@ use rusqlite::Connection;
 
 use crate::schema_migrations::apply_schema_migrations;
 
+/// Prepared statements kept per connection (`prepare_cached`).
+const STATEMENT_CACHE_CAPACITY: usize = 64;
 /// The data folder of release builds.
 const APP_DIRECTORY: &str = "Quarterdeck";
 /// The data folder of development (debug) builds, so a development build a
@@ -107,6 +109,9 @@ pub(crate) fn open_in_memory_database() -> Result<Connection> {
 /// keys, then brings the schema up to date.
 fn prepare_connection(mut connection: Connection) -> Result<Connection> {
     connection.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
+    // Room for every statement a brief is stored and read with, so they are
+    // compiled once per connection, not once per row.
+    connection.set_prepared_statement_cache_capacity(STATEMENT_CACHE_CAPACITY);
     apply_schema_migrations(&mut connection)?;
     Ok(connection)
 }

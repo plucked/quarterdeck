@@ -95,6 +95,28 @@ impl GitHubCache {
         Ok(Some(pull_request))
     }
 
+    /// The cached pull request `number` of `repo`, in a list or not (search
+    /// and pulls ids differ, numbers agree).
+    pub fn pull_request_by_number(
+        &self,
+        repo: &RepoRef,
+        number: u64,
+    ) -> Result<Option<PullRequest>> {
+        let mut statement = self.connection.prepare_cached(&format!(
+            "SELECT {PULL_REQUEST_COLUMNS} FROM pull_requests p
+             WHERE p.repo_owner = ?1 AND p.repo_name = ?2 AND p.number = ?3"
+        ))?;
+        let mut rows = statement.query_map(
+            params![repo.owner, repo.name, sql_integer(number)?],
+            pull_request_from_row,
+        )?;
+        let Some(mut pull_request) = rows.next().transpose()? else {
+            return Ok(None);
+        };
+        pull_request.labels = self.labels_of(pull_request.id)?;
+        Ok(Some(pull_request))
+    }
+
     /// The pull requests of a list, in stored order.
     pub fn list(&self, list_key: PullRequestListKey) -> Result<Vec<PullRequest>> {
         let mut statement = self.connection.prepare(&format!(

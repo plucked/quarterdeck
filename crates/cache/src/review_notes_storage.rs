@@ -3,6 +3,7 @@ use qd_github::{LineSide, RepoRef};
 use rusqlite::{OptionalExtension, Row, params};
 
 use crate::review_summary::{event_from_sql_text, event_sql_text};
+use crate::scope_columns::ScopeColumns;
 use crate::sql_integers::sql_integer;
 use crate::{
     NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewScope, ReviewSummary, UiStateStore,
@@ -11,40 +12,6 @@ use crate::{
 /// The columns every note query reads, in order.
 const NOTE_COLUMNS: &str = "id, destination, pr_id, repo_owner, repo_name, first_number,
     last_number, path, side, line, start_line, reply_to_thread, body, created_at, updated_at";
-
-/// The scope columns of a note: `pr_id`, or the repository and the range's layer numbers.
-struct ScopeColumns {
-    pr_id: Option<i64>,
-    repo_owner: Option<String>,
-    repo_name: Option<String>,
-    first_number: Option<i64>,
-    last_number: Option<i64>,
-}
-
-impl ScopeColumns {
-    fn of(scope: &ReviewScope) -> Result<Self> {
-        Ok(match scope {
-            ReviewScope::PullRequest(id) => Self {
-                pr_id: Some(sql_integer(*id)?),
-                repo_owner: None,
-                repo_name: None,
-                first_number: None,
-                last_number: None,
-            },
-            ReviewScope::CombinedLayers {
-                repo,
-                first_number,
-                last_number,
-            } => Self {
-                pr_id: None,
-                repo_owner: Some(repo.owner.clone()),
-                repo_name: Some(repo.name.clone()),
-                first_number: Some(sql_integer(*first_number)?),
-                last_number: Some(sql_integer(*last_number)?),
-            },
-        })
-    }
-}
 
 impl UiStateStore {
     /// The notes of `scope` going to `destination`, by file, then line, then age.

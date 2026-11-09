@@ -12,6 +12,7 @@ dirs.workspace = true
 qd-diff.workspace = true
 qd-file-tree.workspace = true
 qd-github.workspace = true
+qd-studio.workspace = true
 rusqlite.workspace = true
 
 [lints]

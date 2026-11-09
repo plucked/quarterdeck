@@ -18,6 +18,11 @@
 //! - `sql_integers.rs`: checked conversions between GitHub numbers and SQLite integers.
 //! - `unix_now.rs`: the current time as stored.
 //! - `ui_state_store.rs`: `UiStateStore`, reads and writes of the UI state.
+//! - `brief_storage.rs`: stored briefs (user data): one per review scope, every part in typed rows; `brief_index` for the queue.
+//! - `stored_brief.rs`: `StoredBrief`, a checked studio with the record of its run.
+//! - `brief_index.rs`: `BriefIndex`, which pull requests have a brief.
+//! - `brief_sql_text.rs`: SQL text of the `qd-studio` enums a brief stores.
+//! - `scope_columns.rs`: a `ReviewScope` as its nullable columns, shared by notes and briefs.
 //! - `database_connection.rs`: the database location and how a connection is opened.
 //! - `schema_migrations.rs`: the append-only schema history and its runner.
 //! - `pull_request_list_key.rs`: `PullRequestListKey`, the name of a cached list.
@@ -60,6 +65,9 @@
 //! - `review_notes_storage.rs`: reads and writes of notes and summaries.
 
 mod appearance_settings_storage;
+mod brief_index;
+mod brief_sql_text;
+mod brief_storage;
 mod cache_cleanup;
 mod cache_settings_storage;
 mod cache_ttl;
@@ -103,9 +111,11 @@ mod review_queue_view_state;
 mod review_scope;
 mod review_summary;
 mod schema_migrations;
+mod scope_columns;
 mod sql_integers;
 mod stack_review_mode;
 mod stack_storage;
+mod stored_brief;
 mod ui_state_store;
 mod unix_now;
 mod updated_within;
@@ -115,6 +125,7 @@ mod watched_repositories_storage;
 mod window_mode;
 mod window_placement;
 
+pub use brief_index::BriefIndex;
 pub use cache_ttl::CacheTtl;
 pub use cache_usage::{CacheUsage, CachedData};
 pub use cached_file_set::CachedFileSet;
@@ -144,6 +155,7 @@ pub use review_queue_view_state::ReviewQueueViewState;
 pub use review_scope::ReviewScope;
 pub use review_summary::ReviewSummary;
 pub use stack_review_mode::StackReviewMode;
+pub use stored_brief::StoredBrief;
 pub use ui_state_store::UiStateStore;
 pub use updated_within::UpdatedWithin;
 pub use viewed_file::ViewedFile;
