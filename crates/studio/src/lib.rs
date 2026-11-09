@@ -50,6 +50,7 @@
 //! - `clean_orphan_workspaces.rs`: removes workspaces left by an app process that is gone.
 //! - `brief_record.rs`: `BriefRecord`, everything about how one brief was made.
 //! - `write_brief_report.rs`: `write_brief_report` and `report_root`, a folder reporting a brief for later tuning.
+//! - `shown_page.rs`: `ShownPage`, the page of a brief a reader had open when they reported it.
 //! - `tool_call.rs`: `ToolCall`, a tool call of a run as readable text, read from its transcript.
 //! - `find_claude.rs`: finds the `claude` executable.
 //! - `run_claude.rs`: runs Claude Code headless, confined, and follows its event stream.
@@ -95,6 +96,7 @@ mod review_workspace;
 mod run_claude;
 mod sequence_lane;
 mod sequence_message;
+mod shown_page;
 mod step_weight;
 mod stop_child;
 mod studio;
@@ -151,6 +153,7 @@ pub use review_workspace::ReviewWorkspace;
 pub use run_claude::run_claude;
 pub use sequence_lane::SequenceLane;
 pub use sequence_message::SequenceMessage;
+pub use shown_page::ShownPage;
 pub use step_weight::StepWeight;
 pub use studio::Studio;
 pub use studio_graph::StudioGraph;

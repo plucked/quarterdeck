@@ -1,13 +1,14 @@
 use std::time::Duration;
 
 use qd_studio::{
-    BriefRecord, CodeAccess, REPORT_FILE, ReaderFamiliarity, RejectedWidget, ToolCall,
+    BriefRecord, CodeAccess, REPORT_FILE, ReaderFamiliarity, RejectedWidget, ShownPage, ToolCall,
     write_brief_report,
 };
 use serde_json::json;
 
-/// A report folder holds the entry point with the reader's words, what the
-/// brief was about and what it read, and every input and output of the run.
+/// A report folder holds the entry point with the reader's words, the page
+/// they had open, what the brief was about and what it read, and every
+/// input and output of the run.
 #[test]
 fn writes_every_part_of_a_report() {
     let root = std::env::temp_dir().join(format!("qd-studio-report-test-{}", std::process::id()));
@@ -41,8 +42,19 @@ fn writes_every_part_of_a_report() {
         written_at: 1_794_148_320,
     };
 
-    let report = write_brief_report(&root, &record, "The lead is too long.", "0.3.0")
-        .expect("the report is written");
+    let shown_page = ShownPage {
+        number: 1,
+        count: 1,
+        title: "Overview".into(),
+    };
+    let report = write_brief_report(
+        &root,
+        &record,
+        "The lead is too long.",
+        &shown_page,
+        "0.3.0",
+    )
+    .expect("the report is written");
 
     // The entry point names the reader's words, the subject, the reads.
     assert_eq!(
@@ -51,6 +63,7 @@ fn writes_every_part_of_a_report() {
     );
     let text = std::fs::read_to_string(&report).expect("report.md");
     assert!(text.contains("The lead is too long."), "{text}");
+    assert!(text.contains("page 1 of 1, \"Overview\""), "{text}");
     assert!(
         text.contains("head `bbb222`") && text.contains("new to this area"),
         "{text}"
@@ -78,7 +91,7 @@ fn writes_every_part_of_a_report() {
 
     // A second report of the same pull request in the same second gets a
     // folder of its own, so the first stays.
-    let again = write_brief_report(&root, &record, "Second thoughts.", "0.3.0")
+    let again = write_brief_report(&root, &record, "Second thoughts.", &shown_page, "0.3.0")
         .expect("the second report is written");
     assert_ne!(again.parent(), report.parent());
     let first = std::fs::read_to_string(&report).expect("the first report.md");

@@ -114,8 +114,9 @@ impl BriefGallery {
     fn save_sample_report(&mut self, cx: &mut Context<Self>) {
         if let Ok(sample) = &self.sample {
             let record = sample.brief.record.clone();
+            let shown_page = sample.brief.shown_page(self.page);
             let version = format!("{} (gallery sample)", env!("CARGO_PKG_VERSION"));
-            self.save_report(record, version, cx);
+            self.save_report(record, shown_page, version, cx);
         }
     }
 

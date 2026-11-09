@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use qd_markdown::MarkdownDocument;
-use qd_studio::{BriefRecord, Studio, StudioWidget};
+use qd_studio::{BriefRecord, ShownPage, Studio, StudioWidget};
 
 use super::graph_layout::{DEFAULT_DIAGRAM_WIDTH, lay_out_graph};
 use super::prepared_page::PreparedPage;
@@ -118,6 +118,21 @@ impl PreparedBrief {
             pages,
             record,
             diagram_width: DEFAULT_DIAGRAM_WIDTH,
+        }
+    }
+
+    /// Page `index` (from 0) as a report names it: its number from 1, the
+    /// page count and its title (empty for an index past the last page).
+    pub fn shown_page(&self, index: usize) -> ShownPage {
+        let title = self
+            .pages
+            .get(index)
+            .map(|page| page.title.clone())
+            .unwrap_or_default();
+        ShownPage {
+            number: index + 1,
+            count: self.pages.len(),
+            title,
         }
     }
 

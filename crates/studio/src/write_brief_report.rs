@@ -6,6 +6,7 @@ use serde_json::Value;
 
 use super::brief_record::BriefRecord;
 use super::code_access::CodeAccess;
+use super::shown_page::ShownPage;
 use super::studio_guide::STUDIO_GUIDE;
 use super::studio_schema::STUDIO_SCHEMA;
 
@@ -21,9 +22,9 @@ pub fn report_root() -> Option<PathBuf> {
 }
 
 /// Writes a report on the brief `record` describes, with the reader's
-/// `feedback`, into a new folder under `root` named after the time, the
-/// repository and the pull request, and returns the path of its
-/// `report.md`. Besides that entry point the folder holds the prompt, the
+/// `feedback` and the page they had open (`shown_page`), into a new folder
+/// under `root` named after the time, the repository and the pull request,
+/// and returns the path of its `report.md`. Besides that entry point the folder holds the prompt, the
 /// system prompt and schema as compiled into this build (`app_version`),
 /// the raw answer, what the checks left out and the transcript, so a later
 /// session can see exactly how the brief came about.
@@ -31,6 +32,7 @@ pub fn write_brief_report(
     root: &Path,
     record: &BriefRecord,
     feedback: &str,
+    shown_page: &ShownPage,
     app_version: &str,
 ) -> std::io::Result<PathBuf> {
     // A folder of its own, named so reports sort by time.
@@ -66,7 +68,7 @@ pub fn write_brief_report(
     let report = folder.join(REPORT_FILE);
     std::fs::write(
         &report,
-        report_text(record, feedback, app_version, &stamp.readable),
+        report_text(record, feedback, shown_page, app_version, &stamp.readable),
     )?;
     Ok(report)
 }
@@ -90,10 +92,16 @@ fn new_report_folder(root: &Path, name: &str) -> std::io::Result<PathBuf> {
     }
 }
 
-/// `report.md`: the reader's words first, then what the brief was about,
-/// how it was made, what it read, the files here, and where in Quarterdeck
-/// the brief is produced.
-fn report_text(record: &BriefRecord, feedback: &str, app_version: &str, reported: &str) -> String {
+/// `report.md`: the reader's words and the page they had open first, then
+/// what the brief was about, how it was made, what it read, the files here,
+/// and where in Quarterdeck the brief is produced.
+fn report_text(
+    record: &BriefRecord,
+    feedback: &str,
+    shown_page: &ShownPage,
+    app_version: &str,
+    reported: &str,
+) -> String {
     let mut text = String::new();
     let _ = writeln!(
         text,
@@ -108,6 +116,11 @@ fn report_text(record: &BriefRecord, feedback: &str, app_version: &str, reported
     // What the reader says.
     let _ = writeln!(text, "## What is wrong or weird (the reader's words)\n");
     let _ = writeln!(text, "{}\n", feedback.trim());
+    let _ = writeln!(
+        text,
+        "They had page {} of {}, \"{}\", open when they wrote this, so \"here\" means that page.\n",
+        shown_page.number, shown_page.count, shown_page.title
+    );
 
     // What the brief was about.
     let _ = writeln!(text, "## The brief\n");

@@ -1,5 +1,5 @@
 use gpui::{AppContext as _, ClipboardItem, Context, Task, Window};
-use qd_studio::{BriefRecord, report_root, write_brief_report};
+use qd_studio::{BriefRecord, ShownPage, report_root, write_brief_report};
 
 use super::report_state::ReportState;
 use crate::text_area::TextArea;
@@ -60,10 +60,16 @@ pub trait ReportHost: Sized + 'static {
     }
 
     /// Writes a report on the brief `record` describes with the words in
-    /// the panel, on the background executor (`app_version` names the
-    /// build); the panel then shows the saved report's path, or why it
-    /// failed with the words kept.
-    fn save_report(&mut self, record: BriefRecord, app_version: String, cx: &mut Context<Self>) {
+    /// the panel and the page the reader has open (`shown_page`), on the
+    /// background executor (`app_version` names the build); the panel then
+    /// shows the saved report's path, or why it failed with the words kept.
+    fn save_report(
+        &mut self,
+        record: BriefRecord,
+        shown_page: ShownPage,
+        app_version: String,
+        cx: &mut Context<Self>,
+    ) {
         // The words, and where they go.
         let editor = match self.report_mut().state() {
             ReportState::Writing(editor) | ReportState::Failed { editor, .. } => editor.clone(),
@@ -89,7 +95,9 @@ pub trait ReportHost: Sized + 'static {
         let task = cx.spawn(async move |view, cx| {
             let written = cx
                 .background_executor()
-                .spawn(async move { write_brief_report(&root, &record, &feedback, &app_version) })
+                .spawn(async move {
+                    write_brief_report(&root, &record, &feedback, &shown_page, &app_version)
+                })
                 .await;
             view.update(cx, |view, cx| {
                 let state = match written {

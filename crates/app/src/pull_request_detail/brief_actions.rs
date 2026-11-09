@@ -129,11 +129,13 @@ impl PullRequestDetail {
     }
 
     /// Writes a report on the shown brief with the words in the report
-    /// panel ([`ReportHost::save_report`]).
+    /// panel and the page shown ([`ReportHost::save_report`]).
     fn save_shown_brief_report(&mut self, cx: &mut Context<Self>) {
+        let page = self.current_brief_page();
         if let Some(BriefState::Written(brief)) = self.current_brief() {
             let record = brief.record.clone();
-            self.save_report(record, app_version(), cx);
+            let shown_page = brief.shown_page(page);
+            self.save_report(record, shown_page, app_version(), cx);
         }
     }
 
