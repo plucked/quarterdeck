@@ -3664,7 +3664,7 @@ checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
 name = "qd-cache"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "dirs 7.0.0",
@@ -3677,18 +3677,18 @@ dependencies = [
 
 [[package]]
 name = "qd-diff"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "similar",
 ]
 
 [[package]]
 name = "qd-file-tree"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "qd-github"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "security-framework",
  "serde",
@@ -3699,14 +3699,14 @@ dependencies = [
 
 [[package]]
 name = "qd-markdown"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pulldown-cmark",
 ]
 
 [[package]]
 name = "qd-studio"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
  "dirs 7.0.0",
@@ -3718,7 +3718,7 @@ dependencies = [
 
 [[package]]
 name = "qd-syntax"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "qd-diff",
  "syntect",
@@ -3727,7 +3727,7 @@ dependencies = [
 
 [[package]]
 name = "qd-update"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "dirs 7.0.0",
  "serde",
@@ -3739,7 +3739,7 @@ dependencies = [
 
 [[package]]
 name = "qd-video"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "objc2",
@@ -3760,7 +3760,7 @@ dependencies = [
 
 [[package]]
 name = "quarterdeck"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "futures",
