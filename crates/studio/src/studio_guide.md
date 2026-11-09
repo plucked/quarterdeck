@@ -105,16 +105,22 @@ Write the way a colleague talks you through their change at your desk: whole sen
 - Start from the situation the reader recognises, then say what the change does about it. A problem comes before its fix, a reason before its consequence.
 - Every prose field is full sentences: the lead, summaries, sections, callouts, captions and reading-order explanations. No fragments ("Renames in `x.rs` and README text."), no arrows or shorthand in sentences ("2→3", "w/", "+"), no labels with colons in place of a sentence. Arrows and terse values belong in tables, traces and scope items only.
 - Name things the way the team says them in conversation and in the code, not as stacked nouns ("the memory the load balancer needs", not "load-balancer-worker memory requirement").
+- Let the system's parts and data be the subjects, not function names. People say "the counts stay apart until the very end", not "`sum_loads` keeps both counts. Then `tier_count` reduces them." Mention a function where the reader needs it to find the code, as part of a sentence about what happens.
+- Explain what the steps achieve, not the steps in order. A walk through the code ("X reads…, then Y keeps…, only after that does Z…") restates the hunk; say what the arrangement buys and what follows from it. Leave out details that only matter inside the code (which SQL parameter holds what) unless the point depends on them.
+- Say it the way you would out loud: no stiff inversions ("Only after that does X reduce…"), no parenthetical asides of jargon.
 - Say where a claim comes from once and naturally ("The description says the query was tried on a replica, where it ran stably"), not as repeated tags ("The PR reports X. The PR also says Y.").
 - Addressing the reader as "you" is fine where it helps ("you can skim the YAML changes").
 
 Robotic: "Retries now stop after three timeouts. The counter resets on success. Before, retries were unbounded. Clock skew is not tested."
 Spoken: "Until now a request that kept timing out was retried forever, so one dead host could tie up a worker for good. The client now gives up after the third timeout in a row, and a success resets the count, so a merely flaky host still gets through. The tests do not cover clock skew."
 
+Robotic: "`load_page` reads rows and pins (flags in `$2`) in the same query. `merge_rows` keeps both lists per user and sorts them as before. Only after that does `PageView::visible` cut them to one list. The rest of the view is unchanged and sees one list."
+Spoken: "Pinned rows now come back with the others from one query and stay a separate list while they are merged per user. They only become one list at the very end, when the page decides what is visible, which is why nothing above it had to change: the view still gets a single list, it just no longer drops pins past the first page."
+
 - Specific and calibrated. "Retries stop after the third timeout" rather than "Robust retry handling"; say how sure you are when you are not sure.
 - If a sentence could be produced by reading the hunk, leave it out. Add what the diff does not show: why, context, consequences, evidence, uncertainty.
-- Familiar verbs, precise subjects: who sends what, which state is kept, what a flag controls. One name per thing.
-- Headings name the mechanism or the consequence ("Retries stop after the third timeout"), never a question or a slogan.
+- Familiar verbs, precise subjects: which part sends what, which state is kept, what a flag controls. One name per thing.
+- Headings name the mechanism or the consequence ("Retries stop after the third timeout"), never a question or a slogan, and the text under a heading explains what it claims.
 - State a constraint with its cause and effect.
 - No sales words (comprehensive, robust, seamless, powerful, under the hood), no rhetorical questions, no praise of the author, no review-round history, no verdict on whether the change is good.
 - Mark mechanical and routine parts as such; never call a part "safe".
