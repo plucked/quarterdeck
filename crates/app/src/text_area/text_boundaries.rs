@@ -79,6 +79,16 @@ pub fn word_range_at(text: &str, offset: usize) -> Range<usize> {
     start..end
 }
 
+/// `offset` moved into `text`: at most its length, and back to the start of
+/// the character it falls inside.
+pub fn offset_within(text: &str, offset: usize) -> usize {
+    let mut offset = offset.min(text.len());
+    while !text.is_char_boundary(offset) {
+        offset -= 1;
+    }
+    offset
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +121,18 @@ mod tests {
         let text = "héllo";
         assert_eq!(next_boundary(text, 1), 3);
         assert_eq!(previous_boundary(text, 3), 1);
+    }
+
+    /// An offset from a layout of other text (the placeholder, a text
+    /// before an edit) is moved into the text, never past it or into a
+    /// character.
+    #[test]
+    fn keeps_offsets_inside_the_text() {
+        assert_eq!(offset_within("", 94), 0);
+        assert_eq!(offset_within("abc", 2), 2);
+        assert_eq!(offset_within("abc", 10), 3);
+        // `é` takes bytes 1 and 2: an offset inside it moves to its start.
+        assert_eq!(offset_within("hé!", 2), 1);
+        assert_eq!(word_range_at("", offset_within("", 94)), 0..0);
     }
 }

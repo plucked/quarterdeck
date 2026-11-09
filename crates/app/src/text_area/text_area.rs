@@ -16,8 +16,8 @@ use super::text_area_element::TextAreaElement;
 use super::text_area_event::TextAreaEvent;
 use super::text_area_layout::TextAreaLayout;
 use super::text_boundaries::{
-    line_end, line_start, next_boundary, next_word_end, previous_boundary, previous_word_start,
-    word_range_at,
+    line_end, line_start, next_boundary, next_word_end, offset_within, previous_boundary,
+    previous_word_start, word_range_at,
 };
 use crate::app_commands::Copy;
 use crate::theme;
@@ -162,15 +162,26 @@ impl TextArea {
         if target_y > layout.height {
             return self.text.len();
         }
-        layout.offset_for_position(gpui::point(caret.x, target_y))
+        // The layout may be the placeholder's or predate an edit.
+        offset_within(
+            &self.text,
+            layout.offset_for_position(gpui::point(caret.x, target_y)),
+        )
     }
 
     /// The offset under a window position, from the last paint.
+    /// The text offset under `position`. The layout is the last drawn one,
+    /// which shows the placeholder while the text is empty and can predate
+    /// an edit, so its offset is clamped into the text (slicing past it, or
+    /// inside a character, panics).
     fn offset_for_window_position(&self, position: Point<Pixels>) -> usize {
         let (Some(layout), Some(bounds)) = (&self.last_layout, self.last_bounds) else {
             return self.text.len();
         };
-        layout.offset_for_position(position - bounds.origin)
+        offset_within(
+            &self.text,
+            layout.offset_for_position(position - bounds.origin),
+        )
     }
 
     fn on_backspace(&mut self, _: &Backspace, _: &mut Window, cx: &mut Context<Self>) {

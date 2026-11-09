@@ -3,6 +3,7 @@ use std::ops::Range;
 use gpui::{Bounds, Context, EntityInputHandler, Pixels, Point, UTF16Selection, Window, point};
 
 use super::text_area::TextArea;
+use super::text_boundaries::offset_within;
 
 impl TextArea {
     /// The UTF-8 offset of UTF-16 offset `offset`.
@@ -142,7 +143,11 @@ impl EntityInputHandler for TextArea {
     ) -> Option<usize> {
         let bounds = self.last_bounds?;
         let layout = self.last_layout.as_ref()?;
-        let offset = layout.offset_for_position(position - bounds.origin);
+        // The layout may be the placeholder's or predate an edit.
+        let offset = offset_within(
+            self.text(),
+            layout.offset_for_position(position - bounds.origin),
+        );
         Some(self.offset_to_utf16(offset))
     }
 }
