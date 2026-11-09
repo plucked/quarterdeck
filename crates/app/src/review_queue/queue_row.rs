@@ -296,6 +296,7 @@ mod tests {
             created_at: String::new(),
             updated_at: String::new(),
             branches: None,
+            viewer_review: None,
             labels: Vec::new(),
             stack: stack.map(|(stack_number, position)| StackMembership {
                 number: stack_number,

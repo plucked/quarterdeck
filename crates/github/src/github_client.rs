@@ -40,6 +40,8 @@ const MAX_FILE_PAGES: usize = 30;
 pub const MAX_LISTED_FILES: u64 = 3000;
 const REVIEW_REQUESTED_QUERY: &str = "is:pr is:open archived:false review-requested:@me";
 const AUTHORED_QUERY: &str = "is:pr is:open archived:false author:@me";
+/// Open pull requests by others that the viewer submitted a review on.
+const REVIEWED_QUERY: &str = "is:pr is:open archived:false reviewed-by:@me -author:@me";
 /// How much of a body is read between progress reports.
 const READ_CHUNK_BYTES: usize = 64 * 1024;
 
@@ -103,15 +105,23 @@ impl GitHubClient {
         self.search_pull_requests(REVIEW_REQUESTED_QUERY)
     }
 
+    /// Others' open pull requests the viewer has reviewed (GitHub takes the
+    /// viewer off the requested reviewers once a review is submitted), most
+    /// recently updated first; may overlap [`Self::review_requested`]. One
+    /// search request.
+    pub fn reviewed_by_viewer(&self) -> Result<Vec<PullRequest>, GitHubError> {
+        self.search_pull_requests(REVIEWED_QUERY)
+    }
+
     /// The viewer's own open pull requests, most recently updated first. One
     /// search request.
     pub fn authored(&self) -> Result<Vec<PullRequest>, GitHubError> {
         self.search_pull_requests(AUTHORED_QUERY)
     }
 
-    /// The branches of the pull requests in the lists and where they sit
-    /// in their stacks: the viewer's, those requesting the viewer's review,
-    /// and others' in `other_repositories` (the 100 most recently updated of
+    /// The branches of the pull requests in the lists, the viewer's latest
+    /// review and where they sit in their stacks: the viewer's, those
+    /// requesting the viewer's review, those the viewer reviewed, and others' in `other_repositories` (the 100 most recently updated of
     /// the first ten repositories). One GraphQL request (the search API
     /// lacks both).
     pub fn listed_details(
@@ -124,6 +134,7 @@ impl GitHubClient {
             &serde_json::json!({
                 "authored": AUTHORED_QUERY,
                 "reviewRequested": REVIEW_REQUESTED_QUERY,
+                "reviewed": REVIEWED_QUERY,
                 "includeOthers": others.is_some(),
                 "others": others.unwrap_or_default(),
             }),

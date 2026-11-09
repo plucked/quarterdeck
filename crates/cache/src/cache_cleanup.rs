@@ -89,6 +89,7 @@ mod tests {
             created_at: String::new(),
             updated_at: "t".into(),
             branches: None,
+            viewer_review: None,
             labels: Vec::new(),
             stack: None,
         }

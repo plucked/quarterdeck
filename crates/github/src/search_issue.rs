@@ -38,6 +38,7 @@ impl SearchIssue {
             labels: self.labels,
             stack: None,
             branches: None,
+            viewer_review: None,
         })
     }
 }

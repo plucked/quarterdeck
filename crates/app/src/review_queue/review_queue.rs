@@ -11,7 +11,7 @@ use qd_cache::{
 };
 use qd_github::{
     GitHubClient, GitHubError, PullRequest, PullRequestBranches, PullRequestStack, RepoRef,
-    StackMembership,
+    StackMembership, ViewerReview,
 };
 
 use super::activation_refresh::ActivationRefresh;
@@ -52,10 +52,11 @@ struct PendingRestore {
 }
 
 /// What GraphQL tells of a listed pull request that the search and issues
-/// APIs do not: its branches and its stack membership.
+/// APIs do not: its branches, the viewer's latest review and its stack membership.
 #[derive(Debug, Clone, Default)]
 struct ListedDetails {
     branches: Option<PullRequestBranches>,
+    viewer_review: Option<ViewerReview>,
     stack: Option<StackMembership>,
 }
 
@@ -67,6 +68,7 @@ type DetailsByNumber = HashMap<(RepoRef, u64), ListedDetails>;
 struct OwnLists {
     authored: Vec<PullRequest>,
     review_requested: Vec<PullRequest>,
+    reviewed: Vec<PullRequest>,
     details: DetailsByNumber,
     /// Why the details could not be read, when they could not (the lists keep the last known ones).
     details_error: Option<String>,
@@ -123,6 +125,8 @@ pub struct ReviewQueue {
     lists: QueueLists,
     /// The hidden branch rules `lists` were made with.
     hidden_branch_rules: Vec<HiddenBranchRule>,
+    /// What the Review tab shows: `lists`' review requests and reviewed ones merged.
+    review_tab: Vec<PullRequest>,
     tab: QueueTab,
     /// Whether the sidebar (the lists) shows.
     sidebar_visibility: PanelVisibility,
@@ -224,10 +228,12 @@ impl ReviewQueue {
             });
 
         let hidden_branch_rules = AppSettings::hidden_branch_rules(cx).to_vec();
+        let shown_lists = without_hidden_branches(&lists, &hidden_branch_rules);
         let mut queue = Self {
             services,
             focus,
-            lists: without_hidden_branches(&lists, &hidden_branch_rules),
+            review_tab: shown_lists.review_tab(),
+            lists: shown_lists,
             fetched: lists,
             hidden_branch_rules,
             tab: saved.tab,
@@ -351,13 +357,19 @@ impl ReviewQueue {
         std::mem::take(&mut self.fetched)
     }
 
-    /// The pull requests of the shown tab: in the Others tab, those its
-    /// filters let through.
+    /// The pull requests of the shown tab: in the Review tab, review
+    /// requests and reviewed ones; in the Others tab, those its filters let through.
     pub(super) fn shown_list(&self) -> &[PullRequest] {
         match self.tab {
-            QueueTab::Authored | QueueTab::ReviewRequested => self.lists.get(self.tab),
+            QueueTab::Authored => &self.lists.authored,
+            QueueTab::ReviewRequested => &self.review_tab,
             QueueTab::Others => self.others_tab.shown(),
         }
+    }
+
+    /// What the Review tab shows, whichever tab is shown.
+    pub(super) fn review_tab(&self) -> &[PullRequest] {
+        &self.review_tab
     }
 
     pub(super) fn others_tab(&self) -> &OthersTab {
@@ -415,7 +427,7 @@ impl ReviewQueue {
         let scroll_top = self.queue_list.logical_scroll_top();
         self.rows = match self.tab {
             QueueTab::Authored | QueueTab::ReviewRequested => {
-                QueueRow::build_all(self.lists.get(self.tab), &self.collapsed, &self.stacks)
+                QueueRow::build_all(self.shown_list(), &self.collapsed, &self.stacks)
             }
             QueueTab::Others => QueueRow::build_others(
                 self.others_tab.shown(),
@@ -726,6 +738,7 @@ impl ReviewQueue {
             QueueLists {
                 authored: own.authored,
                 review_requested: own.review_requested,
+                reviewed: own.reviewed,
                 others,
             },
             cx,
@@ -739,6 +752,7 @@ impl ReviewQueue {
         let lists = QueueLists {
             authored: std::mem::take(&mut self.fetched.authored),
             review_requested: std::mem::take(&mut self.fetched.review_requested),
+            reviewed: std::mem::take(&mut self.fetched.reviewed),
             others: others.pull_requests,
         };
         self.replace_lists(lists, cx);
@@ -831,6 +845,7 @@ impl ReviewQueue {
             self.selection_origin,
             refreshed.as_ref(),
         );
+        self.review_tab = lists.review_tab();
         self.lists = lists;
         self.update_others_shown();
         self.request_author_avatars(cx);
@@ -1128,6 +1143,7 @@ fn read_cached_lists(cache: &SharedCache) -> anyhow::Result<QueueLists> {
     Ok(QueueLists {
         authored: cache.list(PullRequestListKey::AUTHORED)?,
         review_requested: cache.list(PullRequestListKey::REVIEW_REQUESTED)?,
+        reviewed: cache.list(PullRequestListKey::REVIEWED)?,
         others: cache.list(PullRequestListKey::OTHERS)?,
     })
 }
@@ -1159,6 +1175,7 @@ fn known_details(lists: &QueueLists) -> DetailsByNumber {
         .map(|pull_request| {
             let details = ListedDetails {
                 branches: pull_request.branches.clone(),
+                viewer_review: pull_request.viewer_review,
                 stack: pull_request.stack.clone(),
             };
             ((pull_request.repo.clone(), pull_request.number), details)
@@ -1166,8 +1183,9 @@ fn known_details(lists: &QueueLists) -> DetailsByNumber {
         .collect()
 }
 
-/// Fetches the viewer's own lists (one search request each) and the
-/// branches and stacks of every list (one GraphQL request, others' in
+/// Fetches the viewer's own lists, those requesting the viewer's review and
+/// those the viewer reviewed (one search request each), and the branches,
+/// viewer reviews and stacks of every list (one GraphQL request, others' in
 /// `watched` included), fills them in and caches the lists. When GraphQL
 /// cannot be read, the details known before are kept.
 ///
@@ -1181,6 +1199,7 @@ fn fetch_own_lists(
     // Both lists, then the branches and stacks of all three in one request.
     let mut authored = client.authored()?;
     let mut review_requested = client.review_requested()?;
+    let mut reviewed = client.reviewed_by_viewer()?;
     let (details, details_error) = match client.listed_details(watched) {
         Ok(listed) => (
             listed
@@ -1188,6 +1207,7 @@ fn fetch_own_lists(
                 .map(|listed| {
                     let details = ListedDetails {
                         branches: Some(listed.branches),
+                        viewer_review: listed.viewer_review,
                         stack: listed.stack,
                     };
                     ((listed.repo, listed.number), details)
@@ -1199,21 +1219,24 @@ fn fetch_own_lists(
     };
     fill_details(&mut authored, &details);
     fill_details(&mut review_requested, &details);
+    fill_details(&mut reviewed, &details);
 
     // Cache them before showing them.
     let mut cache = cache.lock();
     cache.replace_list(PullRequestListKey::AUTHORED, &authored)?;
     cache.replace_list(PullRequestListKey::REVIEW_REQUESTED, &review_requested)?;
+    cache.replace_list(PullRequestListKey::REVIEWED, &reviewed)?;
     Ok(OwnLists {
         authored,
         review_requested,
+        reviewed,
         details,
         details_error,
     })
 }
 
-/// Sets each of `pull_requests`' branches and stack membership from
-/// `details` (no membership for a standalone one).
+/// Sets each of `pull_requests`' branches, viewer review and stack
+/// membership from `details` (no membership for a standalone one).
 fn fill_details(pull_requests: &mut [PullRequest], details: &DetailsByNumber) {
     for pull_request in pull_requests {
         let found = details
@@ -1221,13 +1244,14 @@ fn fill_details(pull_requests: &mut [PullRequest], details: &DetailsByNumber) {
             .cloned()
             .unwrap_or_default();
         pull_request.branches = found.branches;
+        pull_request.viewer_review = found.viewer_review;
         pull_request.stack = found.stack;
     }
 }
 
 /// Sets each of others' `pull_requests`' stack membership from `details`
-/// (none for a standalone one). Their branches stay: GraphQL's others'
-/// search covers only the newest, and their sync looks the rest up.
+/// (none for a standalone one). Their branches and reviews stay: GraphQL's
+/// others' search covers only the newest, and their sync looks the rest up.
 fn fill_stacks(pull_requests: &mut [PullRequest], details: &DetailsByNumber) {
     for pull_request in pull_requests {
         pull_request.stack = details

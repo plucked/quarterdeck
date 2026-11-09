@@ -631,6 +631,14 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         side      TEXT    NOT NULL CHECK (side IN ('head', 'base', 'either'))
     );
 ",
+    r"
+    -- The viewer's latest submitted review (NULL: none, or not known yet).
+    ALTER TABLE pull_requests ADD COLUMN viewer_review TEXT
+        CHECK (viewer_review IN ('approved', 'changes_requested', 'commented', 'dismissed'));
+
+    -- Cached pull requests are looked up again (branches and review come together).
+    UPDATE pull_requests SET head_ref = NULL, base_ref = NULL;
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

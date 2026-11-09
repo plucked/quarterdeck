@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use serde::de::IgnoredAny;
 
-use crate::branch_lookup_query::{BranchLookupData, branch_lookup_query};
 use crate::github_client::{API_BASE, JSON_MEDIA_TYPE, PAGE_SIZE};
+use crate::pull_request_lookup_query::{PullRequestLookupData, pull_request_lookup_query};
 use crate::search_issue::SearchIssue;
 use crate::{GitHubClient, GitHubError, OtherPullRequestsUpdate, PullRequest, RepoRef};
 
@@ -18,8 +18,8 @@ const REPOSITORIES_PER_SEARCH: usize = 10;
 const MAX_ISSUE_PAGES: usize = 20;
 /// An issue's `state` while it is open.
 const OPEN_STATE: &str = "open";
-/// Pull requests whose branches one GraphQL request looks up (one point
-/// of the GraphQL budget each).
+/// Pull requests whose branches and viewer review one GraphQL request
+/// looks up (one point of the GraphQL budget each).
 const BRANCH_LOOKUPS_PER_REQUEST: usize = 100;
 
 /// An item of `GET /repos/{o}/{r}/issues`: an issue or a pull request
@@ -76,9 +76,10 @@ impl GitHubClient {
     /// changed than 20 pages of 100 hold, it starts over with every open
     /// one, so no change is missed. Uses the issues API (core budget, not
     /// search) so ids match the search results of the other lists. The
-    /// branches of every pull request read anew (the issues API lacks them)
-    /// or not known yet are looked up with GraphQL, one request per 100;
-    /// unchanged ones keep what `known` had. A renamed or transferred
+    /// branches and the viewer's latest review of every pull request read
+    /// anew (the issues API lacks them) or not known yet are looked up with
+    /// GraphQL, one request per 100; unchanged ones keep what `known` had
+    /// (a review changes `updated_at`, so it is read anew). A renamed or transferred
     /// repository is `GitHubError::Moved`.
     pub fn other_pull_requests(
         &self,
@@ -128,7 +129,7 @@ impl GitHubClient {
         }));
         pull_requests.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
 
-        // The branches of the ones read anew, which the issues API lacks.
+        // The branches and reviews of the ones read anew, which the issues API lacks.
         self.fill_missing_branches(repo, &mut pull_requests)?;
         Ok(OtherPullRequestsUpdate {
             pull_requests,
@@ -136,9 +137,10 @@ impl GitHubClient {
         })
     }
 
-    /// Looks up the branches of `pull_requests` (all of `repo`) that have
-    /// none yet, [`BRANCH_LOOKUPS_PER_REQUEST`] per GraphQL request. One
-    /// GraphQL does not report keeps none.
+    /// Looks up the branches and the viewer's latest review of
+    /// `pull_requests` (all of `repo`) that have no branches yet,
+    /// [`BRANCH_LOOKUPS_PER_REQUEST`] per GraphQL request. One GraphQL does
+    /// not report keeps none.
     fn fill_missing_branches(
         &self,
         repo: &RepoRef,
@@ -151,14 +153,15 @@ impl GitHubClient {
             .collect();
         for numbers in missing.chunks(BRANCH_LOOKUPS_PER_REQUEST) {
             // Ask for this batch, then fill in what came back.
-            let data: BranchLookupData = self.graphql(
-                &branch_lookup_query(numbers),
+            let data: PullRequestLookupData = self.graphql(
+                &pull_request_lookup_query(numbers),
                 &serde_json::json!({ "owner": repo.owner, "name": repo.name }),
             )?;
-            let mut branches = data.into_branches();
+            let mut found = data.into_pull_requests();
             for pull_request in pull_requests.iter_mut() {
-                if let Some(found) = branches.remove(&pull_request.number) {
-                    pull_request.branches = Some(found);
+                if let Some(looked_up) = found.remove(&pull_request.number) {
+                    pull_request.branches = Some(looked_up.branches);
+                    pull_request.viewer_review = looked_up.viewer_review;
                 }
             }
         }

@@ -5,7 +5,7 @@ use gpui::{
     prelude::*, pulsating_between, px,
 };
 use qd_cache::QueueTab;
-use qd_github::{PullRequest, StackLayer};
+use qd_github::{PullRequest, PullRequestBranches, StackLayer, ViewerReview};
 
 use super::ReviewQueue;
 use super::others_filter_rendering::{render_filter_button, render_others_empty_state};
@@ -16,6 +16,7 @@ use crate::display_date::{relative_age, unix_now};
 use crate::fold_chevron::{FoldChevron, FoldState};
 use crate::repo_monogram::RepoMonogram;
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
+use crate::review_verdict_badge::ReviewVerdictBadge;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
@@ -35,6 +36,8 @@ const BRIEF_MARK_SIZE: f32 = 11.;
 const STACK_GLYPH_SIZE: f32 = 16.;
 /// The author's avatar in a pull request row's second line.
 const ROW_AVATAR_SIZE: f32 = 14.;
+/// Element id of a row's review verdict badge (unique within its row).
+const VERDICT_BADGE_ID: &str = "review-verdict";
 /// Height of the rail mark beside a layer's position.
 const LAYER_RAIL_HEIGHT: f32 = 16.;
 
@@ -119,7 +122,7 @@ impl ReviewQueue {
     fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let tab = self.tab();
         let authored = self.lists().authored.len();
-        let review_requested = self.lists().review_requested.len();
+        let review_requested = self.review_tab().len();
         let others = self.others_tab().shown().len();
         let queue = cx.entity().downgrade();
         let show_tab = move |tab: QueueTab| {
@@ -221,6 +224,7 @@ impl ReviewQueue {
                             needs_review: self
                                 .needs_review(&pull_request.repo, pull_request.number),
                             has_brief: self.has_brief(&pull_request.repo, pull_request.number),
+                            viewer_review: pull_request.viewer_review,
                         },
                         is_selected: selected_id == Some(pull_request.id),
                     },
@@ -247,6 +251,10 @@ impl ReviewQueue {
                         marks: LayerMarks {
                             needs_review: self.needs_review(&key.repo, stack_layer.number),
                             has_brief: self.has_brief(&key.repo, stack_layer.number),
+                            viewer_review: self
+                                .lists()
+                                .find_by_number(&key.repo, stack_layer.number)
+                                .and_then(|listed| listed.viewer_review),
                         },
                         is_selected: self.is_selected(&key.repo, stack_layer.number),
                     },
@@ -369,8 +377,9 @@ fn render_meta(text: impl Into<SharedString>) -> impl IntoElement {
 }
 
 /// One standalone pull request: a state ring (open or draft), its title on
-/// up to two lines, then `#number · author · age`, a Draft pill, and a mark
-/// when it has a stored brief; clicking selects it.
+/// up to two lines, then `#number · author · age`, the viewer's review
+/// verdict, a Draft pill, and a mark when it has a stored brief, then `base ← head` once its branches are
+/// known; clicking selects it.
 fn render_pull_request_row(
     pull_request: &PullRequest,
     list_index: usize,
@@ -427,13 +436,42 @@ fn render_pull_request_row(
                             pull_request.author.login,
                             relative_age(&pull_request.updated_at, now)
                         )))
+                        .children(
+                            pull_request
+                                .viewer_review
+                                .map(|review| ReviewVerdictBadge::new(VERDICT_BADGE_ID, review)),
+                        )
                         .when(state == PullRequestState::Draft, |meta| {
                             meta.child(render_draft_pill())
                         })
                         .when(has_brief, |meta| meta.child(render_brief_mark())),
-                ),
+                )
+                .children(pull_request.branches.as_ref().map(render_branches)),
         )
         .into_any_element()
+}
+
+/// A pull request's branches as `base ← head`, in the code font: the
+/// branch it goes into, then the one it comes from. Each name truncates on
+/// its own, so a long head branch leaves the base readable.
+fn render_branches(branches: &PullRequestBranches) -> impl IntoElement {
+    let branch_name = |name: &str| {
+        div()
+            .min_w_0()
+            .truncate()
+            .child(SharedString::from(name.to_owned()))
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .min_w_0()
+        .font_family(theme::MONO_FONT)
+        .text_xs()
+        .text_color(theme::subtle())
+        .child(branch_name(&branches.base_ref))
+        .child(div().flex_none().child("←"))
+        .child(branch_name(&branches.head_ref))
 }
 
 /// The mark of a pull request with a stored brief: a small star in the
@@ -653,11 +691,14 @@ struct LayerMarks {
     needs_review: bool,
     /// It has a stored brief (a star says so).
     has_brief: bool,
+    /// The viewer's latest review (a badge says which), when known.
+    viewer_review: Option<ViewerReview>,
 }
 
 /// One layer of a stack, under its header, on a single line so long stacks
 /// stay compact: its position on a rail, the title, a Review badge when it
-/// asks for the viewer's review, and `#number` (with its state) on the
+/// asks for the viewer's review, a star with a stored brief, the viewer's
+/// review verdict, and `#number` (with its state) on the
 /// right. Layers the list lacks are muted; clicking any opens it.
 fn render_layer_row(
     row: LayerRow,
@@ -707,6 +748,11 @@ fn render_layer_row(
             line.child(render_review_badge())
         })
         .when(row.marks.has_brief, |line| line.child(render_brief_mark()))
+        .children(
+            row.marks
+                .viewer_review
+                .map(|review| ReviewVerdictBadge::new(VERDICT_BADGE_ID, review)),
+        )
         .child(
             div()
                 .flex_none()

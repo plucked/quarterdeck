@@ -31,6 +31,7 @@ pub fn without_hidden_branches(lists: &QueueLists, rules: &[HiddenBranchRule]) -
     QueueLists {
         authored: keep(&lists.authored),
         review_requested: keep(&lists.review_requested),
+        reviewed: keep(&lists.reviewed),
         others: keep(&lists.others),
     }
 }
@@ -100,6 +101,7 @@ mod tests {
                 head_ref: head_ref.into(),
                 base_ref: base_ref.into(),
             }),
+            viewer_review: None,
         }
     }
 
@@ -165,6 +167,7 @@ mod tests {
                 pull_request("fix/y", "main"),
             ],
             review_requested: vec![pull_request("feat/z", "main")],
+            reviewed: vec![pull_request("feat/w", "main")],
             others: vec![pull_request("chore/a", "feat/x")],
         };
         let shown = without_hidden_branches(&lists, &[rule("feat/*", BranchSide::Either)]);
@@ -174,6 +177,7 @@ mod tests {
             "fix/y"
         );
         assert_eq!(shown.review_requested, Vec::<PullRequest>::new());
+        assert_eq!(shown.reviewed, Vec::<PullRequest>::new());
         assert_eq!(shown.others, Vec::<PullRequest>::new());
     }
 }

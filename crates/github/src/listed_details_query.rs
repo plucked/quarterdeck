@@ -1,19 +1,25 @@
 use serde::Deserialize;
 
-use crate::{ListedPullRequestDetails, PullRequestBranches, RepoRef, StackMembership};
+use crate::{
+    ListedPullRequestDetails, PullRequestBranches, RepoRef, StackMembership, ViewerReview,
+};
 
-/// One GraphQL query for the branches and stack membership of every pull
-/// request in the viewer's lists, run with the same search texts the REST
-/// lists use (as the `authored`, `reviewRequested` and `others` variables;
+/// One GraphQL query for the branches, the viewer's latest review and the
+/// stack membership of every pull request in the viewer's lists, run with the same search texts the REST
+/// lists use (as the `authored`, `reviewRequested`, `reviewed` and `others` variables;
 /// `others` only when `includeOthers`). Costs one point of the GraphQL budget.
 pub(crate) const LISTED_DETAILS_QUERY: &str = r"
 query ListedDetails(
-  $authored: String!, $reviewRequested: String!, $others: String!, $includeOthers: Boolean!
+  $authored: String!, $reviewRequested: String!, $reviewed: String!,
+  $others: String!, $includeOthers: Boolean!
 ) {
   authored: search(query: $authored, type: ISSUE, first: 100) {
     nodes { ...details }
   }
   reviewRequested: search(query: $reviewRequested, type: ISSUE, first: 100) {
+    nodes { ...details }
+  }
+  reviewed: search(query: $reviewed, type: ISSUE, first: 100) {
     nodes { ...details }
   }
   others: search(query: $others, type: ISSUE, first: 100) @include(if: $includeOthers) {
@@ -25,6 +31,7 @@ fragment details on PullRequest {
   repository { name owner { login } }
   headRefName
   baseRefName
+  viewerLatestReview { state }
   stack { number size baseRefName }
   stackEntry { position }
 }
@@ -36,6 +43,7 @@ fragment details on PullRequest {
 pub(crate) struct ListedDetailsData {
     authored: SearchNodes,
     review_requested: SearchNodes,
+    reviewed: SearchNodes,
     /// Absent unless the query included it.
     #[serde(default)]
     others: Option<SearchNodes>,
@@ -55,6 +63,7 @@ struct SearchNode {
     repository: Option<Repository>,
     head_ref_name: Option<String>,
     base_ref_name: Option<String>,
+    viewer_latest_review: Option<ReviewNode>,
     stack: Option<Stack>,
     stack_entry: Option<StackEntry>,
 }
@@ -79,6 +88,11 @@ struct Stack {
 }
 
 #[derive(Deserialize)]
+struct ReviewNode {
+    state: String,
+}
+
+#[derive(Deserialize)]
 struct StackEntry {
     position: u64,
 }
@@ -93,6 +107,7 @@ impl ListedDetailsData {
             .nodes
             .into_iter()
             .chain(data.review_requested.nodes)
+            .chain(data.reviewed.nodes)
             .chain(data.others.into_iter().flat_map(|others| others.nodes))
         {
             let Some(listed) = node.into_listed() else {
@@ -129,6 +144,9 @@ impl SearchNode {
                 head_ref: self.head_ref_name?,
                 base_ref: self.base_ref_name?,
             },
+            viewer_review: self
+                .viewer_latest_review
+                .and_then(|review| ViewerReview::from_graphql_state(&review.state)),
             stack,
         })
     }
@@ -149,6 +167,7 @@ mod tests {
                  "stack": {"number": 99, "size": 3, "baseRefName": "main"}, "stackEntry": {"position": 2}},
                 {"number": 8, "repository": {"name": "b", "owner": {"login": "a"}},
                  "headRefName": "fix/y", "baseRefName": "release/1",
+                 "viewerLatestReview": {"state": "CHANGES_REQUESTED"},
                  "stack": null, "stackEntry": null},
                 {}
             ]},
@@ -156,7 +175,8 @@ mod tests {
                 {"number": 7, "repository": {"name": "b", "owner": {"login": "a"}},
                  "headRefName": "feat/x", "baseRefName": "main",
                  "stack": {"number": 99, "size": 3, "baseRefName": "main"}, "stackEntry": {"position": 2}}
-            ]}
+            ]},
+            "reviewed": {"nodes": []}
         }}"#;
         let response: GraphQlResponse<ListedDetailsData> = serde_json::from_str(json).unwrap();
         let details = response.into_data().unwrap().into_details();
@@ -168,6 +188,11 @@ mod tests {
         assert_eq!(stack.base_ref, "main");
         assert_eq!(details[1].branches.base_ref, "release/1");
         assert_eq!(details[1].stack, None);
+        assert_eq!(details[0].viewer_review, None);
+        assert_eq!(
+            details[1].viewer_review,
+            Some(ViewerReview::ChangesRequested)
+        );
     }
 
     /// A GraphQL failure without data becomes its messages.

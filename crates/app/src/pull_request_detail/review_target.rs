@@ -127,6 +127,7 @@ mod tests {
             created_at: String::new(),
             updated_at: String::new(),
             branches: None,
+            viewer_review: None,
             labels: Vec::new(),
             stack: is_stacked.then(|| StackMembership {
                 number: 9,

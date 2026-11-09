@@ -8,9 +8,9 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - A short intro movie plays while Quarterdeck loads your queue and syncs with GitHub, then fades into the app. Click it to skip. Its bottom right corner shows the version.
 
 **Your review queue**
-- Three lists: **Mine** (pull requests you opened), **Review** (those asking for your review) and **Others** (everyone else's open pull requests in repositories you choose), with counts.
+- Three lists: **Mine** (pull requests you opened), **Review** (those asking for your review, and those you already reviewed that are still open) and **Others** (everyone else's open pull requests in repositories you choose), with counts.
 - Grouped by repository, and stacked pull requests grouped as stacks with every layer in order. Groups fold, and stay folded across launches.
-- Each row shows whether it is a draft, its number, author and how long ago it changed. Layers asking for your review carry a Review badge.
+- Each row shows whether it is a draft, its number, author, how long ago it changed, the branch it goes into and the one it comes from (`main ← feat/login`), and how you last reviewed it: a green check (approved), a red cross (changes requested), a ring with … (commented) or a dash (your review was dismissed); hover it for the words. Layers asking for your review carry a Review badge.
 - Refreshes on its own (at launch, every 5 minutes, and when you come back to the window after a while) or with ⌘R.
 
 **Following other people's work**

@@ -1,4 +1,4 @@
-use crate::{Label, PullRequestBranches, RepoRef, StackMembership, User};
+use crate::{Label, PullRequestBranches, RepoRef, StackMembership, User, ViewerReview};
 
 /// A pull request, normalized from the search API's issue shape, with its
 /// place in a stack filled in from GraphQL.
@@ -26,4 +26,7 @@ pub struct PullRequest {
     /// The branches it comes from and goes into; `None` until GraphQL
     /// answered (the search and issues APIs lack them).
     pub branches: Option<PullRequestBranches>,
+    /// The viewer's latest submitted review; `None` when the viewer has
+    /// not reviewed it (or until GraphQL answered, like `branches`).
+    pub viewer_review: Option<ViewerReview>,
 }

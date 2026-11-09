@@ -34,7 +34,8 @@
 //! - `listed_pull_request_details.rs`: `ListedPullRequestDetails`, a listed pull request's branches and stack membership.
 //! - `listed_details_query.rs`: the GraphQL query for those details and its response.
 //! - `pull_request_branches.rs`: `PullRequestBranches`, the branches a pull request comes from and goes into.
-//! - `branch_lookup_query.rs`: the GraphQL query for the branches of chosen pull requests of one repository.
+//! - `pull_request_lookup_query.rs`: the GraphQL query for the branches and viewer review of chosen pull requests of one repository.
+//! - `viewer_review.rs`: `ViewerReview`, the viewer's latest submitted review verdict.
 //! - `pull_request_stack.rs`: `PullRequestStack`, a stack with its layers, and its response shape.
 //! - `stack_layer.rs`: `StackLayer`, one pull request of a stack.
 //! - `unified_diff.rs`: splits a `git diff` into changed files.
@@ -57,7 +58,6 @@
 //! - `file_text_requests.rs`: `GitHubClient::file_text`, by blob (REST) or path (GraphQL).
 
 mod api_usage;
-mod branch_lookup_query;
 mod conditional_response;
 mod download_avatar;
 mod download_progress;
@@ -84,6 +84,7 @@ mod other_pull_requests_update;
 mod pull_request;
 mod pull_request_branches;
 mod pull_request_file;
+mod pull_request_lookup_query;
 mod pull_request_requests;
 mod pull_request_review_state;
 mod pull_request_revision;
@@ -107,6 +108,7 @@ mod token_source;
 mod unified_diff;
 mod user;
 mod viewer_request;
+mod viewer_review;
 
 pub use api_usage::{ApiUsage, ApiUsageSnapshot};
 pub use conditional_response::ConditionalResponse;
@@ -145,3 +147,4 @@ pub use stack_layer::StackLayer;
 pub use stack_membership::StackMembership;
 pub use token_source::TokenSource;
 pub use user::User;
+pub use viewer_review::ViewerReview;

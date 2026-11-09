@@ -6,6 +6,8 @@ pub struct PullRequestListKey(&'static str);
 impl PullRequestListKey {
     /// Open pull requests that request the viewer's review.
     pub const REVIEW_REQUESTED: Self = Self("review_requested");
+    /// Others' open pull requests the viewer has reviewed.
+    pub const REVIEWED: Self = Self("reviewed");
     /// The viewer's own open pull requests.
     pub const AUTHORED: Self = Self("authored");
     /// Others' open pull requests in the watched repositories.

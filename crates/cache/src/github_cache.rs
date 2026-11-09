@@ -9,11 +9,12 @@ use crate::PullRequestListKey;
 use crate::database_connection::{default_database_path, open_database, prepare_data_directory};
 use crate::sql_integers::{read_u64, sql_integer};
 use crate::unix_now::unix_now;
+use crate::viewer_review_sql_text::{viewer_review_as_sql_text, viewer_review_from_sql_text};
 
 /// The columns [`pull_request_from_row`] reads, in order, from `pull_requests p`.
 const PULL_REQUEST_COLUMNS: &str = "p.id, p.repo_owner, p.repo_name, p.number, p.title, p.body,
     p.author_login, p.author_avatar_url, p.html_url, p.draft, p.created_at, p.updated_at,
-    p.stack_number, p.stack_position, p.stack_size, p.stack_base_ref, p.head_ref, p.base_ref";
+    p.stack_number, p.stack_position, p.stack_size, p.stack_base_ref, p.head_ref, p.base_ref, p.viewer_review";
 
 /// The SQLite connection holding cached GitHub data, one typed column per
 /// field: pull requests and lists here, changed files in
@@ -221,9 +222,10 @@ fn upsert_pull_request_row(
         "INSERT INTO pull_requests (
             id, repo_owner, repo_name, number, title, body, author_login,
             author_avatar_url, html_url, draft, created_at, updated_at, fetched_at,
-            stack_number, stack_position, stack_size, stack_base_ref, head_ref, base_ref)
+            stack_number, stack_position, stack_size, stack_base_ref, head_ref, base_ref,
+            viewer_review)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-            ?18, ?19)
+            ?18, ?19, ?20)
          ON CONFLICT (id) DO UPDATE SET
             repo_owner        = excluded.repo_owner,
             repo_name         = excluded.repo_name,
@@ -242,7 +244,8 @@ fn upsert_pull_request_row(
             stack_size        = excluded.stack_size,
             stack_base_ref    = excluded.stack_base_ref,
             head_ref          = excluded.head_ref,
-            base_ref          = excluded.base_ref",
+            base_ref          = excluded.base_ref,
+            viewer_review     = excluded.viewer_review",
         params![
             id,
             pull_request.repo.owner,
@@ -263,6 +266,7 @@ fn upsert_pull_request_row(
             stack.map(|stack| stack.base_ref.as_str()),
             branches.map(|branches| branches.head_ref.as_str()),
             branches.map(|branches| branches.base_ref.as_str()),
+            pull_request.viewer_review.map(viewer_review_as_sql_text),
         ],
     )?;
     Ok(())
@@ -291,6 +295,11 @@ fn pull_request_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequest> {
         labels: Vec::new(),
         stack: stack_membership_from_row(row)?,
         branches: branches_from_row(row)?,
+        // A value this version does not know reads as no review.
+        viewer_review: row
+            .get::<_, Option<String>>(18)?
+            .as_deref()
+            .and_then(viewer_review_from_sql_text),
     })
 }
 
@@ -343,6 +352,7 @@ mod tests {
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: updated_at.into(),
             branches: None,
+            viewer_review: None,
             labels: Vec::new(),
             stack: None,
         }
@@ -400,6 +410,7 @@ mod tests {
             head_ref: "feat/x".into(),
             base_ref: "main".into(),
         });
+        stored.viewer_review = Some(qd_github::ViewerReview::ChangesRequested);
         cache
             .replace_list(LIST, std::slice::from_ref(&stored))
             .unwrap();

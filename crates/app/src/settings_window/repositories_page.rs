@@ -64,7 +64,7 @@ impl SettingsWindow {
             .children((!suggestions.is_empty()).then(|| {
                 SettingRow::new(
                     "From your queue",
-                    "Repositories of your pull requests and review requests. Click to add one.",
+                    "Repositories of your pull requests, review requests and reviews. Click to add one.",
                     div()
                         .flex()
                         .flex_wrap()
@@ -148,8 +148,8 @@ impl SettingsWindow {
         }));
     }
 
-    /// Reads the repositories of the viewer's own and review-requested
-    /// pull requests from the cache, off the main thread, as quick picks.
+    /// Reads the repositories of the viewer's own, review-requested and
+    /// reviewed pull requests from the cache, off the main thread, as quick picks.
     pub(super) fn read_queue_repositories(&mut self, cx: &mut Context<Self>) {
         let cache = cx.global::<AppServices>().cache.clone();
         self.queue_repositories_task = Some(cx.spawn(async move |settings, cx| {
@@ -160,6 +160,7 @@ impl SettingsWindow {
                     let mut repositories: Vec<RepoRef> = Vec::new();
                     for key in [
                         PullRequestListKey::REVIEW_REQUESTED,
+                        PullRequestListKey::REVIEWED,
                         PullRequestListKey::AUTHORED,
                     ] {
                         for pull_request in cache.list(key)? {

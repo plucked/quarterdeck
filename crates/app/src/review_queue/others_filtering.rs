@@ -181,6 +181,7 @@ mod tests {
             created_at: String::new(),
             updated_at: updated_at.into(),
             branches: None,
+            viewer_review: None,
             labels: labels
                 .iter()
                 .map(|name| Label {

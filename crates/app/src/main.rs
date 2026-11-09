@@ -31,6 +31,8 @@
 //! - `repo_monogram.rs`: `RepoMonogram`, a repository's colored letter (sidebar, settings).
 //! - `fold_chevron.rs`: `FoldChevron`, the button folding a group.
 //! - `checkbox.rs`: `Checkbox`, a drawn checkbox (checked, unchecked or mixed).
+//! - `text_tooltip.rs`: `TextTooltip`, a short text shown over an element on hover.
+//! - `review_verdict_badge.rs`: `ReviewVerdictBadge`, the viewer's latest review verdict as a small round mark.
 //! - `panel_toggle.rs`: `PanelToggle`, the icon button showing or hiding a side panel.
 //! - `resize_handle.rs`: `ResizeHandle`, a divider dragged to resize the panel beside it.
 //! - `text_area/`: `TextArea`, a multiline text editor (gpui has none).
@@ -65,6 +67,7 @@ mod pull_request_detail;
 mod repo_monogram;
 mod resize_handle;
 mod review_queue;
+mod review_verdict_badge;
 mod scrollbar;
 mod segmented_control;
 mod settings_window;
@@ -72,6 +75,7 @@ mod shared_cache;
 mod short_sha;
 mod startup_splash;
 mod text_area;
+mod text_tooltip;
 mod theme;
 mod tree_locate_button;
 mod ui_state;
