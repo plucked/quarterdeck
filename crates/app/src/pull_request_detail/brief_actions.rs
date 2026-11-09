@@ -261,6 +261,15 @@ impl PullRequestDetail {
         self.refresh_brief_rows();
     }
 
+    /// Shows file `file`'s header in the diff (a file clicked in the file
+    /// tree), switching from the brief to the diff first.
+    pub(super) fn show_file_in_diff(&mut self, file: usize, cx: &mut Context<Self>) {
+        if self.brief().mode == DetailMode::Brief {
+            self.set_detail_mode(DetailMode::Diff, cx);
+        }
+        self.reveal_file(file, cx);
+    }
+
     /// Switches to the diff with `anchor`'s first line at the top: the file
     /// is expanded when collapsed; when the line has no row (a filter hides
     /// the file) the diff shows the file's header, or stays where it was.

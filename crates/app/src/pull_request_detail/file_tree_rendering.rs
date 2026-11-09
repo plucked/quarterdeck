@@ -304,7 +304,7 @@ impl PullRequestDetail {
             status => Some(render_file_status_badge(status)),
         };
         base.when(is_current, |row| row.bg(theme::selected()))
-            .on_click(cx.listener(move |detail, _, _, cx| detail.reveal_file(file, cx)))
+            .on_click(cx.listener(move |detail, _, _, cx| detail.show_file_in_diff(file, cx)))
             .child(div().flex_none().w(px(FOLD_CHEVRON_SIZE)))
             .child(
                 div()
