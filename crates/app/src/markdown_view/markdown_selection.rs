@@ -24,8 +24,14 @@ pub struct MarkdownSelection {
     focus: FocusHandle,
     selection: Option<TextSelection>,
     is_dragging: bool,
-    /// The texts of the last frame, replaced every render.
+    /// The texts hit testing reads: those of the last frame that painted
+    /// the document, so every layout has its bounds (gpui panics on the
+    /// bounds of a layout that was never prepainted).
     segments: Vec<TextSegment>,
+    /// The texts of the last render, waiting for the paint that gives
+    /// their layouts bounds. A virtualized list renders rows to measure
+    /// them without painting them; those texts never reach `segments`.
+    rendered: Vec<TextSegment>,
 }
 
 impl MarkdownSelection {
@@ -35,6 +41,7 @@ impl MarkdownSelection {
             selection: None,
             is_dragging: false,
             segments: Vec::new(),
+            rendered: Vec::new(),
         }
     }
 
@@ -60,10 +67,18 @@ impl MarkdownSelection {
             .map(|range| selected_text(&self.segments, range))
     }
 
-    /// Replaces the texts hit testing uses with those of the frame being
-    /// rendered. Changes nothing that is drawn, so it does not notify.
-    pub fn replace_segments(&mut self, segments: Vec<TextSegment>) {
-        self.segments = segments;
+    /// Keeps the texts of the frame being rendered until it paints them.
+    /// Changes nothing that is drawn, so it does not notify.
+    pub fn set_rendered_segments(&mut self, segments: Vec<TextSegment>) {
+        self.rendered = segments;
+    }
+
+    /// Hands the rendered texts to hit testing, now that they are painted
+    /// (called from the document's paint). Changes nothing that is drawn.
+    pub fn commit_painted_segments(&mut self) {
+        if !self.rendered.is_empty() {
+            self.segments = std::mem::take(&mut self.rendered);
+        }
     }
 
     /// Starts a selection at `position` for a press with `click_count` clicks.

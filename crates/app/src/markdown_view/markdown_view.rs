@@ -40,11 +40,13 @@ impl RenderOnce for MarkdownView {
         let state_key = ElementId::named_usize(self.id.clone(), Arc::as_ptr(&self.document).addr());
         let state = window.use_keyed_state(state_key, cx, |_, cx| MarkdownSelection::new(cx));
 
-        // Render the blocks with the current selection, then hand their
-        // layouts to the state for the next mouse events.
+        // Render the blocks with the current selection; their layouts reach
+        // hit testing only once this frame paints them (`drag_listener`).
         let mut texts = SelectableTexts::new(state.read(cx).selected_range());
         let blocks = render_blocks(self.document.blocks(), &mut texts);
-        state.update(cx, |state, _| state.replace_segments(texts.into_segments()));
+        state.update(cx, |state, _| {
+            state.set_rendered_segments(texts.into_segments());
+        });
         let focus = state.read(cx).focus().clone();
 
         div()
@@ -76,12 +78,15 @@ impl RenderOnce for MarkdownView {
     }
 }
 
-/// An empty overlay whose paint listens to mouse moves and releases
-/// anywhere in the window, so a drag keeps selecting outside the document.
+/// An empty overlay whose paint hands the painted texts to hit testing and
+/// listens to mouse moves and releases anywhere in the window, so a drag
+/// keeps selecting outside the document.
 fn drag_listener(state: Entity<MarkdownSelection>) -> gpui::Canvas<()> {
     canvas(
         |_, _, _| {},
-        move |_, (), window, _| {
+        move |_, (), window, cx| {
+            // Painted now, so every text of this frame has its bounds.
+            state.update(cx, |state, _| state.commit_painted_segments());
             let moving = state.clone();
             window.on_mouse_event(move |event: &MouseMoveEvent, phase, _window, cx| {
                 let is_drag = event.pressed_button == Some(MouseButton::Left);
