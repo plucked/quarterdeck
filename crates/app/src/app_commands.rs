@@ -1,6 +1,7 @@
 use gpui::{App, KeyBinding, Menu, MenuItem, SystemMenuType, actions};
 
 use crate::app_update::AppUpdater;
+use crate::brief_gallery::open_brief_gallery;
 use crate::settings_window::{SettingsCategory, open_settings_window, open_settings_window_at};
 use crate::text_area::bind_text_area_keys;
 
@@ -30,15 +31,17 @@ actions!(
         ToggleStackReview,
         ShowAuthored,
         ShowReviewRequested,
-        ShowOthers
+        ShowOthers,
+        OpenBriefGallery
     ]
 );
 
 /// Registers the app-level command handlers, their key bindings and the menu bar.
 pub fn install_app_commands(cx: &mut App) {
-    // Quit and Settings work from any window; the others go to the focused view.
+    // Quit, Settings and the brief gallery work from any window; the others go to the focused view.
     cx.on_action(|_: &Quit, cx| cx.quit());
     cx.on_action(|_: &OpenSettings, cx| open_settings_window(cx));
+    cx.on_action(|_: &OpenBriefGallery, cx| open_brief_gallery(cx));
     cx.on_action(|_: &CheckForUpdates, cx| {
         AppUpdater::global(cx).update(cx, AppUpdater::check_now);
         open_settings_window_at(SettingsCategory::Updates, cx);
@@ -104,7 +107,11 @@ pub fn install_app_commands(cx: &mut App) {
         },
         Menu {
             name: "Window".into(),
-            items: vec![MenuItem::action("Close Window", CloseWindow)],
+            items: vec![
+                MenuItem::action("Close Window", CloseWindow),
+                MenuItem::separator(),
+                MenuItem::action("Brief Gallery", OpenBriefGallery),
+            ],
         },
     ]);
 }

@@ -10,6 +10,7 @@ use qd_diff::{GapPlace, LineOrigin};
 use qd_github::LineSide;
 
 use super::changed_files::ChangedFiles;
+use super::detail_mode::DetailMode;
 use super::detail_row::DetailRow;
 use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
@@ -64,9 +65,10 @@ impl Render for PullRequestDetail {
         // The sticky header over the diff, in one column; the side panel
         // beside that column at full height when shown. `min_w_0` and
         // `min_h_0` let the pane shrink to the window.
-        // The side panel holds the file tree and the review; it shows once files are loaded.
+        // The side panel holds the files, the review and the actions; it
+        // stays while another pull request's files load, so it does not flicker.
         let shows_tree = self.file_tree().visibility() == PanelVisibility::Shown
-            && !self.loaded_files().is_empty();
+            && self.pull_request().is_some();
         let main_column = div()
             .flex()
             .flex_col()
@@ -74,7 +76,16 @@ impl Render for PullRequestDetail {
             .min_w_0()
             .h_full()
             .children(self.render_sticky_header(cx))
-            .child(div().flex().flex_1().min_h_0().child(diff_area));
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .min_h_0()
+                    .child(match self.brief().mode {
+                        DetailMode::Diff => diff_area.into_any_element(),
+                        DetailMode::Brief => self.render_brief_area(cx),
+                    }),
+            );
         div()
             .flex()
             .flex_1()

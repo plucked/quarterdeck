@@ -16,6 +16,18 @@ allow_warnings = true
 background = false
 on_change_strategy = "kill_then_restart"
 
+# Like `app`, with the brief gallery opened at launch: `bacon gallery` to
+# work on how briefs look, the gallery coming back after every rebuild.
+[jobs.gallery]
+command = [
+    "sh", "-c",
+    "packaging/macos/bundle.sh --dev && QUARTERDECK_BRIEF_GALLERY=1 exec target/debug/Quarterdeck.app/Contents/MacOS/Quarterdeck",
+]
+need_stdout = true
+allow_warnings = true
+background = false
+on_change_strategy = "kill_then_restart"
+
 [jobs.clippy-strict]
 # `-D warnings` fails on our warnings; allow_warnings ignores upstream future-incompat notes.
 command = ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
@@ -24,4 +36,5 @@ allow_warnings = true
 
 [keybindings]
 r = "job:app"
+g = "job:gallery"
 c = "job:clippy-strict"

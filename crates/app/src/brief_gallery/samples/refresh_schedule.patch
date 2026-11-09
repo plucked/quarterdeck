@@ -1,0 +1,25 @@
+@@ -11,13 +11,13 @@ const ACTIVATION_STALE_AFTER: Duration = Duration::from_mins(1);
+ 
+ /// When the review queue refreshes on its own: a timer after each refresh,
+ /// and on window activation once the queue is stale; neither before GitHub
+-/// allows it again after asking to slow down. Takes `now` as a parameter so
++/// takes requests again (a used-up budget refilled, a `retry-after` over). Takes `now` as a parameter so
+ /// the decisions are testable without a clock.
+ #[derive(Default)]
+ pub struct RefreshSchedule {
+     /// When the last refresh finished, successfully or not.
+     last_finished_at: Option<Instant>,
+-    /// Until when GitHub asked not to be sent requests (its `retry-after`).
++    /// Until when GitHub refuses requests (a used-up budget's reset, or its `retry-after`).
+     held_until: Option<Instant>,
+ }
+ 
+@@ -27,7 +27,7 @@ impl RefreshSchedule {
+         self.last_finished_at = Some(now);
+     }
+ 
+-    /// Holds refreshes on their own back until `until` (GitHub's `retry-after`).
++    /// Holds refreshes on their own back until `until` (a budget's reset, or GitHub's `retry-after`).
+     pub fn hold_until(&mut self, until: Instant) {
+         self.held_until = Some(until);
+     }

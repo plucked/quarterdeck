@@ -15,5 +15,8 @@ mod ui_state_recorder;
 mod window_placement_conversion;
 
 pub use review_change::ReviewChange;
-pub use ui_state_recorder::{UiStateRecorder, read_review_notes, read_viewed_files};
+pub use ui_state_recorder::{
+    UiStateRecorder, read_brief, read_brief_index, read_review_notes, read_viewed_files,
+    write_brief,
+};
 pub use window_placement_conversion::{placement_from_window, window_bounds_from_placement};

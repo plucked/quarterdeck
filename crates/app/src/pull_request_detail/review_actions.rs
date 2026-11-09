@@ -18,6 +18,7 @@ use super::review_status::ReviewStatus;
 use super::review_target::ReviewTarget;
 use super::side_panel_tab::SidePanelTab;
 use crate::avatar_images::AvatarImages;
+use crate::short_sha::short_sha;
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::ui_state::{ReviewChange, UiStateRecorder};
 
@@ -832,9 +833,4 @@ fn unix_seconds() -> i64 {
         .map_or(0, |since| {
             i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
         })
-}
-
-/// The first seven characters of a commit.
-fn short_sha(sha: &str) -> &str {
-    sha.get(..7).unwrap_or(sha)
 }

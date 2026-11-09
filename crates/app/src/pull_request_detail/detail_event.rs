@@ -12,6 +12,9 @@ pub enum DetailEvent {
     /// The files shown are of another target (one layer or combined
     /// layers); the sidebar marks a stack under combined review.
     TargetChanged,
+    /// A brief was written and stored; the sidebar marks pull requests
+    /// that have one.
+    BriefStored,
 }
 
 /// A stack layer to show: the pull request `number` of `repo`, with its

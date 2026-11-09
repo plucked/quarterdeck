@@ -57,10 +57,11 @@ impl CountColumns {
 }
 
 impl PullRequestDetail {
-    /// The panel beside the diff: the Files and Review tabs; Files holds
-    /// progress, filter chips, and the files as a folder tree in diff order.
+    /// The panel beside the diff: the Files, Review and Actions tabs; Files
+    /// holds progress, filter chips, and the files as a folder tree in diff
+    /// order (a quiet line while they load, so the panel stays in place when
+    /// another pull request is picked); Actions merges or closes.
     pub(super) fn render_file_tree_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        // The tabs and their content once files are loaded.
         let has_files = !self.loaded_files().is_empty();
         div()
             .flex_none()
@@ -70,15 +71,32 @@ impl PullRequestDetail {
             .flex_col()
             .bg(theme::panel())
             .text_sm()
-            .when(has_files, |panel| {
-                let panel = panel.child(self.render_side_panel_tabs(cx));
-                match self.review().tab {
-                    SidePanelTab::Files => panel
-                        .child(self.render_tree_header(cx))
-                        .child(self.render_tree_body(cx)),
-                    SidePanelTab::Review => panel.child(self.render_review_panel(cx)),
-                }
+            .child(self.render_side_panel_tabs(cx))
+            .map(|panel| match self.review().tab {
+                SidePanelTab::Files if has_files => panel
+                    .child(self.render_tree_header(cx))
+                    .child(self.render_tree_body(cx)),
+                SidePanelTab::Files => panel.child(self.render_files_pending()),
+                SidePanelTab::Review => panel.child(self.render_review_panel(cx)),
+                SidePanelTab::Actions => panel.child(self.render_actions_tab(cx)),
             })
+    }
+
+    /// The Files tab before there are files: loading, failed (the diff
+    /// column says why), or a pull request without changed files.
+    fn render_files_pending(&self) -> AnyElement {
+        let text = match self.load_progress() {
+            Some(_) => "Loading files…",
+            None if self.load_failed() => "The files could not be loaded.",
+            None => "No changed files.",
+        };
+        div()
+            .flex_1()
+            .p_3()
+            .text_xs()
+            .text_color(theme::muted())
+            .child(text)
+            .into_any_element()
     }
 
     /// The divider left of the side panel; dragging it resizes the panel.

@@ -1,13 +1,15 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, Styled, div, prelude::*, px};
 use qd_github::PullRequest;
 
+use super::detail_mode::DetailMode;
 use super::pull_request_detail::PullRequestDetail;
 use crate::avatar_images::Avatar;
-use crate::button::Button;
 use crate::display_date::short_date;
 use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
+use crate::github_link::GitHubLink;
 use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
+use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
 /// The tallest the expanded description gets before it scrolls on its own,
@@ -18,11 +20,12 @@ const DESCRIPTION_MAX_HEIGHT: f32 = 320.;
 const HEADER_AVATAR_SIZE: f32 = 16.;
 
 impl PullRequestDetail {
-    /// The header that stays above the diff: chevron, title, links, what is
-    /// loading and the files toggle; a line of metadata and progress; the
-    /// stack line of a stacked pull request; the description while
-    /// expanded; and a progress line along the bottom while loading. `None`
-    /// without a pull request.
+    /// The header that stays above the diff: chevron, title with GitHub's
+    /// mark linking to the pull request, what is loading and the Diff / Brief
+    /// switch; a line of metadata; the stack line of a stacked pull request;
+    /// the description while expanded; and a progress line along the bottom
+    /// while loading. `None` without a pull request. Merging and closing are
+    /// in the side panel's PR Actions.
     pub(super) fn render_sticky_header(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let pull_request = self.pull_request()?;
         let has_description = self.description().is_some();
@@ -51,29 +54,27 @@ impl PullRequestDetail {
                         ))
                     }),
             )
+            // The title, GitHub's mark right after it (both shrink to the
+            // title's length), then the room left before the switch.
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .text_lg()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .when(!is_expanded, Styled::truncate)
-                    .child(pull_request.title.clone()),
-            )
-            .children(self.render_activity_pill())
-            .child(
-                div()
-                    .flex_none()
                     .flex()
                     .items_center()
                     .gap_1()
-                    .child(Button::new("open-on-github", "GitHub ↗").ghost().on_click(
-                        move |_, _, cx| {
-                            cx.open_url(&url);
-                        },
-                    ))
-                    .children(self.render_action_buttons(cx)),
-            );
+                    .child(
+                        div()
+                            .min_w_0()
+                            .text_lg()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .when(!is_expanded, Styled::truncate)
+                            .child(pull_request.title.clone()),
+                    )
+                    .child(GitHubLink::new("open-on-github", url)),
+            )
+            .children(self.render_activity_pill())
+            .child(self.render_mode_switch(cx));
 
         // The padded content, then the progress line flush with the bottom edge.
         let content = div()
@@ -86,7 +87,6 @@ impl PullRequestDetail {
             .child(title_row)
             .child(Self::render_meta_line(pull_request))
             .children(self.render_stack_bar(cx))
-            .children(self.render_action_panel(cx))
             .when(is_expanded, |header| {
                 header.child(self.render_description_box())
             });
@@ -102,6 +102,25 @@ impl PullRequestDetail {
                 .children(self.render_progress_line())
                 .into_any_element(),
         )
+    }
+
+    /// Diff or Brief: what the main column shows.
+    fn render_mode_switch(&self, cx: &mut Context<Self>) -> AnyElement {
+        let mode = self.brief().mode;
+        let detail = cx.entity().downgrade();
+        let pick = move |mode: DetailMode| {
+            let detail = detail.clone();
+            move |_: &mut gpui::Window, cx: &mut gpui::App| {
+                detail
+                    .update(cx, |detail, cx| detail.set_detail_mode(mode, cx))
+                    .ok();
+            }
+        };
+        SegmentedControl::new("detail-mode")
+            .large()
+            .option("Diff", mode == DetailMode::Diff, pick(DetailMode::Diff))
+            .option("Brief", mode == DetailMode::Brief, pick(DetailMode::Brief))
+            .into_any_element()
     }
 
     /// The metadata under the title: draft, where, who and when. How far

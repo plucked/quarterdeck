@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use futures::StreamExt as _;
 use futures::channel::mpsc;
@@ -10,7 +10,7 @@ use gpui::{
 };
 use qd_cache::{
     DetailScrollPosition, DiffViewSettings, LineWrapping, PanelVisibility, ReviewLayoutState,
-    ReviewScope, StackReviewMode, ViewedFile,
+    ReviewScope, StackReviewMode, UiStateStore, ViewedFile,
 };
 use qd_diff::FileDiff;
 use qd_file_tree::{FileKind, FileTree, NodeId};
@@ -21,6 +21,8 @@ use qd_markdown::MarkdownDocument;
 use qd_syntax::DiffSyntax;
 
 use super::action_panel::ActionPanel;
+use super::brief_actions::detail_brief_handlers;
+use super::brief_pane::BriefPane;
 use super::changed_files::ChangedFiles;
 use super::changed_rows::ChangedRows;
 use super::context_loads::ContextLoads;
@@ -45,12 +47,13 @@ use super::viewed_toggle::ViewedToggle;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::avatar_images::{AvatarImages, AvatarLoaded};
+use crate::brief_view::PreparedBrief;
 use crate::diff_view::{CodeCells, CodeSegments, DiffPosition, SideSelection};
 use crate::facet_chips::ChipClick;
 use crate::fetch_stack::{cached_stack, refresh_stack};
 use crate::scrollbar::ListRowTops;
 use crate::shared_cache::SharedCache;
-use crate::ui_state::{UiStateRecorder, read_review_notes, read_viewed_files};
+use crate::ui_state::{UiStateRecorder, read_brief, read_review_notes, read_viewed_files};
 use crate::word_range_at::word_range_at;
 
 /// How far beyond the visible area rows are laid out, so fast scrolling
@@ -97,6 +100,10 @@ struct FetchedChanges {
     /// The user's review notes of that scope, and the GitHub review's summary.
     notes: Vec<qd_cache::ReviewNote>,
     summary: Option<qd_cache::ReviewSummary>,
+    /// The brief stored for that scope, prepared for drawing.
+    brief: Option<PreparedBrief>,
+    /// The head commit the shown files are of, when known.
+    head_sha: Option<String>,
 }
 
 /// The syntax colors computed for one diff, matched back by the diff's `Arc`.
@@ -181,6 +188,11 @@ pub struct PullRequestDetail {
     review: ReviewPane,
     /// The merge or close panel under the header, while open.
     action_panel: Option<ActionPanel>,
+    /// The AI-written brief: diff or brief mode, briefs written, the run in flight.
+    brief: BriefPane,
+    /// The head commit of the shown files, when known: what a brief's
+    /// version is compared with.
+    shown_head_sha: Option<String>,
     /// Keep the observers of [`AppSettings`] and the avatars (header and
     /// comment authors) registered for the view's lifetime.
     _subscriptions: [Subscription; 2],
@@ -245,6 +257,8 @@ impl PullRequestDetail {
             row_tops: ListRowTops::from_heights([]),
             row_tops_width: None,
             action_panel: None,
+            brief: BriefPane::new(detail_brief_handlers(cx)),
+            shown_head_sha: None,
             review: ReviewPane {
                 destination: layout.comment_destination,
                 ..ReviewPane::default()
@@ -458,6 +472,11 @@ impl PullRequestDetail {
         }
     }
 
+    /// Whether the files' load failed.
+    pub(super) fn load_failed(&self) -> bool {
+        matches!(self.changed_files, Some(ChangedFiles::Failed(_)))
+    }
+
     /// How far the files' load has come, while they load.
     pub(super) fn load_progress(&self) -> Option<LoadProgress> {
         match &self.changed_files {
@@ -543,6 +562,19 @@ impl PullRequestDetail {
                 .any(|comment| comment.author_avatar_url == url)
         });
         is_author || is_commenter
+    }
+
+    /// The head commit of the shown files, when known.
+    pub(super) fn shown_head_sha(&self) -> Option<&str> {
+        self.shown_head_sha.as_deref()
+    }
+
+    pub(super) fn brief(&self) -> &BriefPane {
+        &self.brief
+    }
+
+    pub(super) fn brief_mut(&mut self) -> &mut BriefPane {
+        &mut self.brief
     }
 
     pub(super) fn review_mut(&mut self) -> &mut ReviewPane {
@@ -966,6 +998,8 @@ impl PullRequestDetail {
         self.list.reset(self.rows.len());
         self.row_tops_width = None;
         self.refresh_tree_rows();
+        // The shown pull request or target may have changed, and with it the brief.
+        self.refresh_brief_rows();
 
         let files_settled = !matches!(self.changed_files, Some(ChangedFiles::Loading(_)));
         let pending = if files_settled {
@@ -1428,6 +1462,8 @@ impl PullRequestDetail {
         };
         let target = self.target.clone();
         let scope = target.viewed_scope(&pull_request);
+        // A brief this session already holds there wins; the stored one is not read.
+        let wants_stored_brief = self.brief().state_of(pull_request.id, &target).is_none();
         let cache = self.services.cache.clone();
         let client = self.services.github.clone();
         let ui_state = cx.global::<UiStateRecorder>().shared_store();
@@ -1441,6 +1477,8 @@ impl PullRequestDetail {
         self.changed_files = Some(ChangedFiles::Loading(first_step));
         self.file_review = FileReviewState::default();
         self.viewed_scope = None;
+        // The head is known again with the files; until then no brief is compared with it.
+        self.shown_head_sha = None;
         self.reset_review();
         self.syntax_task = None;
         self.context_loads = ContextLoads::default();
@@ -1478,6 +1516,12 @@ impl PullRequestDetail {
                 let ordered_paths: Vec<&str> = ordered.iter().map(LoadedFile::filename).collect();
                 let tree = FileTree::build(&ordered_paths);
                 let notes_and_summary = read_review_notes(&ui_state, &scope);
+
+                // The stored brief of this scope, and the head the files are of.
+                let brief = wants_stored_brief
+                    .then(|| read_prepared_brief(&ui_state, &scope))
+                    .flatten();
+                let head_sha = shown_head_sha(&cache, &pull_request, &target);
                 anyhow::Ok(FetchedChanges {
                     files: ordered,
                     tree,
@@ -1485,6 +1529,8 @@ impl PullRequestDetail {
                     notes: notes_and_summary.0,
                     summary: notes_and_summary.1,
                     scope,
+                    brief,
+                    head_sha,
                 })
             });
 
@@ -1506,18 +1552,7 @@ impl PullRequestDetail {
             detail
                 .update(cx, |detail, cx| {
                     detail.changed_files = Some(match loaded {
-                        Ok(fetched) => {
-                            detail.file_review =
-                                FileReviewState::for_loaded(&fetched.files, &fetched.viewed_marks);
-                            detail.viewed_scope = Some(fetched.scope);
-                            detail.review.comments.notes = fetched.notes;
-                            detail.review.comments.summary = fetched.summary.unwrap_or_default();
-                            if detail.review.tab == SidePanelTab::Review {
-                                detail.show_side_panel_tab(SidePanelTab::Review, cx);
-                            }
-                            detail.file_tree.reset_for(fetched.tree);
-                            ChangedFiles::Loaded(fetched.files)
-                        }
+                        Ok(fetched) => detail.take_fetched_changes(fetched, cx),
                         Err(error) => ChangedFiles::Failed(format!("{error:#}").into()),
                     });
                     detail.rebuild_rows(ScrollAnchor::Top);
@@ -1527,6 +1562,33 @@ impl PullRequestDetail {
                 })
                 .ok();
         }));
+    }
+
+    /// Takes in what a load fetched: the viewed marks, the review notes and
+    /// summary, the head commit, the stored brief and the file tree; returns
+    /// the loaded files.
+    fn take_fetched_changes(
+        &mut self,
+        fetched: FetchedChanges,
+        cx: &mut Context<Self>,
+    ) -> ChangedFiles {
+        self.file_review = FileReviewState::for_loaded(&fetched.files, &fetched.viewed_marks);
+        self.viewed_scope = Some(fetched.scope);
+        self.review.comments.notes = fetched.notes;
+        self.review.comments.summary = fetched.summary.unwrap_or_default();
+        self.shown_head_sha = fetched.head_sha;
+        if let Some(brief) = fetched.brief {
+            self.show_stored_brief(brief);
+        }
+        // A summary editor opened while loading holds no saved summary; it
+        // is made again with the loaded one, so typing never overwrites it.
+        self.review.summary_editor = None;
+        self.review.summary_subscription = None;
+        if self.review.tab == SidePanelTab::Review {
+            self.show_side_panel_tab(SidePanelTab::Review, cx);
+        }
+        self.file_tree.reset_for(fetched.tree);
+        ChangedFiles::Loaded(fetched.files)
     }
 
     /// Colors the loaded diffs by language off the main thread, one batch of
@@ -1634,5 +1696,29 @@ fn fetch_target_files(
                 }
             })
         }
+    }
+}
+
+/// The brief stored for `scope`, prepared for drawing (Markdown parsed,
+/// diagrams laid out); `None` without one. Blocks: background executor.
+fn read_prepared_brief(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Option<PreparedBrief> {
+    read_brief(store, scope).map(|stored| PreparedBrief::prepare(stored.studio, stored.record))
+}
+
+/// The head commit of the files shown for `pull_request` at `target`: the
+/// combined range's, or the one the cached file set was fetched for.
+fn shown_head_sha(
+    cache: &SharedCache,
+    pull_request: &PullRequest,
+    target: &ReviewTarget,
+) -> Option<String> {
+    match target {
+        ReviewTarget::Combined(range) => Some(range.head_sha.clone()),
+        ReviewTarget::Layer | ReviewTarget::AwaitingStack => cache
+            .lock()
+            .file_set_commits(pull_request.id)
+            .ok()
+            .flatten()
+            .map(|commits| commits.head_sha),
     }
 }

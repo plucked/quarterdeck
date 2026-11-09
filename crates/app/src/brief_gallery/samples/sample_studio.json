@@ -1,0 +1,679 @@
+{
+  "lead": "When GitHub's request budget runs out, the queue now stops refreshing on its own until the budget refills, instead of firing a refused request every five minutes and on every window activation.",
+  "pages": [
+    {
+      "title": "Overview",
+      "summary": "Refreshes now wait until a used-up request budget refills.",
+      "widgets": [
+        {
+          "kind": "section",
+          "heading": "A used-up budget now holds the refresh schedule",
+          "body": "`RefreshSchedule` already held its timed and activation refreshes back while GitHub asked to slow down (`SlowDown` with a `retry-after`). A used-up budget is a different error, `RateLimited`, and `retry_after` returned `None` for it, so nothing held the schedule:\n\n- the five-minute timer fired and was refused;\n- every window activation older than a minute fired and was refused;\n- each refusal counted as a finished refresh, so the next one came just as soon.\n\nNow `retry_after` also answers for `RateLimited`: the seconds until `resets_at`, the moment GitHub refills the budget."
+        },
+        {
+          "kind": "scope",
+          "changes": [
+            "A used-up request budget (`RateLimited`) now holds timed and activation refreshes until `resets_at`.",
+            "The error message and the hold read the time from one function, `unix_now`."
+          ],
+          "unchanged": [
+            "`SlowDown` keeps its `retry-after` hold, as before.",
+            "Errors other than these two give no hold."
+          ],
+          "mechanical": [
+            "`refresh_schedule.rs`: doc comments only."
+          ]
+        },
+        {
+          "kind": "tour",
+          "title": "Reading order",
+          "steps": [
+            {
+              "title": "`retry_after` answers for a used-up budget",
+              "explanation": "The new `RateLimited` arm turns `resets_at` into a wait; this is the whole behaviour change.",
+              "weight": "core",
+              "anchor": {
+                "path": "crates/github/src/github_error.rs",
+                "side": "head",
+                "start_line": 49,
+                "end_line": 56
+              }
+            },
+            {
+              "title": "One clock: `unix_now`",
+              "explanation": "Moves the clock reading out of `minutes_until`, so the hold and the message agree on *now*.",
+              "weight": "supporting",
+              "anchor": {
+                "path": "crates/github/src/github_error.rs",
+                "side": "head",
+                "start_line": 71,
+                "end_line": 76
+              }
+            },
+            {
+              "title": "The test pins the reset cases",
+              "explanation": "A future, a current and a past reset, and both kinds of `SlowDown`, with the clock passed in.",
+              "weight": "supporting",
+              "anchor": {
+                "path": "crates/github/src/github_error.rs",
+                "side": "head",
+                "start_line": 118,
+                "end_line": 144
+              }
+            },
+            {
+              "title": "The schedule's docs name the new hold",
+              "explanation": "Comment changes only; the schedule's code is untouched.",
+              "weight": "mechanical",
+              "anchor": {
+                "path": "crates/app/src/review_queue/refresh_schedule.rs",
+                "side": "head",
+                "start_line": 12,
+                "end_line": 15
+              }
+            }
+          ]
+        },
+        {
+          "kind": "callout",
+          "tone": "note",
+          "text": "A **budget** here is GitHub's hourly request allowance for one resource (`core`, `search` or `graphql`); `resets_at` is when it refills, in seconds since the Unix epoch."
+        },
+        {
+          "kind": "graph",
+          "title": "Where a refused refresh ends up",
+          "groups": [
+            {
+              "id": "main",
+              "label": "Main thread"
+            },
+            {
+              "id": "background",
+              "label": "Background executor"
+            }
+          ],
+          "nodes": [
+            {
+              "id": "timer",
+              "label": "Refresh timer",
+              "detail": "fires 5 min after a refresh",
+              "role": "actor",
+              "group": "main",
+              "anchor": null,
+              "change": "same"
+            },
+            {
+              "id": "queue",
+              "label": "ReviewQueue",
+              "detail": "starts refreshes, shows errors",
+              "role": "owner",
+              "group": "main",
+              "anchor": null,
+              "change": "same"
+            },
+            {
+              "id": "schedule",
+              "label": "RefreshSchedule",
+              "detail": "holds refreshes until a time",
+              "role": "owner",
+              "group": "main",
+              "anchor": {
+                "path": "crates/app/src/review_queue/refresh_schedule.rs",
+                "side": "head",
+                "start_line": 12,
+                "end_line": 15
+              },
+              "change": "same"
+            },
+            {
+              "id": "client",
+              "label": "GitHubClient",
+              "detail": "one blocking request per call",
+              "role": "transport",
+              "group": "background",
+              "anchor": null,
+              "change": "same"
+            },
+            {
+              "id": "github",
+              "label": "GitHub API",
+              "detail": "counts the hourly budget",
+              "role": "external",
+              "group": null,
+              "anchor": null,
+              "change": "same"
+            },
+            {
+              "id": "error",
+              "label": "GitHubError",
+              "detail": "RateLimited { resets_at }",
+              "role": "constraint",
+              "group": null,
+              "anchor": {
+                "path": "crates/github/src/github_error.rs",
+                "side": "head",
+                "start_line": 53,
+                "end_line": 56
+              },
+              "change": "same"
+            }
+          ],
+          "edges": [
+            {
+              "from": "timer",
+              "to": "queue",
+              "label": "tick",
+              "style": "control",
+              "change": "same"
+            },
+            {
+              "from": "queue",
+              "to": "client",
+              "label": "search request",
+              "style": "async",
+              "change": "same"
+            },
+            {
+              "from": "client",
+              "to": "github",
+              "label": "GET /search/issues",
+              "style": "control",
+              "change": "same"
+            },
+            {
+              "from": "github",
+              "to": "error",
+              "label": "403, remaining 0",
+              "style": "data",
+              "change": "same"
+            },
+            {
+              "from": "error",
+              "to": "schedule",
+              "label": "retry_after()",
+              "style": "data",
+              "change": "same"
+            },
+            {
+              "from": "schedule",
+              "to": "queue",
+              "label": "held until reset",
+              "style": "optional",
+              "change": "same"
+            }
+          ]
+        },
+        {
+          "kind": "callout",
+          "tone": "verdict",
+          "text": "With the budget used up, the queue now sends no requests until it refills, so it stops spending the minutes after a reset on refusals."
+        }
+      ]
+    },
+    {
+      "title": "The wait",
+      "summary": "retry_after now answers for a used-up budget, reading one clock.",
+      "widgets": [
+        {
+          "kind": "code_compare",
+          "caption": "`retry_after` gains an arm for a used-up budget, and takes its clock from a parameter.",
+          "before": {
+            "path": "crates/github/src/github_error.rs",
+            "side": "base",
+            "start_line": 42,
+            "end_line": 47
+          },
+          "after": {
+            "path": "crates/github/src/github_error.rs",
+            "side": "head",
+            "start_line": 45,
+            "end_line": 59
+          }
+        },
+        {
+          "kind": "code_excerpt",
+          "caption": "The new arm: a reset in the past or at this second gives no wait.",
+          "anchor": {
+            "path": "crates/github/src/github_error.rs",
+            "side": "head",
+            "start_line": 49,
+            "end_line": 56
+          }
+        },
+        {
+          "kind": "code_excerpt",
+          "caption": "Across two hunks: the gap row stands for the lines the diff does not show.",
+          "anchor": {
+            "path": "crates/github/src/github_error.rs",
+            "side": "head",
+            "start_line": 52,
+            "end_line": 73
+          }
+        },
+        {
+          "kind": "code_excerpt",
+          "caption": "On the base side: the clock reading that moved into `unix_now`.",
+          "anchor": {
+            "path": "crates/github/src/github_error.rs",
+            "side": "base",
+            "start_line": 59,
+            "end_line": 65
+          }
+        },
+        {
+          "kind": "section",
+          "heading": "One clock for every wait",
+          "body": "`minutes_until`, which words the error message (\"try again in 12 minutes\"), read the clock on its own. Both now call `unix_now`, so the message and the hold agree on what *now* is. `retry_after_from` takes the clock as a parameter, which is what makes the new test independent of the time it runs at; see [GitHub's rate limit documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) for the headers involved."
+        },
+        {
+          "kind": "table",
+          "title": "Which errors hold the schedule",
+          "columns": [
+            "Error",
+            "Before",
+            "After"
+          ],
+          "rows": [
+            [
+              "`SlowDown` with `retry-after`",
+              "held for the given seconds",
+              "held for the given seconds"
+            ],
+            [
+              "`SlowDown` without `retry-after`",
+              "not held",
+              "not held"
+            ],
+            [
+              "`RateLimited` (budget used up)",
+              "not held",
+              "held until `resets_at`"
+            ],
+            [
+              "Any other error",
+              "not held",
+              "not held"
+            ]
+          ]
+        },
+        {
+          "kind": "graph",
+          "title": "What decides how long refreshes wait",
+          "groups": [],
+          "nodes": [
+            {
+              "id": "refusal",
+              "label": "Refused refresh",
+              "detail": "a 403 or 429 from GitHub",
+              "role": "actor",
+              "group": null,
+              "anchor": null,
+              "change": "same"
+            },
+            {
+              "id": "retry",
+              "label": "retry_after()",
+              "detail": "the wait, if any",
+              "role": "owner",
+              "group": null,
+              "anchor": {
+                "path": "crates/github/src/github_error.rs",
+                "side": "head",
+                "start_line": 45,
+                "end_line": 47
+              },
+              "change": "same"
+            },
+            {
+              "id": "clock",
+              "label": "unix_now()",
+              "detail": "seconds since 1970",
+              "role": "store",
+              "group": null,
+              "anchor": {
+                "path": "crates/github/src/github_error.rs",
+                "side": "head",
+                "start_line": 71,
+                "end_line": 76
+              },
+              "change": "added"
+            },
+            {
+              "id": "own_clock",
+              "label": "Own clock read",
+              "detail": "inside minutes_until",
+              "role": "store",
+              "group": null,
+              "anchor": null,
+              "change": "removed"
+            },
+            {
+              "id": "message",
+              "label": "Error message",
+              "detail": "“try again in 12 minutes”",
+              "role": "external",
+              "group": null,
+              "anchor": null,
+              "change": "same"
+            },
+            {
+              "id": "schedule",
+              "label": "RefreshSchedule",
+              "detail": "held_until",
+              "role": "owner",
+              "group": null,
+              "anchor": null,
+              "change": "same"
+            }
+          ],
+          "edges": [
+            {
+              "from": "refusal",
+              "to": "retry",
+              "label": "GitHubError",
+              "style": "data",
+              "change": "same"
+            },
+            {
+              "from": "retry",
+              "to": "schedule",
+              "label": "None for RateLimited",
+              "style": "optional",
+              "change": "removed"
+            },
+            {
+              "from": "retry",
+              "to": "schedule",
+              "label": "wait until resets_at",
+              "style": "control",
+              "change": "added"
+            },
+            {
+              "from": "clock",
+              "to": "retry",
+              "label": "now",
+              "style": "data",
+              "change": "added"
+            },
+            {
+              "from": "clock",
+              "to": "message",
+              "label": "now",
+              "style": "data",
+              "change": "added"
+            },
+            {
+              "from": "own_clock",
+              "to": "message",
+              "label": "now",
+              "style": "data",
+              "change": "removed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Over time",
+      "summary": "What the hold changes while the budget is used up.",
+      "widgets": [
+        {
+          "kind": "graph",
+          "title": "The schedule's states",
+          "groups": [],
+          "nodes": [
+            {
+              "id": "idle",
+              "label": "Idle",
+              "detail": "waiting for the timer or activation",
+              "role": "owner",
+              "group": null,
+              "anchor": null,
+              "change": "same"
+            },
+            {
+              "id": "refreshing",
+              "label": "Refreshing",
+              "detail": "requests in flight",
+              "role": "actor",
+              "group": null,
+              "anchor": null,
+              "change": "same"
+            },
+            {
+              "id": "held",
+              "label": "Held",
+              "detail": "until resets_at",
+              "role": "constraint",
+              "group": null,
+              "anchor": {
+                "path": "crates/app/src/review_queue/refresh_schedule.rs",
+                "side": "head",
+                "start_line": 20,
+                "end_line": 21
+              },
+              "change": "same"
+            }
+          ],
+          "edges": [
+            {
+              "from": "idle",
+              "to": "refreshing",
+              "label": "timer, activation or ⌘R",
+              "style": "control",
+              "change": "same"
+            },
+            {
+              "from": "refreshing",
+              "to": "held",
+              "label": "RateLimited",
+              "style": "control",
+              "change": "same"
+            },
+            {
+              "from": "refreshing",
+              "to": "idle",
+              "label": "refresh finished",
+              "style": "control",
+              "change": "same"
+            },
+            {
+              "from": "held",
+              "to": "idle",
+              "label": "resets_at passed",
+              "style": "control",
+              "change": "same"
+            },
+            {
+              "from": "held",
+              "to": "held",
+              "label": "activation: skipped",
+              "style": "optional",
+              "change": "same"
+            }
+          ]
+        },
+        {
+          "kind": "sequence",
+          "title": "A window activation while the budget is used up",
+          "lanes": [
+            {
+              "id": "window",
+              "label": "Window",
+              "role": "actor"
+            },
+            {
+              "id": "queue",
+              "label": "ReviewQueue",
+              "role": "owner"
+            },
+            {
+              "id": "client",
+              "label": "GitHubClient",
+              "role": "transport"
+            },
+            {
+              "id": "github",
+              "label": "GitHub",
+              "role": "external"
+            }
+          ],
+          "messages": [
+            {
+              "from": "window",
+              "to": "queue",
+              "label": "activated (queue 3 min old)",
+              "style": "async",
+              "note": null,
+              "anchor": null
+            },
+            {
+              "from": "queue",
+              "to": "client",
+              "label": "refresh: search mine",
+              "style": "call",
+              "note": "on the background executor",
+              "anchor": null
+            },
+            {
+              "from": "client",
+              "to": "github",
+              "label": "GET /search/issues",
+              "style": "call",
+              "note": null,
+              "anchor": null
+            },
+            {
+              "from": "github",
+              "to": "client",
+              "label": "403, x-ratelimit-remaining: 0",
+              "style": "reply",
+              "note": null,
+              "anchor": null
+            },
+            {
+              "from": "client",
+              "to": "queue",
+              "label": "Err(RateLimited { resets_at })",
+              "style": "reply",
+              "note": null,
+              "anchor": {
+                "path": "crates/github/src/github_error.rs",
+                "side": "head",
+                "start_line": 53,
+                "end_line": 56
+              }
+            },
+            {
+              "from": "queue",
+              "to": "queue",
+              "label": "hold_until(resets_at)",
+              "style": "call",
+              "note": "timer and activations skipped until then",
+              "anchor": {
+                "path": "crates/app/src/review_queue/refresh_schedule.rs",
+                "side": "head",
+                "start_line": 30,
+                "end_line": 31
+              }
+            },
+            {
+              "from": "window",
+              "to": "queue",
+              "label": "activated again",
+              "style": "async",
+              "note": "skipped: held",
+              "anchor": null
+            }
+          ]
+        },
+        {
+          "kind": "trace",
+          "title": "A used-up core budget at 10:00 that refills at 10:40",
+          "columns": [
+            "Action",
+            "Before the change",
+            "After the change"
+          ],
+          "rows": [
+            [
+              "10:00 refresh",
+              "refused: `RateLimited`",
+              "refused: `RateLimited`; held until 10:40"
+            ],
+            [
+              "10:05 timer",
+              "refused again",
+              "skipped"
+            ],
+            [
+              "10:12 window activated",
+              "refused again",
+              "skipped"
+            ],
+            [
+              "10:40 timer",
+              "succeeds",
+              "succeeds"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Limits and evidence",
+      "summary": "What the hold depends on, and what the tests cover.",
+      "widgets": [
+        {
+          "kind": "callout",
+          "tone": "constraint",
+          "text": "The hold is read from the local clock against GitHub's `resets_at`, so a Mac clock running minutes fast ends the hold early and the first refresh after it is refused once more."
+        },
+        {
+          "kind": "callout",
+          "tone": "evidence",
+          "text": "The PR adds `a_used_up_budget_waits_until_it_refills`, which pins a future, a current and a past reset, and both kinds of `SlowDown`. Nothing tests the schedule's use of the hold; this brief ran nothing."
+        },
+        {
+          "kind": "code_excerpt",
+          "caption": "Left out: lines past the end of the diff.",
+          "anchor": {
+            "path": "crates/github/src/github_error.rs",
+            "side": "head",
+            "start_line": 200,
+            "end_line": 210
+          }
+        },
+        {
+          "kind": "table",
+          "title": "Left out: a row with a missing cell",
+          "columns": [
+            "Error",
+            "Wait"
+          ],
+          "rows": [
+            [
+              "`RateLimited`"
+            ]
+          ]
+        },
+        {
+          "kind": "code_compare",
+          "caption": "Left out: before and after on the wrong sides.",
+          "before": {
+            "path": "crates/github/src/github_error.rs",
+            "side": "head",
+            "start_line": 45,
+            "end_line": 46
+          },
+          "after": {
+            "path": "crates/github/src/github_error.rs",
+            "side": "base",
+            "start_line": 43,
+            "end_line": 44
+          }
+        }
+      ]
+    }
+  ]
+}

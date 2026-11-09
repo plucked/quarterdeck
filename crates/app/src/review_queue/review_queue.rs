@@ -6,7 +6,8 @@ use gpui::{
     Subscription, Task, Window, div, prelude::*, px,
 };
 use qd_cache::{
-    DetailScrollPosition, PanelVisibility, PullRequestListKey, QueueTab, ReviewQueueViewState,
+    BriefIndex, DetailScrollPosition, PanelVisibility, PullRequestListKey, QueueTab,
+    ReviewQueueViewState,
 };
 use qd_github::{
     GitHubClient, GitHubError, PullRequest, PullRequestStack, RepoRef, StackMembership,
@@ -37,7 +38,7 @@ use crate::fetch_stack::{cached_stack, refresh_stack};
 use crate::pull_request_detail::{DetailEvent, LayerRequest, PullRequestDetail};
 use crate::shared_cache::SharedCache;
 use crate::theme;
-use crate::ui_state::UiStateRecorder;
+use crate::ui_state::{UiStateRecorder, read_brief_index};
 
 /// How far past the sidebar's edges rows are laid out, so scrolling shows no gaps.
 const QUEUE_LIST_OVERDRAW: f32 = 300.;
@@ -120,6 +121,10 @@ pub struct ReviewQueue {
     queue_list: ListState,
     /// The right pane; it re-renders on its own when it scrolls.
     detail: Entity<PullRequestDetail>,
+    /// Which pull requests have a stored brief, marked in the sidebar.
+    brief_index: BriefIndex,
+    /// The read of `brief_index` in flight.
+    brief_index_task: Option<Task<()>>,
     /// The saved selection, until the lists it is in have loaded.
     pending_restore: Option<PendingRestore>,
     /// The in-flight refresh; a new one starts only after it finished.
@@ -198,6 +203,7 @@ impl ReviewQueue {
                     queue.refresh(cx);
                 }
                 DetailEvent::TargetChanged => cx.notify(),
+                DetailEvent::BriefStored => queue.load_brief_index(cx),
             });
 
         let mut queue = Self {
@@ -225,6 +231,8 @@ impl ReviewQueue {
             sidebar_width,
             stacks,
             stacks_task: None,
+            brief_index: BriefIndex::default(),
+            brief_index_task: None,
             others_tab: OthersTab::new(
                 AppSettings::watched_repositories(cx).to_vec(),
                 cx.global::<UiStateRecorder>().saved_others_filters(),
@@ -245,7 +253,31 @@ impl ReviewQueue {
         queue.rebuild_rows();
         queue.restore_selection(RestorePhase::CachedQueue, cx);
         queue.refresh(cx);
+        queue.load_brief_index(cx);
         queue
+    }
+
+    /// Reads which pull requests have a stored brief, on the background
+    /// executor, and redraws the sidebar with their marks.
+    fn load_brief_index(&mut self, cx: &mut Context<Self>) {
+        let store = cx.global::<UiStateRecorder>().shared_store();
+        self.brief_index_task = Some(cx.spawn(async move |queue, cx| {
+            let index = cx
+                .background_executor()
+                .spawn(async move { read_brief_index(&store) })
+                .await;
+            queue
+                .update(cx, |queue, cx| {
+                    queue.brief_index = index;
+                    cx.notify();
+                })
+                .ok();
+        }));
+    }
+
+    /// Whether pull request `number` of `repo` has a stored brief.
+    pub(super) fn has_brief(&self, repo: &RepoRef, number: u64) -> bool {
+        self.brief_index.has_brief(repo, number)
     }
 
     pub(super) fn queue_list(&self) -> &ListState {

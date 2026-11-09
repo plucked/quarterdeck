@@ -1,24 +1,44 @@
-use gpui::{AnyElement, Context, FontWeight, IntoElement, Rgba, SharedString, div, prelude::*};
-use qd_github::{MergeOptions, MergeQueueState, PullRequestState};
+use gpui::{AnyElement, Context, FontWeight, IntoElement, Rgba, SharedString, div, prelude::*, px};
+use qd_github::{MergeMethod, MergeOptions, MergeQueueState, PullRequestState};
 
 use super::action_panel::{ActionPanel, ActionProgress, ArmedAction, PanelAction};
 use super::pull_request_detail::PullRequestDetail;
 use crate::button::Button;
 use crate::checkbox::{CheckState, Checkbox};
-use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
+/// Corner radius of a merge method's row.
+const METHOD_ROW_RADIUS: f32 = 4.;
+
 impl PullRequestDetail {
-    /// `Merge…` and `Close…` in the header, opening their panel; `None`
-    /// without a GitHub connection.
-    pub(super) fn render_action_buttons(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        self.services().github.as_ref().ok()?;
+    /// The side panel's Actions tab: `Merge…` and `Close…`, and the open
+    /// panel of the one clicked under them; without a GitHub connection,
+    /// why there are none.
+    pub(super) fn render_actions_tab(&self, cx: &mut Context<Self>) -> AnyElement {
+        let tab = div()
+            .id("actions-tab")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .px_3()
+            .pt_2()
+            .pb_4();
+        if self.services().github.is_err() {
+            return tab
+                .child(render_line(
+                    "Merging and closing need a GitHub connection (Settings → GitHub).",
+                    theme::muted(),
+                ))
+                .into_any_element();
+        }
         let open = self.action_panel().map(|panel| panel.action);
-        Some(
+        tab.child(
             div()
-                .flex_none()
                 .flex()
-                .gap_1()
+                .gap_1p5()
                 .child(
                     Button::new("open-merge", "Merge…")
                         .selected(open == Some(PanelAction::Merge))
@@ -33,13 +53,14 @@ impl PullRequestDetail {
                         .on_click(cx.listener(|detail, _, _, cx| {
                             detail.toggle_action_panel(PanelAction::Close, cx);
                         })),
-                )
-                .into_any_element(),
+                ),
         )
+        .children(self.render_action_panel(cx))
+        .into_any_element()
     }
 
-    /// The open merge or close panel under the header.
-    pub(super) fn render_action_panel(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// The open merge or close panel under the Actions tab's buttons.
+    fn render_action_panel(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let panel = self.action_panel()?;
         let body = match (&panel.options, &panel.options_error) {
             (_, Some(error)) => render_line(
@@ -59,10 +80,8 @@ impl PullRequestDetail {
         };
         Some(
             div()
-                .mt_1()
-                .ml_8()
-                .px_4()
-                .py_3()
+                .px_3()
+                .py_2p5()
                 .flex()
                 .flex_col()
                 .gap_2p5()
@@ -114,7 +133,8 @@ impl PullRequestDetail {
             body = body.child(render_line(note, theme::accent()));
         }
 
-        // The method: a choice when the repository allows several.
+        // The method: a choice when the repository allows several, one per
+        // line, since the panel is as narrow as the side panel.
         let method = panel.method;
         body = match options.allowed_methods.as_slice() {
             [] => body.child(render_line(
@@ -125,20 +145,13 @@ impl PullRequestDetail {
                 format!("Method: {}", only.label()),
                 theme::muted(),
             )),
-            methods => {
-                let mut control = SegmentedControl::new("merge-method");
-                for choice in methods {
-                    let choice = *choice;
-                    let detail = cx.entity().downgrade();
-                    control =
-                        control.option(choice.label(), method == Some(choice), move |_, cx| {
-                            detail
-                                .update(cx, |detail, cx| detail.set_merge_method(choice, cx))
-                                .ok();
-                        });
-                }
-                body.child(control)
-            }
+            methods => body.child(
+                div().flex().flex_col().gap_1().children(
+                    methods
+                        .iter()
+                        .map(|choice| render_method_row(*choice, method == Some(*choice), cx)),
+                ),
+            ),
         };
         body = body.child(self.render_branch_choice(panel, options, cx));
 
@@ -182,6 +195,7 @@ impl PullRequestDetail {
             }
             Some(ArmedAction::Close | ArmedAction::DeleteBranch) | None => div()
                 .flex()
+                .flex_wrap()
                 .gap_2()
                 .justify_end()
                 .child(Button::new("merge-cancel", "Cancel").on_click(cx.listener(
@@ -233,6 +247,7 @@ impl PullRequestDetail {
             Some(ArmedAction::Merge | ArmedAction::AdminMerge | ArmedAction::DeleteBranch)
             | None => div()
                 .flex()
+                .flex_wrap()
                 .gap_2()
                 .justify_end()
                 .child(Button::new("close-cancel", "Cancel").on_click(cx.listener(
@@ -376,6 +391,40 @@ impl PullRequestDetail {
     }
 }
 
+/// A merge method on its own line, outlined in the accent color while
+/// picked; clicking it picks it.
+fn render_method_row(
+    choice: MergeMethod,
+    is_picked: bool,
+    cx: &mut Context<PullRequestDetail>,
+) -> AnyElement {
+    div()
+        .id(SharedString::from(format!(
+            "merge-method-{}",
+            choice.label()
+        )))
+        .px_2()
+        .py_1()
+        .rounded(px(METHOD_ROW_RADIUS))
+        .border_1()
+        .text_xs()
+        .font_weight(FontWeight::MEDIUM)
+        .cursor_pointer()
+        .when(is_picked, |row| {
+            row.border_color(theme::accent())
+                .bg(theme::panel())
+                .text_color(theme::text())
+        })
+        .when(!is_picked, |row| {
+            row.border_color(theme::border())
+                .text_color(theme::muted())
+                .hover(|style| style.text_color(theme::text()))
+        })
+        .on_click(cx.listener(move |detail, _, _, cx| detail.set_merge_method(choice, cx)))
+        .child(choice.label())
+        .into_any_element()
+}
+
 /// One line of the panel in `color`.
 fn render_line(text: impl Into<SharedString>, color: Rgba) -> AnyElement {
     let text: SharedString = text.into();
@@ -394,7 +443,7 @@ fn render_confirmation(
 ) -> AnyElement {
     div()
         .flex()
-        .items_center()
+        .flex_col()
         .gap_2()
         .px_3()
         .py_2()
@@ -404,22 +453,28 @@ fn render_confirmation(
         .bg(theme::panel())
         .child(
             div()
-                .flex_1()
                 .text_xs()
                 .font_weight(FontWeight::SEMIBOLD)
                 .child(question),
         )
         .child(
-            Button::new("action-back", "Back")
-                .ghost()
-                .on_click(cx.listener(|detail, _, _, cx| {
-                    detail.arm_action(None, cx);
-                })),
-        )
-        .child(
-            Button::new("action-confirm", confirm_label)
-                .danger()
-                .on_click(cx.listener(|detail, _, _, cx| detail.run_armed_action(cx))),
+            div()
+                .flex()
+                .flex_wrap()
+                .gap_2()
+                .justify_end()
+                .child(
+                    Button::new("action-back", "Back")
+                        .ghost()
+                        .on_click(cx.listener(|detail, _, _, cx| {
+                            detail.arm_action(None, cx);
+                        })),
+                )
+                .child(
+                    Button::new("action-confirm", confirm_label)
+                        .danger()
+                        .on_click(cx.listener(|detail, _, _, cx| detail.run_armed_action(cx))),
+                ),
         )
         .into_any_element()
 }

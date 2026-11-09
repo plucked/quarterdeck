@@ -51,10 +51,25 @@
 //! - `context_expansion.rs`: revealing unchanged lines around hunks: fetching the file's text, rebuilding its rows.
 //! - `fetch_file_text.rs`: gets a file's text after the change from the cache by blob SHA, else from GitHub.
 //! - `context_loads.rs`: `ContextLoads`, the file texts being fetched and their tasks.
+//! - `detail_mode.rs`: `DetailMode`, the diff or the brief in the main column.
+//! - `brief_pane.rs`: `BriefPane`, the briefs written this session, the run in flight, the brief's rows.
+//! - `brief_row.rs`: `BriefRow`, one row of the brief's list.
+//! - `run_cancel.rs`: `RunCancel`, kills the agent process when the run is dropped.
+//! - `brief_job.rs`: `BriefJob`, one brief's background run: checkout, agent, checks, storing.
+//! - `brief_code.rs`: `BriefCode`, the shallow checkout of the head commit a brief's agent reads (or why there is none).
+//! - `brief_actions.rs`: writing a brief with Claude Code, cancelling it, and opening an anchor in the diff.
+//! - `file_lookup.rs`: `file_index_of`, the loaded file an anchor's path names; the loaded files as the brief's `BriefDiffs`.
+//! - `brief_pane_rendering.rs`: the brief's rows in the main column, drawn by `brief_view`.
 
 mod action_panel;
 mod action_panel_rendering;
 mod activity_rendering;
+mod brief_actions;
+mod brief_code;
+mod brief_job;
+mod brief_pane;
+mod brief_pane_rendering;
+mod brief_row;
 mod changed_files;
 mod changed_rows;
 mod comment_card_rendering;
@@ -64,12 +79,14 @@ mod context_expansion;
 mod context_loads;
 mod detail_content;
 mod detail_event;
+mod detail_mode;
 mod detail_row;
 mod detail_row_list;
 mod diff_selection;
 mod fetch_changed_files;
 mod fetch_combined_files;
 mod fetch_file_text;
+mod file_lookup;
 mod file_review_state;
 mod file_set_update;
 mod file_tree_rendering;
@@ -92,6 +109,7 @@ mod review_status;
 mod review_target;
 mod row_height_estimate;
 mod row_rendering;
+mod run_cancel;
 mod selected_diff_text;
 mod side_panel_tab;
 mod stack_bar_rendering;

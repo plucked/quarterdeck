@@ -7,11 +7,13 @@ use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 
 use super::review_change::ReviewChange;
 use qd_cache::{
-    CacheTtl, ColorTheme, DiffViewSettings, FoldedGroups, NoteDestination, OthersFilter,
-    PanelWidths, RepositoryOthersFilter, ReviewLayoutState, ReviewNote, ReviewQueueViewState,
-    ReviewScope, ReviewSummary, UiStateStore, ViewedFile, WindowPlacement,
+    BriefIndex, CacheTtl, ColorTheme, DiffViewSettings, FoldedGroups, NoteDestination,
+    OthersFilter, PanelWidths, RepositoryOthersFilter, ReviewLayoutState, ReviewNote,
+    ReviewQueueViewState, ReviewScope, ReviewSummary, StoredBrief, UiStateStore, ViewedFile,
+    WindowPlacement,
 };
 use qd_github::RepoRef;
+use qd_studio::{BriefRecord, Studio};
 
 /// Batches a burst of changes (a scroll, a resize drag) into one write.
 const WRITE_DELAY: Duration = Duration::from_millis(300);
@@ -475,6 +477,38 @@ pub fn read_review_notes(
         ReviewScope::CombinedLayers { .. } => None,
     };
     (notes, summary)
+}
+
+/// The stored brief of `scope`, read through the shared store on the
+/// background executor; an unreadable brief counts as none.
+pub fn read_brief(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Option<StoredBrief> {
+    lock_store(store).brief(scope).unwrap_or_else(|error| {
+        eprintln!("ui state: ignoring a stored brief: {error:#}");
+        None
+    })
+}
+
+/// Stores the brief `studio` with its `record` as the brief of `scope`,
+/// through the shared store on the background executor; a failure is
+/// reported on stderr (the brief still shows for the session).
+pub fn write_brief(
+    store: &Mutex<UiStateStore>,
+    scope: &ReviewScope,
+    studio: &Studio,
+    record: &BriefRecord,
+) {
+    if let Err(error) = lock_store(store).put_brief(scope, studio, record) {
+        eprintln!("ui state: cannot store a brief: {error:#}");
+    }
+}
+
+/// Which pull requests have a stored brief, read through the shared store
+/// on the background executor; unreadable means none.
+pub fn read_brief_index(store: &Mutex<UiStateStore>) -> BriefIndex {
+    lock_store(store).brief_index().unwrap_or_else(|error| {
+        eprintln!("ui state: ignoring the stored briefs: {error:#}");
+        BriefIndex::default()
+    })
 }
 
 /// The viewed marks of a pull request, read through the shared store on the

@@ -15,9 +15,11 @@ qd-diff.workspace = true
 qd-file-tree.workspace = true
 qd-github.workspace = true
 qd-markdown.workspace = true
+qd-studio.workspace = true
 qd-syntax.workspace = true
 qd-update.workspace = true
 qd-video.workspace = true
+serde_json.workspace = true
 image = { workspace = true, features = ["png", "jpeg"] }
 
 [lints]

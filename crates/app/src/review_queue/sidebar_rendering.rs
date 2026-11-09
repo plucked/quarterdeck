@@ -29,6 +29,8 @@ const PULSE_PERIOD: Duration = Duration::from_millis(1200);
 const LAYER_GUTTER_WIDTH: f32 = 28.;
 /// The open / draft ring before a pull request's title.
 const STATE_RING_SIZE: f32 = 10.;
+/// Text size of the mark on a pull request with a stored brief.
+const BRIEF_MARK_SIZE: f32 = 11.;
 /// The stack glyph beside a stack's header.
 const STACK_GLYPH_SIZE: f32 = 16.;
 /// The author's avatar in a pull request row's second line.
@@ -195,6 +197,7 @@ impl ReviewQueue {
                     pull_request,
                     *list_index,
                     selected_id == Some(pull_request.id),
+                    self.has_brief(&pull_request.repo, pull_request.number),
                     now,
                     cx,
                 )
@@ -214,7 +217,11 @@ impl ReviewQueue {
                         title: pull_request.title.clone().into(),
                         meta: format!("#{}{draft_marker}", pull_request.number).into(),
                         is_listed: true,
-                        needs_review: self.needs_review(&pull_request.repo, pull_request.number),
+                        marks: LayerMarks {
+                            needs_review: self
+                                .needs_review(&pull_request.repo, pull_request.number),
+                            has_brief: self.has_brief(&pull_request.repo, pull_request.number),
+                        },
                         is_selected: selected_id == Some(pull_request.id),
                     },
                     cx.listener(move |queue, event: &gpui::ClickEvent, _, cx| {
@@ -237,7 +244,10 @@ impl ReviewQueue {
                         meta: format!("#{}{}", stack_layer.number, layer_state_marker(stack_layer))
                             .into(),
                         is_listed: false,
-                        needs_review: self.needs_review(&key.repo, stack_layer.number),
+                        marks: LayerMarks {
+                            needs_review: self.needs_review(&key.repo, stack_layer.number),
+                            has_brief: self.has_brief(&key.repo, stack_layer.number),
+                        },
                         is_selected: self.is_selected(&key.repo, stack_layer.number),
                     },
                     cx.listener(move |queue, event: &gpui::ClickEvent, _, cx| {
@@ -359,12 +369,13 @@ fn render_meta(text: impl Into<SharedString>) -> impl IntoElement {
 }
 
 /// One standalone pull request: a state ring (open or draft), its title on
-/// up to two lines, then `#number · author · age` and a Draft pill;
-/// clicking selects it.
+/// up to two lines, then `#number · author · age`, a Draft pill, and a mark
+/// when it has a stored brief; clicking selects it.
 fn render_pull_request_row(
     pull_request: &PullRequest,
     list_index: usize,
     is_selected: bool,
+    has_brief: bool,
     now: i64,
     cx: &mut Context<ReviewQueue>,
 ) -> AnyElement {
@@ -418,10 +429,21 @@ fn render_pull_request_row(
                         )))
                         .when(state == PullRequestState::Draft, |meta| {
                             meta.child(render_draft_pill())
-                        }),
+                        })
+                        .when(has_brief, |meta| meta.child(render_brief_mark())),
                 ),
         )
         .into_any_element()
+}
+
+/// The mark of a pull request with a stored brief: a small star in the
+/// accent color.
+fn render_brief_mark() -> impl IntoElement {
+    div()
+        .flex_none()
+        .text_size(px(BRIEF_MARK_SIZE))
+        .text_color(theme::accent())
+        .child("✦")
 }
 
 /// The pill marking a draft.
@@ -621,9 +643,16 @@ struct LayerRow {
     meta: SharedString,
     /// Whether the shown list has it; other layers show muted.
     is_listed: bool,
-    /// Whether it asks for the viewer's review (a badge says so).
-    needs_review: bool,
+    marks: LayerMarks,
     is_selected: bool,
+}
+
+/// What a layer row marks beside its title.
+struct LayerMarks {
+    /// It asks for the viewer's review (a badge says so).
+    needs_review: bool,
+    /// It has a stored brief (a star says so).
+    has_brief: bool,
 }
 
 /// One layer of a stack, under its header, on a single line so long stacks
@@ -674,7 +703,10 @@ fn render_layer_row(
                 .when(!row.is_listed, |title| title.text_color(theme::muted()))
                 .child(row.title),
         )
-        .when(row.needs_review, |line| line.child(render_review_badge()))
+        .when(row.marks.needs_review, |line| {
+            line.child(render_review_badge())
+        })
+        .when(row.marks.has_brief, |line| line.child(render_brief_mark()))
         .child(
             div()
                 .flex_none()

@@ -1,5 +1,6 @@
 //! `short_date` and `relative_age` (with `unix_now`): GitHub's ISO 8601
-//! timestamps as people read them; `unix_seconds` reads one as a time.
+//! timestamps as people read them; `unix_seconds` reads one as a time;
+//! `age_since` an age between two Unix times.
 
 /// Month names, January first.
 const MONTHS: [&str; 12] = [
@@ -20,14 +21,24 @@ pub fn relative_age(timestamp: &str, now: i64) -> String {
     let Some(then) = unix_seconds(timestamp) else {
         return timestamp.to_owned();
     };
+    // Recent ones as an age, older ones as their date.
+    if now - then < WEEKS_SHOWN * WEEK {
+        age_since(then, now)
+    } else {
+        short_date(timestamp)
+    }
+}
+
+/// How long ago `then` was at `now` (both Unix seconds), shortly: `now`,
+/// `12m`, `3h`, `2d`, `3w`, `12w`.
+pub fn age_since(then: i64, now: i64) -> String {
     let age = (now - then).max(0);
     match age {
         0..MINUTE => "now".to_owned(),
         MINUTE..HOUR => format!("{}m", age / MINUTE),
         HOUR..DAY => format!("{}h", age / HOUR),
         DAY..WEEK => format!("{}d", age / DAY),
-        _ if age < WEEKS_SHOWN * WEEK => format!("{}w", age / WEEK),
-        _ => short_date(timestamp),
+        _ => format!("{}w", age / WEEK),
     }
 }
 

@@ -19,6 +19,15 @@ enum ControlWidth {
     Fill,
 }
 
+/// How large the control's labels and padding are.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ControlSize {
+    /// Small labels: options inside panels.
+    Small,
+    /// Body-size labels with more room: a view's main switch.
+    Large,
+}
+
 /// One option of a [`SegmentedControl`].
 struct SegmentOption {
     label: SharedString,
@@ -27,12 +36,14 @@ struct SegmentOption {
 }
 
 /// A bordered row of options of which one is selected; clicking an option
-/// calls its handler (the owner then re-renders with the new selection).
+/// calls its handler (the owner then re-renders with the new selection) and
+/// goes no further, like a [`Button`](crate::button::Button) click.
 #[derive(IntoElement)]
 pub struct SegmentedControl {
     id: ElementId,
     options: Vec<SegmentOption>,
     width: ControlWidth,
+    size: ControlSize,
 }
 
 impl SegmentedControl {
@@ -42,6 +53,7 @@ impl SegmentedControl {
             id: id.into(),
             options: Vec::new(),
             width: ControlWidth::Fit,
+            size: ControlSize::Small,
         }
     }
 
@@ -49,6 +61,13 @@ impl SegmentedControl {
     #[must_use]
     pub fn fill_width(mut self) -> Self {
         self.width = ControlWidth::Fill;
+        self
+    }
+
+    /// Draws it larger, for a view's main switch (the detail's Diff / Brief).
+    #[must_use]
+    pub fn large(mut self) -> Self {
+        self.size = ControlSize::Large;
         self
     }
 
@@ -81,12 +100,17 @@ impl RenderOnce for SegmentedControl {
             .bg(theme::sidebar())
             .border_1()
             .border_color(theme::border())
-            .text_xs()
+            .map(|control| match self.size {
+                ControlSize::Small => control.text_xs(),
+                ControlSize::Large => control.text_sm(),
+            })
             .children(self.options.into_iter().enumerate().map(|(index, option)| {
                 div()
                     .id(index)
-                    .px_2()
-                    .py_0p5()
+                    .map(|segment| match self.size {
+                        ControlSize::Small => segment.px_2().py_0p5(),
+                        ControlSize::Large => segment.px_4().py_1(),
+                    })
                     .when(self.width == ControlWidth::Fill, |segment| {
                         segment.flex_1().flex().justify_center()
                     })
@@ -101,7 +125,12 @@ impl RenderOnce for SegmentedControl {
                             .text_color(theme::muted())
                             .hover(|style| style.text_color(theme::text()))
                     })
-                    .on_click(move |_, window, cx| (option.on_select)(window, cx))
+                    // The click is the option's alone: a clickable row around the
+                    // control (the detail's title row folds the description) ignores it.
+                    .on_click(move |_, window, cx| {
+                        cx.stop_propagation();
+                        (option.on_select)(window, cx);
+                    })
                     .child(option.label)
             }))
     }

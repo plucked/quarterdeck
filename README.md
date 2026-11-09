@@ -36,8 +36,17 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Submit a GitHub review: comment, approve or request changes, with a summary.
 - Local notes copy as Markdown, with the file, the lines and the code around them, ready to paste to an AI agent.
 
+**Briefs written by Claude (experimental)**
+- Switch a pull request from **Diff** to **Brief** and click **Write brief**: Claude Code reads the change's diffs and walks you through it the way a colleague would: why it exists, the context you need, what changes and what stays the same, the order to read it in, how it works, and its limits. It explains; it does not review or judge the change.
+- Before writing, say how well you know the area: **I know this code well** gives just the change, **I know the area roughly** explains the mechanisms it touches, and **I'm new to this area** starts with background on that part of the system, read from the surrounding code. Quarterdeck remembers the answer per repository until you quit.
+- Briefs are kept: a ✦ in the sidebar marks pull requests that have one, and a brief says above it which commit it was written for, and warns with **Write again** when the pull request has moved on since.
+- Something wrong or weird in a brief? **Report…** at the right of the line above it saves your words with everything about how the brief was made (prompt, instructions, Claude's raw answer, what it read) to `~/Library/Application Support/Quarterdeck/brief-reports/`. Hand the folder's `report.md` to a Claude Code session in this repository to improve the brief tool. Code in the brief is quoted from the diff itself, and every quote opens the diff at that line. A larger change reads like a short presentation: pages from the overview through each mechanism to what to check, with tabs to jump and buttons to the next page. Where a picture explains more, the brief draws diagrams: who owns what and where data goes (before and after, when the change reshapes it), state machines, and message sequences.
+- Claude gets a shallow checkout of the pull request's head commit (Git LFS files left out), plus its diff, to follow callers, types and tests. It can only read files in that checkout, which is deleted when the brief is done; it cannot run or change anything. The code it reads is sent to Anthropic.
+- Needs [Claude Code](https://claude.ai/code) installed and logged in, and `git` (Xcode's command line tools). Briefs are kept until you quit.
+- **Window → Brief Gallery** shows every part a brief can have on sample text, without running Claude.
+
 **Acting on a pull request**
-- Merge with any merge method the repository allows, as admin when you may bypass its rules, or through its merge queue. Merging a stack layer merges the layers below it too.
+- From the side panel's Actions tab: merge with any merge method the repository allows, as admin when you may bypass its rules, or through its merge queue. Merging a stack layer merges the layers below it too.
 - Close a pull request, and delete its branch.
 
 **Light on GitHub**
@@ -102,6 +111,8 @@ For working on Quarterdeck itself, [bacon](https://dystroy.org/bacon) rebuilds a
 ```bash
 bacon
 ```
+
+`bacon gallery` does the same and opens the brief gallery each time, for working on how briefs look.
 
 ## Keyboard
 
