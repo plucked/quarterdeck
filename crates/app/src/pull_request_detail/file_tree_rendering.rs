@@ -1,10 +1,10 @@
 use std::ops::Range;
 
 use gpui::{
-    AnyElement, Context, Div, IntoElement, Rgba, Stateful, Styled, div, prelude::*, px, relative,
-    uniform_list,
+    AnyElement, Context, Div, ImageSource, IntoElement, Resource, Rgba, Stateful, Styled, div, img,
+    prelude::*, px, relative, uniform_list,
 };
-use qd_file_tree::{TreeNodeKind, TreeRow};
+use qd_file_tree::{FileIcon, TreeNodeKind, TreeRow};
 
 use super::folder_viewed_state::FolderViewedState;
 use super::line_counts::LineCounts;
@@ -12,6 +12,7 @@ use super::pull_request_detail::PullRequestDetail;
 use super::side_panel_tab::SidePanelTab;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::diff_view::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
+use crate::file_icon_svgs::file_icon_path;
 use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
@@ -29,6 +30,10 @@ const COUNT_FONT_SIZE: f32 = 10.;
 const COUNT_CHARACTER_WIDTH: f32 = 6.1;
 /// Height of the viewed progress bar.
 const PROGRESS_BAR_HEIGHT: f32 = 4.;
+/// Edge length of a file's type icon, centered where a folder's chevron sits.
+const FILE_ICON_SIZE: f32 = 16.;
+/// How visible a viewed file's icon is, so it fades with the name.
+const VIEWED_ICON_OPACITY: f32 = 0.5;
 
 /// Widths of the added and removed columns, wide enough for the largest
 /// count a row shows.
@@ -276,8 +281,9 @@ impl PullRequestDetail {
             .into_any_element()
     }
 
-    /// A file: name, its added and removed lines, a badge when it was
-    /// added, removed or moved, and its viewed box.
+    /// A file: its type icon (in the chevron's column, so file and folder
+    /// names line up), name, its added and removed lines, a badge when it
+    /// was added, removed or moved, and its viewed box.
     fn render_file_row(
         &self,
         base: Stateful<Div>,
@@ -305,7 +311,7 @@ impl PullRequestDetail {
         };
         base.when(is_current, |row| row.bg(theme::selected()))
             .on_click(cx.listener(move |detail, _, _, cx| detail.show_file_in_diff(file, cx)))
-            .child(div().flex_none().w(px(FOLD_CHEVRON_SIZE)))
+            .child(render_file_icon(loaded.facets.icon, is_viewed))
             .child(
                 div()
                     .flex_1()
@@ -333,6 +339,22 @@ impl PullRequestDetail {
             )
             .into_any_element()
     }
+}
+
+/// A file's type icon, centered in a column as wide as a fold chevron;
+/// faded once the file is viewed.
+fn render_file_icon(icon: FileIcon, is_viewed: bool) -> impl IntoElement {
+    let source = ImageSource::Resource(Resource::Embedded(file_icon_path(icon).into()));
+    div()
+        .flex_none()
+        .w(px(FOLD_CHEVRON_SIZE))
+        .flex()
+        .justify_center()
+        .child(
+            img(source)
+                .size(px(FILE_ICON_SIZE))
+                .when(is_viewed, |icon| icon.opacity(VIEWED_ICON_OPACITY)),
+        )
 }
 
 /// The checkbox state for a folder's viewed state.

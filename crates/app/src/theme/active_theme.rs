@@ -24,6 +24,11 @@ pub fn active_colors() -> &'static ThemeColors {
     &all_colors()[ACTIVE_THEME.load(Ordering::Relaxed)]
 }
 
+/// Whether the active theme is dark.
+pub fn is_dark_theme() -> bool {
+    active_colors().is_dark
+}
+
 /// The colors of `theme`, active or not (the settings preview draws any).
 pub fn colors_of(theme: ColorTheme) -> &'static ThemeColors {
     &all_colors()[position_of(theme)]

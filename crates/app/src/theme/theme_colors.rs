@@ -54,6 +54,9 @@ pub struct ThemeColors {
     pub error: Rgba,
     /// Syntax colors in `SyntaxKind::ALL` order.
     syntax: [Rgba; 7],
+    /// Whether the theme is dark: pictures drawn in near-white (some file
+    /// icons) have a darker variant for light themes.
+    pub is_dark: bool,
 }
 
 impl ThemeColors {
@@ -105,6 +108,7 @@ impl ThemeColors {
                 palette.error,
             ]
             .map(rgb),
+            is_dark: palette.is_dark,
         }
     }
 

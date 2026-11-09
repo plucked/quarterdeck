@@ -19,6 +19,7 @@
 //! - `tree_locate_button.rs`: `TreeLocateButton`, the file header's icon button showing the file in the file tree.
 //! - `bundled_fonts.rs`: registers the fonts built into the binary (`Schibsted Grotesk`, `JetBrains Mono`).
 //! - `bundled_icons.rs`: `BundledIcons`, the asset source serving the SVG icons built into the binary.
+//! - `file_icon_svgs.rs`: the SVG of each file icon in the file tree, and which one the active theme draws.
 //! - `github_link.rs`: `GitHubLink`, GitHub's mark as an icon button opening a page on GitHub.
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
@@ -57,6 +58,7 @@ mod display_date;
 mod display_size;
 mod facet_chips;
 mod fetch_stack;
+mod file_icon_svgs;
 mod fold_chevron;
 mod github_link;
 mod launch_app;

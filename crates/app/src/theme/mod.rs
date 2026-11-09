@@ -10,7 +10,7 @@
 //! - `palette.rs`: `Palette`, a theme as designed: name, purpose, its colors.
 //! - `palettes.rs`: the eight palettes and `palette_of`.
 //! - `theme_colors.rs`: `ThemeColors`, every color the views use, worked out from a palette.
-//! - `active_theme.rs`: which theme is active; `set_active_theme`, `colors_of`.
+//! - `active_theme.rs`: which theme is active; `set_active_theme`, `colors_of`, `is_dark_theme`.
 //! - `color_tokens.rs`: the color functions views call (`text()`, `syntax(kind)`, …).
 //! - `theme_fonts.rs`: the interface and code fonts.
 
@@ -21,7 +21,7 @@ mod palettes;
 mod theme_colors;
 mod theme_fonts;
 
-pub use active_theme::{colors_of, set_active_theme};
+pub use active_theme::{colors_of, is_dark_theme, set_active_theme};
 pub use color_tokens::*;
 pub use palettes::palette_of;
 pub use theme_colors::ThemeColors;
