@@ -1,6 +1,7 @@
 //! A pull request's changed files as a folder tree: folders before files,
 //! single-child folders compacted, one order shared with the diff, and the
-//! filter: a viewed switch and chip rows by kind and by file type.
+//! filter: a viewed switch and chip rows by kind and by file type; and each
+//! file's icon.
 //! UI-free; the app's file tree panel renders it.
 //!
 //! Files:
@@ -16,6 +17,8 @@
 //! - `facet_choice.rs`: `FacetChoice`, what one chip is set to.
 //! - `facet_count.rs`: `FacetCount`, one chip's total and matching counts.
 //! - `file_category.rs`: whether a path is a test or generated, and its extension.
+//! - `file_icon.rs`: `FileIcon`, the icon a file shows, picked from its path.
+//! - `file_icon_rules.rs`: the file names, name beginnings and extensions each icon stands for.
 
 mod facet_choice;
 mod facet_count;
@@ -23,6 +26,8 @@ mod facet_filter;
 mod file_category;
 mod file_facets;
 mod file_filter;
+mod file_icon;
+mod file_icon_rules;
 mod file_kind;
 mod file_tree;
 mod filtered_file;
@@ -36,6 +41,7 @@ pub use facet_filter::FacetFilter;
 pub use file_category::{extension_of, file_type_of, is_generated_path, is_test_path};
 pub use file_facets::FileFacets;
 pub use file_filter::FileFilter;
+pub use file_icon::FileIcon;
 pub use file_kind::FileKind;
 pub use file_tree::FileTree;
 pub use filtered_file::FilteredFile;

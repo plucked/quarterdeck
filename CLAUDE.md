@@ -17,7 +17,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: 
 | `qd-markdown` | `crates/markdown` | GitHub-flavored Markdown → typed document (`pulldown-cmark`) |
 | `qd-syntax` | `crates/syntax` | syntax colors for diff hunks (`syntect` + bat's grammars via `two-face`, Graphite theme) |
 | `qd-diff` | `crates/diff` | per-file patch → hunks, side-by-side rows, inline word/char changes, whitespace folding (`similar`) |
-| `qd-file-tree` | `crates/file_tree` | changed files as a folder tree (shared file order), test/generated detection, file filters |
+| `qd-file-tree` | `crates/file_tree` | changed files as a folder tree (shared file order), test/generated detection, file filters, file icons by path |
 | `qd-video` | `crates/video` | movie frames decoded by macOS AVFoundation into BGRA (the startup splash) |
 | `qd-studio` | `crates/studio` | the review studio: widgets an AI agent writes to explain a PR (lead and pages of section, callout, code excerpt/compare, table/trace, scope, reading order, graph, sequence), anchors checked against the diff, the agent's prompt + JSON Schema, a confined headless `claude -p` run |
 | `qd-update` | `crates/update` | self-update: release manifest (`latest.json`), download with SHA-256 check, signature check, bundle swap, relaunch |
