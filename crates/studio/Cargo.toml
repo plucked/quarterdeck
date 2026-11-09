@@ -1,0 +1,18 @@
+[package]
+name = "qd-studio"
+description = "The review studio: the widgets an AI agent composes to explain a pull request, checked against its diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64.workspace = true
+dirs.workspace = true
+qd-diff.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true
+
+[lints]
+workspace = true

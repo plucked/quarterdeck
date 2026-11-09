@@ -15,12 +15,14 @@ qd-diff = { path = "crates/diff" }
 qd-file-tree = { path = "crates/file_tree" }
 qd-github = { path = "crates/github" }
 qd-markdown = { path = "crates/markdown" }
+qd-studio = { path = "crates/studio" }
 qd-syntax = { path = "crates/syntax" }
 qd-update = { path = "crates/update" }
 qd-video = { path = "crates/video" }
 
 # external
 anyhow = "1"
+base64 = "0.22"
 dirs = "7"
 futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
 gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders"] }

@@ -81,6 +81,12 @@ impl GitHubClient {
         }
     }
 
+    /// The token requests are sent with, for git to fetch commits of
+    /// private repositories with.
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+
     /// The login known for the token, once [`Self::viewer_login`] asked.
     pub(crate) fn known_viewer_login(&self) -> &OnceLock<String> {
         &self.viewer_login

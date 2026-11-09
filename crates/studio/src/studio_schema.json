@@ -1,0 +1,674 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "lead",
+    "pages"
+  ],
+  "properties": {
+    "lead": {
+      "type": "string",
+      "description": "At most three plain sentences and about 60 words: the changed behaviour and why, for whom. Shown above the first page; every detail belongs on the pages."
+    },
+    "pages": {
+      "type": "array",
+      "description": "The walk through the change, in the order to read it: 1 page for a small change, up to 6 for a broad one, up to 10 for a combined stack of many layers. Each page answers one question the reader has.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "summary",
+          "widgets"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "A short tab name, at most about 20 characters, e.g. 'Overview', 'The hold', 'What to check'."
+          },
+          "summary": {
+            "type": "string",
+            "description": "One sentence saying what this page answers or concludes; shown under the title and on the button leading to the page."
+          },
+          "widgets": {
+            "type": "array",
+            "description": "The page's blocks in reading order.",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/section"
+                },
+                {
+                  "$ref": "#/$defs/scope"
+                },
+                {
+                  "$ref": "#/$defs/tour"
+                },
+                {
+                  "$ref": "#/$defs/callout"
+                },
+                {
+                  "$ref": "#/$defs/code_excerpt"
+                },
+                {
+                  "$ref": "#/$defs/code_compare"
+                },
+                {
+                  "$ref": "#/$defs/table"
+                },
+                {
+                  "$ref": "#/$defs/trace"
+                },
+                {
+                  "$ref": "#/$defs/graph"
+                },
+                {
+                  "$ref": "#/$defs/sequence"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "side",
+        "start_line",
+        "end_line"
+      ],
+      "description": "Lines of one changed file, numbered on one side of the diff listing. The first and last line must appear in the listing on that side.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "The file path exactly as in the listing's ### heading."
+        },
+        "side": {
+          "type": "string",
+          "enum": [
+            "base",
+            "head"
+          ],
+          "description": "base: the left (old) numbers; head: the right (new) numbers."
+        },
+        "start_line": {
+          "type": "integer"
+        },
+        "end_line": {
+          "type": "integer"
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "heading",
+        "body"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "section"
+          ]
+        },
+        "heading": {
+          "type": "string",
+          "description": "Names the mechanism or consequence, e.g. 'Clear tracking only for a field included in the write'."
+        },
+        "body": {
+          "type": "string",
+          "description": "Markdown prose. No code blocks longer than one line: use code_excerpt or code_compare to show code."
+        }
+      }
+    },
+    "callout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "tone",
+        "text"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "callout"
+          ]
+        },
+        "tone": {
+          "type": "string",
+          "enum": [
+            "note",
+            "constraint",
+            "verdict",
+            "evidence"
+          ],
+          "description": "note: context the reader needs; constraint: a limit or side effect, with cause and effect; verdict: the one consequence that matters most (a fact about behaviour, never a judgement of quality); evidence: what the pull request's tests or description show, and what nothing shows."
+        },
+        "text": {
+          "type": "string",
+          "description": "Markdown, one or two sentences. A constraint states its cause and effect."
+        }
+      }
+    },
+    "code_excerpt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "caption",
+        "anchor"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "code_excerpt"
+          ]
+        },
+        "caption": {
+          "type": "string",
+          "description": "What to see in these lines."
+        },
+        "anchor": {
+          "$ref": "#/$defs/anchor"
+        }
+      }
+    },
+    "code_compare": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "caption",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "code_compare"
+          ]
+        },
+        "caption": {
+          "type": "string"
+        },
+        "before": {
+          "$ref": "#/$defs/anchor",
+          "description": "side must be base."
+        },
+        "after": {
+          "$ref": "#/$defs/anchor",
+          "description": "side must be head; the same logical place as before."
+        }
+      }
+    },
+    "table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "title",
+        "columns",
+        "rows"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "table"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "description": "Each row has exactly one cell per column. Cells are short inline Markdown.",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "title",
+        "columns",
+        "rows"
+      ],
+      "description": "A numbered sequence of steps, e.g. columns Action | Before the change | After the change for the minimal failing case.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "trace"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "title",
+        "groups",
+        "nodes",
+        "edges"
+      ],
+      "description": "Boxes and labelled arrows, laid out by the app from left to right along the arrows: ownership, data and control paths, dependencies, state transitions. 2 to 14 nodes, at most 24 edges, at most 5 groups.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "graph"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "description": "Names what the graph shows, e.g. 'Who owns the refresh schedule'."
+        },
+        "groups": {
+          "type": "array",
+          "description": "Real boundaries only: a thread, process, crate or machine. May be empty.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label",
+              "detail",
+              "role",
+              "group",
+              "anchor",
+              "change"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique within the graph; edges use it."
+              },
+              "label": {
+                "type": "string",
+                "description": "A short name, at most about 24 characters, e.g. 'World thread'."
+              },
+              "detail": {
+                "type": "string",
+                "description": "One short line on what it does or holds, at most about 40 characters; may be empty."
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "actor",
+                  "owner",
+                  "transport",
+                  "store",
+                  "constraint",
+                  "external"
+                ],
+                "description": "actor: thread, task, process or user action; owner: the single owner of some state; transport: channel, queue, socket or request; store: database, cache, file; constraint: a limit or invariant; external: a system outside the change."
+              },
+              "group": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The id of the group it sits in, or null."
+              },
+              "anchor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/anchor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The lines that implement it, or null; clicking the box opens them."
+              },
+              "change": {
+                "type": "string",
+                "enum": [
+                  "same",
+                  "added",
+                  "removed"
+                ],
+                "description": "same: before and after the change; added: only after; removed: only before. Any added or removed part makes the app draw the graph twice, before and after, at the same positions."
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to",
+              "label",
+              "style",
+              "change"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "A node id."
+              },
+              "to": {
+                "type": "string",
+                "description": "A node id."
+              },
+              "label": {
+                "type": "string",
+                "description": "What the arrow carries or why the transition happens, at most about 30 characters. Required: an unnamed arrow explains nothing."
+              },
+              "style": {
+                "type": "string",
+                "enum": [
+                  "control",
+                  "data",
+                  "async",
+                  "optional"
+                ],
+                "description": "control: a call or decision passed on; data: data handed over without passing control; async: a message that does not wait; optional: happens only in some cases."
+              },
+              "change": {
+                "type": "string",
+                "enum": [
+                  "same",
+                  "added",
+                  "removed"
+                ],
+                "description": "same: before and after the change; added: only after; removed: only before. Any added or removed part makes the app draw the graph twice, before and after, at the same positions."
+              }
+            }
+          }
+        }
+      }
+    },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "title",
+        "lanes",
+        "messages"
+      ],
+      "description": "A static swimlane: participants as columns, messages as arrows in time order, top to bottom. For concurrency, waits and protocols. 2 to 6 lanes, 1 to 24 messages.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "sequence"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "lanes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label",
+              "role"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string",
+                "description": "A short name, at most about 20 characters."
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "actor",
+                  "owner",
+                  "transport",
+                  "store",
+                  "constraint",
+                  "external"
+                ],
+                "description": "actor: thread, task, process or user action; owner: the single owner of some state; transport: channel, queue, socket or request; store: database, cache, file; constraint: a limit or invariant; external: a system outside the change."
+              }
+            }
+          }
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to",
+              "label",
+              "style",
+              "note",
+              "anchor"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "A lane id."
+              },
+              "to": {
+                "type": "string",
+                "description": "A lane id; the same as from for work a participant does on its own."
+              },
+              "label": {
+                "type": "string",
+                "description": "What is sent, at most about 40 characters."
+              },
+              "style": {
+                "type": "string",
+                "enum": [
+                  "call",
+                  "reply",
+                  "async"
+                ],
+                "description": "call: the sender waits; reply: the answer to a call; async: sent without waiting."
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "A short remark shown under the label, such as what is held or blocked meanwhile, or null."
+              },
+              "anchor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/anchor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The lines that send it, or null."
+              }
+            }
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "changes",
+        "unchanged",
+        "mechanical"
+      ],
+      "description": "What the change covers, as facts taken from the diff. Every item is a short inline-Markdown line; a list may be empty.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "scope"
+          ]
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The behaviour that changes, at most about six items: group related changes into one item rather than listing each edit."
+        },
+        "unchanged": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What a reader might expect to change but deliberately does not, at most about four items."
+        },
+        "mechanical": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Renames, moves, formatting, generated or lock files that can be skimmed, at most about four items, with paths."
+        }
+      }
+    },
+    "tour": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "title",
+        "steps"
+      ],
+      "description": "The order to read the change in, instead of the alphabetical file list: foundations (types, schema, interfaces) before the code that uses them, the core early, mechanical pieces last. 2 to 9 steps.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "tour"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "title",
+              "explanation",
+              "weight",
+              "anchor"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "Names the piece, e.g. 'The hold is computed from resets_at'."
+              },
+              "explanation": {
+                "type": "string",
+                "description": "One or two sentences: what this piece does for the change. Not a restatement of the lines."
+              },
+              "weight": {
+                "type": "string",
+                "enum": [
+                  "core",
+                  "supporting",
+                  "mechanical"
+                ],
+                "description": "core: where the behaviour lives, read closely; supporting: call sites, wiring, tests; mechanical: renames, moves, formatting, generated files, skim."
+              },
+              "anchor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/anchor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The line where the piece starts in the listing (only the start line is used), or null when it spans files with no single start."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
