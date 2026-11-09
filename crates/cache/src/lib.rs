@@ -50,6 +50,9 @@
 //! - `others_filter.rs`: `OthersFilter` and `RepositoryOthersFilter`, how the Others tab narrows a repository's pull requests.
 //! - `updated_within.rs`: `UpdatedWithin`, how recently an Others pull request was updated.
 //! - `others_filter_storage.rs`: reads and writes of the Others filters.
+//! - `hidden_branch_rule.rs`: `HiddenBranchRule`, a pattern hiding pull requests by branch.
+//! - `branch_side.rs`: `BranchSide`, which branch of a pull request a rule looks at.
+//! - `hidden_branch_rules_storage.rs`: reads and writes of the hidden branch rules.
 //! - `folded_groups.rs`: `FoldedGroups` and `FoldedStack`, the sidebar groups the user folded.
 //! - `folded_groups_storage.rs`: reads and writes of the folded groups.
 //! - `stack_review_mode.rs`: `StackReviewMode`, one layer or combined layers.
@@ -65,6 +68,7 @@
 //! - `review_notes_storage.rs`: reads and writes of notes and summaries.
 
 mod appearance_settings_storage;
+mod branch_side;
 mod brief_index;
 mod brief_sql_text;
 mod brief_storage;
@@ -91,6 +95,8 @@ mod file_text_storage;
 mod folded_groups;
 mod folded_groups_storage;
 mod github_cache;
+mod hidden_branch_rule;
+mod hidden_branch_rules_storage;
 mod line_wrapping;
 mod note_anchor;
 mod note_destination;
@@ -125,6 +131,7 @@ mod watched_repositories_storage;
 mod window_mode;
 mod window_placement;
 
+pub use branch_side::BranchSide;
 pub use brief_index::BriefIndex;
 pub use cache_ttl::CacheTtl;
 pub use cache_usage::{CacheUsage, CachedData};
@@ -139,6 +146,7 @@ pub use display_uuid::DisplayUuid;
 pub use file_set_revision::FileSetRevision;
 pub use folded_groups::{FoldedGroups, FoldedStack};
 pub use github_cache::GitHubCache;
+pub use hidden_branch_rule::HiddenBranchRule;
 pub use line_wrapping::LineWrapping;
 pub use note_anchor::NoteAnchor;
 pub use note_destination::NoteDestination;

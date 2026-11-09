@@ -1,8 +1,8 @@
 use gpui::{
-    App, Context, Entity, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window,
-    div, prelude::*, px,
+    App, Context, Entity, FocusHandle, FontWeight, IntoElement, Render, SharedString, Subscription,
+    Task, Window, div, prelude::*, px,
 };
-use qd_cache::{CacheUsage, ColorTheme};
+use qd_cache::{BranchSide, CacheUsage, ColorTheme};
 
 use super::add_repository_status::AddRepositoryStatus;
 use super::file_diff_page::render_file_diff_page;
@@ -49,9 +49,15 @@ pub struct SettingsWindow {
     pub(super) queue_repositories: Vec<qd_github::RepoRef>,
     /// The read of `queue_repositories` in flight.
     pub(super) queue_repositories_task: Option<Task<()>>,
+    /// Where a branch pattern to hide is typed.
+    pub(super) branch_pattern_input: Entity<TextArea>,
+    /// Which branch the next added pattern looks at.
+    pub(super) branch_rule_side: BranchSide,
+    /// Why the typed pattern could not be added, when it could not.
+    pub(super) branch_rule_error: Option<SharedString>,
     /// Keep the observers of [`AppSettings`], the updater and the text
     /// fields registered for the view's lifetime.
-    _subscriptions: [Subscription; 4],
+    _subscriptions: [Subscription; 5],
 }
 
 impl SettingsWindow {
@@ -63,6 +69,7 @@ impl SettingsWindow {
         // cmd-enter in the token field signs in, like the button.
         let token_input = cx.new(|cx| TextArea::new("ghp_…", cx));
         let repository_input = cx.new(|cx| TextArea::new("owner/name or a GitHub link", cx));
+        let branch_pattern_input = cx.new(|cx| TextArea::new("feat/something*", cx));
         let subscriptions = [
             cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
             cx.observe(&AppUpdater::global(cx), |_, _, cx| cx.notify()),
@@ -75,7 +82,18 @@ impl SettingsWindow {
             cx.subscribe(
                 &repository_input,
                 |settings, input, event: &TextAreaEvent, cx| {
-                    settings.on_repository_input_event(&input, *event, cx);
+                    if is_one_line_submit(&input, *event, cx) {
+                        settings.add_typed_repository(cx);
+                    }
+                },
+            ),
+            // The same for the branch pattern field: return adds the pattern.
+            cx.subscribe(
+                &branch_pattern_input,
+                |settings, input, event: &TextAreaEvent, cx| {
+                    if is_one_line_submit(&input, *event, cx) {
+                        settings.add_typed_branch_rule(cx);
+                    }
                 },
             ),
         ];
@@ -94,29 +112,14 @@ impl SettingsWindow {
             add_repository_task: None,
             queue_repositories: Vec::new(),
             queue_repositories_task: None,
+            branch_pattern_input,
+            branch_rule_side: BranchSide::default(),
+            branch_rule_error: None,
             _subscriptions: subscriptions,
         };
         settings.read_cache_usage(cx);
         settings.read_queue_repositories(cx);
         settings
-    }
-
-    /// Adds the typed repository on return or cmd-enter: a newline typed
-    /// into the one-line field is taken out and counts as the submit.
-    fn on_repository_input_event(
-        &mut self,
-        input: &Entity<TextArea>,
-        event: TextAreaEvent,
-        cx: &mut Context<Self>,
-    ) {
-        let text = input.read(cx).text().to_owned();
-        let has_newline = text.contains('\n');
-        if has_newline {
-            input.update(cx, |input, cx| input.set_text(text.replace('\n', ""), cx));
-        }
-        if event == TextAreaEvent::Submit || has_newline {
-            self.add_typed_repository(cx);
-        }
     }
 
     /// Reads what the cache holds off the main thread (it sums every cached
@@ -249,6 +252,7 @@ impl Render for SettingsWindow {
                 .into_any_element()
             }
             SettingsCategory::Repositories => self.render_repositories_page(cx),
+            SettingsCategory::Filters => self.render_filters_page(cx),
             SettingsCategory::Updates => render_updates_page(cx).into_any_element(),
         };
         div()
@@ -281,4 +285,19 @@ impl Render for SettingsWindow {
                     .child(page),
             )
     }
+}
+
+/// Whether `event` of the one-line field `input` submits it: return or
+/// cmd-enter. A newline typed into it is taken out and counts as the submit.
+fn is_one_line_submit(
+    input: &Entity<TextArea>,
+    event: TextAreaEvent,
+    cx: &mut Context<SettingsWindow>,
+) -> bool {
+    let text = input.read(cx).text().to_owned();
+    let has_newline = text.contains('\n');
+    if has_newline {
+        input.update(cx, |input, cx| input.set_text(text.replace('\n', ""), cx));
+    }
+    event == TextAreaEvent::Submit || has_newline
 }

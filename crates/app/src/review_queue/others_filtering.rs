@@ -180,6 +180,7 @@ mod tests {
             draft,
             created_at: String::new(),
             updated_at: updated_at.into(),
+            branches: None,
             labels: labels
                 .iter()
                 .map(|name| Label {

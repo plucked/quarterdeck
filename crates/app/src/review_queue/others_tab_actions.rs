@@ -67,10 +67,16 @@ impl ReviewQueue {
         *self.lists_mut() = lists;
     }
 
-    /// Follows a change of the watched repositories: shows the new set at
-    /// once (a removed one goes, an added one shows empty) and refreshes,
+    /// Follows a change of the settings: changed hidden branch rules show
+    /// the lists again; changed watched repositories show the new set at
+    /// once (a removed one goes, an added one shows empty) and refresh,
     /// which fetches the added one's pull requests.
     pub(super) fn on_settings_changed(&mut self, cx: &mut Context<Self>) {
+        // Changed hidden branch rules show the lists again, without refetching.
+        if self.hidden_branch_rules() != AppSettings::hidden_branch_rules(cx) {
+            let fetched = self.take_fetched();
+            self.replace_lists(fetched, cx);
+        }
         let watched = AppSettings::watched_repositories(cx).to_vec();
         if !self.others_tab_mut().set_watched(&watched) {
             return;

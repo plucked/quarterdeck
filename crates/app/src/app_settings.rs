@@ -1,7 +1,7 @@
 //! `AppSettings`: the user's preferences, shared by every window.
 
 use gpui::{App, BorrowAppContext, Global};
-use qd_cache::{CacheTtl, ColorTheme, DiffViewSettings};
+use qd_cache::{CacheTtl, ColorTheme, DiffViewSettings, HiddenBranchRule};
 use qd_github::RepoRef;
 
 use crate::theme;
@@ -19,6 +19,9 @@ pub struct AppSettings {
     /// The repositories whose other open pull requests the Others tab lists,
     /// in the order they were added.
     watched_repositories: Vec<RepoRef>,
+    /// The rules hiding pull requests from every queue tab by branch, in
+    /// the order they were added.
+    hidden_branch_rules: Vec<HiddenBranchRule>,
 }
 
 impl Global for AppSettings {}
@@ -33,6 +36,7 @@ impl AppSettings {
             cache_ttl: recorder.saved_cache_ttl().unwrap_or_default(),
             color_theme: recorder.saved_color_theme().unwrap_or_default(),
             watched_repositories: recorder.saved_watched_repositories(),
+            hidden_branch_rules: recorder.saved_hidden_branch_rules(),
         };
         theme::set_active_theme(settings.color_theme);
         settings
@@ -100,5 +104,20 @@ impl AppSettings {
         cx.update_global::<Self, _>(|app_settings, _| {
             app_settings.watched_repositories = repositories;
         });
+    }
+
+    /// The rules hiding pull requests from every queue tab by branch.
+    pub fn hidden_branch_rules(cx: &App) -> &[HiddenBranchRule] {
+        &cx.global::<Self>().hidden_branch_rules
+    }
+
+    /// Changes the rules hiding pull requests by branch and saves them;
+    /// observers (the queue shows its lists again) are notified only on a change.
+    pub fn set_hidden_branch_rules(cx: &mut App, rules: Vec<HiddenBranchRule>) {
+        if Self::hidden_branch_rules(cx) == rules.as_slice() {
+            return;
+        }
+        UiStateRecorder::record_hidden_branch_rules(cx, rules.clone());
+        cx.update_global::<Self, _>(|app_settings, _| app_settings.hidden_branch_rules = rules);
     }
 }

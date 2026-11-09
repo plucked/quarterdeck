@@ -37,6 +37,7 @@ impl SearchIssue {
             updated_at: self.updated_at,
             labels: self.labels,
             stack: None,
+            branches: None,
         })
     }
 }

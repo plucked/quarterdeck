@@ -7,16 +7,16 @@ use ureq::http::{HeaderMap, Response, StatusCode};
 use ureq::{Body, RequestBuilder};
 
 use crate::graphql_response::GraphQlResponse;
+use crate::listed_details_query::{LISTED_DETAILS_QUERY, ListedDetailsData};
 use crate::next_page_url::next_page_url;
 use crate::other_pull_requests::others_search_queries;
 use crate::pull_request_revision::PullRequestRefs;
 use crate::pull_request_stack::StackResponse;
 use crate::search_issue::SearchIssue;
 use crate::search_response::SearchResponse;
-use crate::stack_membership_query::{STACK_MEMBERSHIP_QUERY, StackMembershipData};
 use crate::unified_diff::files_of_unified_diff;
 use crate::{
-    ApiUsage, ConditionalResponse, DownloadProgress, ETag, GitHubError, ListedStackMembership,
+    ApiUsage, ConditionalResponse, DownloadProgress, ETag, GitHubError, ListedPullRequestDetails,
     PullRequest, PullRequestFile, PullRequestStack, RateLimit, RateLimitResource, RepoRef,
     RevisionCheck,
 };
@@ -109,18 +109,18 @@ impl GitHubClient {
         self.search_pull_requests(AUTHORED_QUERY)
     }
 
-    /// Where the pull requests of the lists sit in their stacks: the
-    /// viewer's, those requesting the viewer's review, and others' in
-    /// `other_repositories` (the 100 most recently updated of the first ten
-    /// repositories); standalone ones are left out. One GraphQL request (the
-    /// search API lacks stacks).
-    pub fn stack_memberships(
+    /// The branches of the pull requests in the lists and where they sit
+    /// in their stacks: the viewer's, those requesting the viewer's review,
+    /// and others' in `other_repositories` (the 100 most recently updated of
+    /// the first ten repositories). One GraphQL request (the search API
+    /// lacks both).
+    pub fn listed_details(
         &self,
         other_repositories: &[RepoRef],
-    ) -> Result<Vec<ListedStackMembership>, GitHubError> {
+    ) -> Result<Vec<ListedPullRequestDetails>, GitHubError> {
         let others = others_search_queries(other_repositories).into_iter().next();
-        let data: StackMembershipData = self.graphql(
-            STACK_MEMBERSHIP_QUERY,
+        let data: ListedDetailsData = self.graphql(
+            LISTED_DETAILS_QUERY,
             &serde_json::json!({
                 "authored": AUTHORED_QUERY,
                 "reviewRequested": REVIEW_REQUESTED_QUERY,
@@ -128,7 +128,7 @@ impl GitHubClient {
                 "others": others.unwrap_or_default(),
             }),
         )?;
-        Ok(data.into_memberships())
+        Ok(data.into_details())
     }
 
     /// The HTTP agent, for requests built in sibling files.

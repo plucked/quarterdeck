@@ -31,8 +31,10 @@
 //! - `revision_check.rs`: `RevisionCheck`, a pull request's commits and file count.
 //! - `download_progress.rs`: `DownloadProgress`, the bytes of a body received so far.
 //! - `stack_membership.rs`: `StackMembership`, where a pull request sits in its stack.
-//! - `listed_stack_membership.rs`: `ListedStackMembership`, a listed pull request's membership.
-//! - `stack_membership_query.rs`: the GraphQL query for the memberships and its response.
+//! - `listed_pull_request_details.rs`: `ListedPullRequestDetails`, a listed pull request's branches and stack membership.
+//! - `listed_details_query.rs`: the GraphQL query for those details and its response.
+//! - `pull_request_branches.rs`: `PullRequestBranches`, the branches a pull request comes from and goes into.
+//! - `branch_lookup_query.rs`: the GraphQL query for the branches of chosen pull requests of one repository.
 //! - `pull_request_stack.rs`: `PullRequestStack`, a stack with its layers, and its response shape.
 //! - `stack_layer.rs`: `StackLayer`, one pull request of a stack.
 //! - `unified_diff.rs`: splits a `git diff` into changed files.
@@ -55,6 +57,7 @@
 //! - `file_text_requests.rs`: `GitHubClient::file_text`, by blob (REST) or path (GraphQL).
 
 mod api_usage;
+mod branch_lookup_query;
 mod conditional_response;
 mod download_avatar;
 mod download_progress;
@@ -69,7 +72,8 @@ mod graphql_response;
 mod keychain_token;
 mod label;
 mod line_side;
-mod listed_stack_membership;
+mod listed_details_query;
+mod listed_pull_request_details;
 mod merge_method;
 mod merge_options;
 mod merge_outcome;
@@ -78,6 +82,7 @@ mod next_page_url;
 mod other_pull_requests;
 mod other_pull_requests_update;
 mod pull_request;
+mod pull_request_branches;
 mod pull_request_file;
 mod pull_request_requests;
 mod pull_request_review_state;
@@ -98,7 +103,6 @@ mod search_issue;
 mod search_response;
 mod stack_layer;
 mod stack_membership;
-mod stack_membership_query;
 mod token_source;
 mod unified_diff;
 mod user;
@@ -116,7 +120,7 @@ pub use github_error::GitHubError;
 pub use keychain_token::{delete_stored_token, store_token, stored_token};
 pub use label::Label;
 pub use line_side::LineSide;
-pub use listed_stack_membership::ListedStackMembership;
+pub use listed_pull_request_details::ListedPullRequestDetails;
 pub use merge_method::MergeMethod;
 pub use merge_options::{
     MergeOptions, MergePermissions, MergeQueueState, MergeReadiness, PullRequestState,
@@ -124,6 +128,7 @@ pub use merge_options::{
 pub use merge_outcome::MergeOutcome;
 pub use other_pull_requests_update::OtherPullRequestsUpdate;
 pub use pull_request::PullRequest;
+pub use pull_request_branches::PullRequestBranches;
 pub use pull_request_file::PullRequestFile;
 pub use pull_request_review_state::PullRequestReviewState;
 pub use pull_request_revision::PullRequestRevision;

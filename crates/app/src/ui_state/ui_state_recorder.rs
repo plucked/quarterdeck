@@ -7,10 +7,10 @@ use gpui::{App, AsyncApp, BorrowAppContext, Global, Task};
 
 use super::review_change::ReviewChange;
 use qd_cache::{
-    BriefIndex, CacheTtl, ColorTheme, DiffViewSettings, FoldedGroups, NoteDestination,
-    OthersFilter, PanelWidths, RepositoryOthersFilter, ReviewLayoutState, ReviewNote,
-    ReviewQueueViewState, ReviewScope, ReviewSummary, StoredBrief, UiStateStore, ViewedFile,
-    WindowPlacement,
+    BriefIndex, CacheTtl, ColorTheme, DiffViewSettings, FoldedGroups, HiddenBranchRule,
+    NoteDestination, OthersFilter, PanelWidths, RepositoryOthersFilter, ReviewLayoutState,
+    ReviewNote, ReviewQueueViewState, ReviewScope, ReviewSummary, StoredBrief, UiStateStore,
+    ViewedFile, WindowPlacement,
 };
 use qd_github::RepoRef;
 use qd_studio::{BriefRecord, Studio};
@@ -32,6 +32,7 @@ struct PendingUiState {
     side_panel_width: Option<f32>,
     folded_groups: Option<FoldedGroups>,
     watched_repositories: Option<Vec<RepoRef>>,
+    hidden_branch_rules: Option<Vec<HiddenBranchRule>>,
     /// The latest Others filter of each repository changed.
     others_filters: HashMap<RepoRef, OthersFilter>,
     /// Every viewed mark change, in the order made: unlike settings, each counts.
@@ -52,6 +53,7 @@ impl PendingUiState {
             && self.side_panel_width.is_none()
             && self.folded_groups.is_none()
             && self.watched_repositories.is_none()
+            && self.hidden_branch_rules.is_none()
             && self.others_filters.is_empty()
             && self.viewed_changes.is_empty()
             && self.review_changes.is_empty()
@@ -213,6 +215,25 @@ impl UiStateRecorder {
     pub fn record_watched_repositories(cx: &mut App, repositories: Vec<RepoRef>) {
         cx.update_global::<Self, _>(|recorder, cx| {
             recorder.pending.watched_repositories = Some(repositories);
+            recorder.schedule_write(WRITE_DELAY, cx);
+        });
+    }
+
+    /// The rules hiding pull requests by branch, as saved; none when there
+    /// are none or they no longer read. Reads on the main thread at startup only.
+    pub fn saved_hidden_branch_rules(&self) -> Vec<HiddenBranchRule> {
+        self.lock_store()
+            .hidden_branch_rules()
+            .unwrap_or_else(|error| {
+                report_unreadable::<()>("hidden branch rules", &error);
+                Vec::new()
+            })
+    }
+
+    /// Records the rules hiding pull requests by branch and schedules a write.
+    pub fn record_hidden_branch_rules(cx: &mut App, rules: Vec<HiddenBranchRule>) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.pending.hidden_branch_rules = Some(rules);
             recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
@@ -410,6 +431,11 @@ fn write_pending(store: &Mutex<UiStateStore>, pending: &PendingUiState) {
         && let Err(error) = store.put_watched_repositories(repositories)
     {
         eprintln!("ui state: cannot save the watched repositories: {error:#}");
+    }
+    if let Some(rules) = &pending.hidden_branch_rules
+        && let Err(error) = store.put_hidden_branch_rules(rules)
+    {
+        eprintln!("ui state: cannot save the hidden branch rules: {error:#}");
     }
     for (repo, filter) in &pending.others_filters {
         if let Err(error) = store.put_others_filter(repo, filter) {

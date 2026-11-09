@@ -619,6 +619,18 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
         PRIMARY KEY (brief_id, position)
     );
 ",
+    r"
+    -- The branches a pull request comes from and goes into (NULL until GraphQL answered).
+    ALTER TABLE pull_requests ADD COLUMN head_ref TEXT;
+    ALTER TABLE pull_requests ADD COLUMN base_ref TEXT;
+
+    -- Rules hiding pull requests from every queue tab by branch name: a preference.
+    CREATE TABLE hidden_branch_rules (
+        position  INTEGER PRIMARY KEY CHECK (position >= 0),
+        pattern   TEXT    NOT NULL CHECK (pattern <> ''),
+        side      TEXT    NOT NULL CHECK (side IN ('head', 'base', 'either'))
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

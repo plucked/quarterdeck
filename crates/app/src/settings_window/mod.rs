@@ -15,11 +15,13 @@
 //! - `sign_in_status.rs`: `SignInStatus`, where signing in with a token stands.
 //! - `repositories_page.rs`: the Repositories category: the repositories the Others tab lists, adding (checked with GitHub) and removing.
 //! - `add_repository_status.rs`: `AddRepositoryStatus`, where adding a typed repository stands.
+//! - `filters_page.rs`: the Filters category: the rules hiding pull requests from every queue tab by branch.
 //! - `updates_page.rs`: the Updates category: the version, update status, release notes, restart.
 
 mod add_repository_status;
 mod appearance_page;
 mod file_diff_page;
+mod filters_page;
 mod github_page;
 mod github_sign_in;
 mod open_settings_window;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
-use qd_github::{Label, PullRequest, RepoRef, StackMembership, User};
+use qd_github::{Label, PullRequest, PullRequestBranches, RepoRef, StackMembership, User};
 use rusqlite::{Connection, Row, Transaction, params};
 
 use crate::PullRequestListKey;
@@ -13,7 +13,7 @@ use crate::unix_now::unix_now;
 /// The columns [`pull_request_from_row`] reads, in order, from `pull_requests p`.
 const PULL_REQUEST_COLUMNS: &str = "p.id, p.repo_owner, p.repo_name, p.number, p.title, p.body,
     p.author_login, p.author_avatar_url, p.html_url, p.draft, p.created_at, p.updated_at,
-    p.stack_number, p.stack_position, p.stack_size, p.stack_base_ref";
+    p.stack_number, p.stack_position, p.stack_size, p.stack_base_ref, p.head_ref, p.base_ref";
 
 /// The SQLite connection holding cached GitHub data, one typed column per
 /// field: pull requests and lists here, changed files in
@@ -216,12 +216,14 @@ fn upsert_pull_request_row(
     fetched_at: i64,
 ) -> Result<()> {
     let stack = pull_request.stack.as_ref();
+    let branches = pull_request.branches.as_ref();
     transaction.execute(
         "INSERT INTO pull_requests (
             id, repo_owner, repo_name, number, title, body, author_login,
             author_avatar_url, html_url, draft, created_at, updated_at, fetched_at,
-            stack_number, stack_position, stack_size, stack_base_ref)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            stack_number, stack_position, stack_size, stack_base_ref, head_ref, base_ref)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+            ?18, ?19)
          ON CONFLICT (id) DO UPDATE SET
             repo_owner        = excluded.repo_owner,
             repo_name         = excluded.repo_name,
@@ -238,7 +240,9 @@ fn upsert_pull_request_row(
             stack_number      = excluded.stack_number,
             stack_position    = excluded.stack_position,
             stack_size        = excluded.stack_size,
-            stack_base_ref    = excluded.stack_base_ref",
+            stack_base_ref    = excluded.stack_base_ref,
+            head_ref          = excluded.head_ref,
+            base_ref          = excluded.base_ref",
         params![
             id,
             pull_request.repo.owner,
@@ -257,6 +261,8 @@ fn upsert_pull_request_row(
             stack.map(|stack| sql_integer(stack.position)).transpose()?,
             stack.map(|stack| sql_integer(stack.size)).transpose()?,
             stack.map(|stack| stack.base_ref.as_str()),
+            branches.map(|branches| branches.head_ref.as_str()),
+            branches.map(|branches| branches.base_ref.as_str()),
         ],
     )?;
     Ok(())
@@ -284,7 +290,17 @@ fn pull_request_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequest> {
         // Read from `pr_labels` by the caller.
         labels: Vec::new(),
         stack: stack_membership_from_row(row)?,
+        branches: branches_from_row(row)?,
     })
+}
+
+/// The branch columns of a pull request row; `None` unless both are set.
+fn branches_from_row(row: &Row<'_>) -> rusqlite::Result<Option<PullRequestBranches>> {
+    let head_ref: Option<String> = row.get(16)?;
+    let base_ref: Option<String> = row.get(17)?;
+    Ok(head_ref
+        .zip(base_ref)
+        .map(|(head_ref, base_ref)| PullRequestBranches { head_ref, base_ref }))
 }
 
 /// The stack columns of a pull request row; `None` unless all are set.
@@ -326,6 +342,7 @@ mod tests {
             draft: false,
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: updated_at.into(),
+            branches: None,
             labels: Vec::new(),
             stack: None,
         }
@@ -377,6 +394,10 @@ mod tests {
             number: 3,
             position: 2,
             size: 4,
+            base_ref: "main".into(),
+        });
+        stored.branches = Some(PullRequestBranches {
+            head_ref: "feat/x".into(),
             base_ref: "main".into(),
         });
         cache

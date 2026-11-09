@@ -50,6 +50,7 @@ mod tests {
             draft: false,
             created_at: String::new(),
             updated_at: String::new(),
+            branches: None,
             labels: Vec::new(),
             stack: None,
         }

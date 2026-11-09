@@ -6,15 +6,17 @@ use gpui::{
     Subscription, Task, Window, div, prelude::*, px,
 };
 use qd_cache::{
-    BriefIndex, DetailScrollPosition, PanelVisibility, PullRequestListKey, QueueTab,
-    ReviewQueueViewState,
+    BriefIndex, DetailScrollPosition, HiddenBranchRule, PanelVisibility, PullRequestListKey,
+    QueueTab, ReviewQueueViewState,
 };
 use qd_github::{
-    GitHubClient, GitHubError, PullRequest, PullRequestStack, RepoRef, StackMembership,
+    GitHubClient, GitHubError, PullRequest, PullRequestBranches, PullRequestStack, RepoRef,
+    StackMembership,
 };
 
 use super::activation_refresh::ActivationRefresh;
 use super::collapsed_groups::CollapsedGroups;
+use super::hidden_branches::without_hidden_branches;
 use super::others_tab::OthersTab;
 use super::queue_lists::QueueLists;
 use super::queue_row::QueueRow;
@@ -49,17 +51,25 @@ struct PendingRestore {
     detail_scroll: DetailScrollPosition,
 }
 
-/// Stack memberships by repository and pull request number.
-type Memberships = HashMap<(RepoRef, u64), StackMembership>;
+/// What GraphQL tells of a listed pull request that the search and issues
+/// APIs do not: its branches and its stack membership.
+#[derive(Debug, Clone, Default)]
+struct ListedDetails {
+    branches: Option<PullRequestBranches>,
+    stack: Option<StackMembership>,
+}
+
+/// Listed details by repository and pull request number.
+type DetailsByNumber = HashMap<(RepoRef, u64), ListedDetails>;
 
 /// The viewer's own lists as a refresh fetched them (the first part of a
-/// refresh), with their stacks filled in, and the memberships for others'.
+/// refresh), with their branches and stacks filled in, and the details for others'.
 struct OwnLists {
     authored: Vec<PullRequest>,
     review_requested: Vec<PullRequest>,
-    memberships: Memberships,
-    /// Why the stacks could not be read, when they could not (the lists keep the last known ones).
-    stack_error: Option<String>,
+    details: DetailsByNumber,
+    /// Why the details could not be read, when they could not (the lists keep the last known ones).
+    details_error: Option<String>,
 }
 
 /// Others' pull requests as a refresh fetched them (its second part).
@@ -79,7 +89,7 @@ struct FetchedOthers {
 /// and what is known already, kept when part of the refresh fails.
 struct RefreshInput {
     watched: Vec<RepoRef>,
-    known_memberships: Memberships,
+    known_details: DetailsByNumber,
     known_others: Vec<PullRequest>,
     /// Where each repository's last sync this session ended.
     others_synced_until: HashMap<RepoRef, String>,
@@ -105,7 +115,14 @@ struct OpeningLayer {
 pub struct ReviewQueue {
     services: AppServices,
     focus: FocusHandle,
+    /// Every pull request the last refresh (or the cache) found; the
+    /// refresh brings these up to date.
+    fetched: QueueLists,
+    /// The lists the tabs show: `fetched` without what the hidden branch
+    /// rules hide.
     lists: QueueLists,
+    /// The hidden branch rules `lists` were made with.
+    hidden_branch_rules: Vec<HiddenBranchRule>,
     tab: QueueTab,
     /// Whether the sidebar (the lists) shows.
     sidebar_visibility: PanelVisibility,
@@ -206,10 +223,13 @@ impl ReviewQueue {
                 DetailEvent::BriefStored => queue.load_brief_index(cx),
             });
 
+        let hidden_branch_rules = AppSettings::hidden_branch_rules(cx).to_vec();
         let mut queue = Self {
             services,
             focus,
-            lists,
+            lists: without_hidden_branches(&lists, &hidden_branch_rules),
+            fetched: lists,
+            hidden_branch_rules,
             tab: saved.tab,
             sidebar_visibility: saved.sidebar,
             rows: Vec::new(),
@@ -315,8 +335,20 @@ impl ReviewQueue {
         cx.notify();
     }
 
+    /// The lists the tabs show (without what the hidden branch rules hide).
     pub(super) fn lists(&self) -> &QueueLists {
         &self.lists
+    }
+
+    /// The hidden branch rules the shown lists were made with.
+    pub(super) fn hidden_branch_rules(&self) -> &[HiddenBranchRule] {
+        &self.hidden_branch_rules
+    }
+
+    /// Takes every pull request found, to show them again with
+    /// [`Self::replace_lists`].
+    pub(super) fn take_fetched(&mut self) -> QueueLists {
+        std::mem::take(&mut self.fetched)
     }
 
     /// The pull requests of the shown tab: in the Others tab, those its
@@ -617,8 +649,8 @@ impl ReviewQueue {
         let ttl = AppSettings::cache_ttl(cx).duration();
         let input = RefreshInput {
             watched: self.others_tab.watched().to_vec(),
-            known_memberships: known_memberships(&self.lists),
-            known_others: self.lists.others.clone(),
+            known_details: known_details(&self.fetched),
+            known_others: self.fetched.others.clone(),
             others_synced_until: self.others_tab.synced_until().clone(),
         };
 
@@ -630,13 +662,13 @@ impl ReviewQueue {
             let own_client = client.clone();
             let own_cache = cache.clone();
             let watched = input.watched.clone();
-            let known_memberships = input.known_memberships;
-            let own = cx
-                .background_executor()
-                .spawn(async move {
-                    fetch_own_lists(&own_client, &own_cache, &watched, known_memberships)
-                })
-                .await;
+            let known_details = input.known_details;
+            let own =
+                cx.background_executor()
+                    .spawn(async move {
+                        fetch_own_lists(&own_client, &own_cache, &watched, known_details)
+                    })
+                    .await;
             let own = match own {
                 Ok(own) => own,
                 Err(error) => {
@@ -646,7 +678,7 @@ impl ReviewQueue {
                     return;
                 }
             };
-            let memberships = own.memberships.clone();
+            let details = own.details.clone();
             if queue
                 .update(cx, |queue, cx| queue.show_own_lists(own, cx))
                 .is_err()
@@ -664,7 +696,7 @@ impl ReviewQueue {
                         &input.known_others,
                         &input.others_synced_until,
                     );
-                    fill_memberships(&mut fetched.pull_requests, &memberships);
+                    fill_stacks(&mut fetched.pull_requests, &details);
                     let mut cache = cache.lock();
                     cache.replace_list(PullRequestListKey::OTHERS, &fetched.pull_requests)?;
                     cache.delete_expired(ttl)?;
@@ -685,11 +717,11 @@ impl ReviewQueue {
     /// Shows the viewer's refreshed own lists, with the stacks just read
     /// filled into the Others list known so far; the refresh goes on.
     fn show_own_lists(&mut self, own: OwnLists, cx: &mut Context<Self>) {
-        if let Some(error) = &own.stack_error {
-            eprintln!("stacks: keeping the last known ones: {error}");
+        if let Some(error) = &own.details_error {
+            eprintln!("branches and stacks: keeping the last known ones: {error}");
         }
-        let mut others = self.lists.others.clone();
-        fill_memberships(&mut others, &own.memberships);
+        let mut others = self.fetched.others.clone();
+        fill_stacks(&mut others, &own.details);
         self.replace_lists(
             QueueLists {
                 authored: own.authored,
@@ -705,8 +737,8 @@ impl ReviewQueue {
         self.others_tab.set_error(others.error);
         self.others_tab.set_synced_until(others.synced_until);
         let lists = QueueLists {
-            authored: std::mem::take(&mut self.lists.authored),
-            review_requested: std::mem::take(&mut self.lists.review_requested),
+            authored: std::mem::take(&mut self.fetched.authored),
+            review_requested: std::mem::take(&mut self.fetched.review_requested),
             others: others.pull_requests,
         };
         self.replace_lists(lists, cx);
@@ -782,9 +814,13 @@ impl ReviewQueue {
         }
     }
 
-    /// Replaces the lists after a refresh, keeping the selection where the
-    /// pull request is still listed (or was opened from a stack).
-    fn replace_lists(&mut self, lists: QueueLists, cx: &mut Context<Self>) {
+    /// Replaces the lists after a refresh (or a change of the hidden branch
+    /// rules), keeping the selection where the pull request is still shown
+    /// (or was opened from a stack).
+    pub(super) fn replace_lists(&mut self, fetched: QueueLists, cx: &mut Context<Self>) {
+        self.hidden_branch_rules = AppSettings::hidden_branch_rules(cx).to_vec();
+        let lists = without_hidden_branches(&fetched, &self.hidden_branch_rules);
+        self.fetched = fetched;
         let refreshed = self
             .selected
             .as_ref()
@@ -1116,44 +1152,53 @@ fn read_cached_stacks(
         .collect()
 }
 
-/// The stack memberships the lists know now, kept when GraphQL fails.
-fn known_memberships(lists: &QueueLists) -> Memberships {
+/// The branches and stack memberships the lists know now, kept when GraphQL fails.
+fn known_details(lists: &QueueLists) -> DetailsByNumber {
     lists
         .iter()
-        .filter_map(|pull_request| {
-            let membership = pull_request.stack.clone()?;
-            Some(((pull_request.repo.clone(), pull_request.number), membership))
+        .map(|pull_request| {
+            let details = ListedDetails {
+                branches: pull_request.branches.clone(),
+                stack: pull_request.stack.clone(),
+            };
+            ((pull_request.repo.clone(), pull_request.number), details)
         })
         .collect()
 }
 
 /// Fetches the viewer's own lists (one search request each) and the
-/// stacks of every list (one GraphQL request, others' in `watched`
-/// included), fills in their memberships and caches the lists. When the
-/// stacks cannot be read, the memberships known before are kept.
+/// branches and stacks of every list (one GraphQL request, others' in
+/// `watched` included), fills them in and caches the lists. When GraphQL
+/// cannot be read, the details known before are kept.
 ///
 /// Blocking: runs on the background executor.
 fn fetch_own_lists(
     client: &GitHubClient,
     cache: &SharedCache,
     watched: &[RepoRef],
-    known_memberships: Memberships,
+    known_details: DetailsByNumber,
 ) -> anyhow::Result<OwnLists> {
-    // Both lists, then the stacks of all three in one request.
+    // Both lists, then the branches and stacks of all three in one request.
     let mut authored = client.authored()?;
     let mut review_requested = client.review_requested()?;
-    let (memberships, stack_error) = match client.stack_memberships(watched) {
+    let (details, details_error) = match client.listed_details(watched) {
         Ok(listed) => (
             listed
                 .into_iter()
-                .map(|listed| ((listed.repo, listed.number), listed.membership))
+                .map(|listed| {
+                    let details = ListedDetails {
+                        branches: Some(listed.branches),
+                        stack: listed.stack,
+                    };
+                    ((listed.repo, listed.number), details)
+                })
                 .collect(),
             None,
         ),
-        Err(error) => (known_memberships, Some(format!("{error:#}"))),
+        Err(error) => (known_details, Some(format!("{error:#}"))),
     };
-    fill_memberships(&mut authored, &memberships);
-    fill_memberships(&mut review_requested, &memberships);
+    fill_details(&mut authored, &details);
+    fill_details(&mut review_requested, &details);
 
     // Cache them before showing them.
     let mut cache = cache.lock();
@@ -1162,18 +1207,32 @@ fn fetch_own_lists(
     Ok(OwnLists {
         authored,
         review_requested,
-        memberships,
-        stack_error,
+        details,
+        details_error,
     })
 }
 
-/// Sets each of `pull_requests`' stack membership from `memberships`
-/// (none for a standalone one).
-fn fill_memberships(pull_requests: &mut [PullRequest], memberships: &Memberships) {
+/// Sets each of `pull_requests`' branches and stack membership from
+/// `details` (no membership for a standalone one).
+fn fill_details(pull_requests: &mut [PullRequest], details: &DetailsByNumber) {
     for pull_request in pull_requests {
-        pull_request.stack = memberships
+        let found = details
             .get(&(pull_request.repo.clone(), pull_request.number))
-            .cloned();
+            .cloned()
+            .unwrap_or_default();
+        pull_request.branches = found.branches;
+        pull_request.stack = found.stack;
+    }
+}
+
+/// Sets each of others' `pull_requests`' stack membership from `details`
+/// (none for a standalone one). Their branches stay: GraphQL's others'
+/// search covers only the newest, and their sync looks the rest up.
+fn fill_stacks(pull_requests: &mut [PullRequest], details: &DetailsByNumber) {
+    for pull_request in pull_requests {
+        pull_request.stack = details
+            .get(&(pull_request.repo.clone(), pull_request.number))
+            .and_then(|found| found.stack.clone());
     }
 }
 

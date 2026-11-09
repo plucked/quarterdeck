@@ -16,6 +16,7 @@
 //! - `selection_restore.rs`: decides how a selection saved before a relaunch is restored.
 //! - `restore_phase.rs`: `RestorePhase`, which queue a saved selection is matched against.
 //! - `queue_lists.rs`: `QueueLists`, the authored, review-requested and others' lists.
+//! - `hidden_branches.rs`: whether the hidden branch rules hide a pull request, and the lists without those.
 //! - `others_tab.rs`: `OthersTab`, the Others tab's state: watched repositories, their filters, what passes, their order.
 //! - `others_tab_actions.rs`: the queue's Others actions: open a filter, change it, follow the watched repositories.
 //! - `others_filtering.rs`: whether a pull request passes an Others filter, and the chips' counts.
@@ -30,6 +31,7 @@
 mod activation_refresh;
 mod chip_marks;
 mod collapsed_groups;
+mod hidden_branches;
 mod open_filter_chips;
 mod others_filter_rendering;
 mod others_filtering;

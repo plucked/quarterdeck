@@ -10,16 +10,19 @@ pub enum SettingsCategory {
     GitHub,
     /// The repositories the Others tab lists.
     Repositories,
+    /// What every queue tab leaves out: pull requests by branch.
+    Filters,
     /// The running version and updates.
     Updates,
 }
 
 impl SettingsCategory {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Appearance,
         Self::FileDiff,
         Self::GitHub,
         Self::Repositories,
+        Self::Filters,
         Self::Updates,
     ];
 
@@ -30,6 +33,7 @@ impl SettingsCategory {
             Self::FileDiff => "File Diff",
             Self::GitHub => "GitHub",
             Self::Repositories => "Repositories",
+            Self::Filters => "Filters",
             Self::Updates => "Updates",
         }
     }
