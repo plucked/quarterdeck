@@ -132,6 +132,11 @@ pub struct PullRequestDetail {
     file_review: FileReviewState,
     rows: DetailRowList,
     list: ListState,
+    /// The file the reader last jumped to (a click in the tree, `]` / `[`).
+    /// It is the current file while its header is in view, so a jump the
+    /// diff cannot scroll for (a file in the last screenful) still shows in
+    /// the tree and moves `]` on; scrolling by hand or a rebuild drops it.
+    jumped_to_file: Option<usize>,
     /// How far each file's lines are scrolled sideways when lines do not wrap.
     horizontal_offsets: HashMap<usize, f32>,
     /// A scroll position to apply once the files are loaded (a restore after
@@ -215,7 +220,11 @@ impl PullRequestDetail {
         let detail = cx.entity().downgrade();
         list.set_scroll_handler(move |_, _, cx| {
             detail
-                .update(cx, |_, cx| cx.emit(DetailEvent::Scrolled))
+                .update(cx, |detail, cx| {
+                    // Scrolling by hand: the file at the top is current again.
+                    detail.jumped_to_file = None;
+                    cx.emit(DetailEvent::Scrolled);
+                })
                 .ok();
         });
 
@@ -232,6 +241,7 @@ impl PullRequestDetail {
             file_review: FileReviewState::default(),
             rows: DetailRowList::default(),
             list,
+            jumped_to_file: None,
             horizontal_offsets: HashMap::new(),
             pending_scroll: None,
             files_task: None,
@@ -996,6 +1006,7 @@ impl PullRequestDetail {
             comments: &self.review.placement,
         });
         self.list.reset(self.rows.len());
+        self.jumped_to_file = None;
         self.row_tops_width = None;
         self.refresh_tree_rows();
         // The shown pull request or target may have changed, and with it the brief.
@@ -1216,10 +1227,29 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// The file whose rows are at the top of the diff, highlighted in the tree.
+    /// The file the reader is on, highlighted in the tree: the one last
+    /// jumped to while its header is in view, else the one whose rows are at
+    /// the top of the diff.
     pub(super) fn current_file(&self) -> Option<usize> {
-        self.rows
-            .file_at_row(self.list.logical_scroll_top().item_ix)
+        let jumped = self
+            .jumped_to_file
+            .filter(|file| self.is_file_header_in_view(*file));
+        jumped.or_else(|| {
+            self.rows
+                .file_at_row(self.list.logical_scroll_top().item_ix)
+        })
+    }
+
+    /// Whether file `file`'s header row lay wholly inside the diff's
+    /// viewport in the last frame.
+    fn is_file_header_in_view(&self, file: usize) -> bool {
+        let Some(row) = self.rows.file_start(file) else {
+            return false;
+        };
+        let viewport = self.list.viewport_bounds();
+        self.list.bounds_for_item(row).is_some_and(|header| {
+            header.top() >= viewport.top() && header.bottom() <= viewport.bottom()
+        })
     }
 
     /// Shows file `file` in the file tree (the file header's tree button):
@@ -1254,13 +1284,15 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Scrolls the diff to file `file`'s header; nothing while it is hidden.
+    /// Scrolls the diff to file `file`'s header (as far as the diff goes)
+    /// and makes it the current file; nothing while it is hidden.
     pub(super) fn reveal_file(&mut self, file: usize, cx: &mut Context<Self>) {
         if let Some(row) = self.rows.file_start(file) {
             self.list.scroll_to(ListOffset {
                 item_ix: row,
                 offset_in_item: px(0.),
             });
+            self.jumped_to_file = Some(file);
             cx.notify();
         }
     }

@@ -224,8 +224,8 @@ impl PullRequestDetail {
                 + 10.))
             .pr_3()
             .text_sm()
-            .cursor_pointer()
-            .hover(|style| style.bg(theme::hover()));
+            .cursor_pointer();
+        // Each row sets its own hover style: gpui allows one per element.
         match &self.file_tree().tree().node(row.node).kind {
             TreeNodeKind::Folder { .. } => {
                 self.render_folder_row(base, index, row, frame.columns, cx)
@@ -253,7 +253,8 @@ impl PullRequestDetail {
         let state = summary.map_or(FolderViewedState::None, |summary| summary.viewed);
         let counts = summary.map(|summary| summary.lines).unwrap_or_default();
         let folder = row.node;
-        base.on_click(cx.listener(move |detail, _, _, cx| detail.toggle_folder(&path, cx)))
+        base.hover(|style| style.bg(theme::hover()))
+            .on_click(cx.listener(move |detail, _, _, cx| detail.toggle_folder(&path, cx)))
             .child(FoldChevron::new(
                 ("folder-fold", index),
                 FoldState::of(is_collapsed),
@@ -309,7 +310,15 @@ impl PullRequestDetail {
             "modified" | "changed" => None,
             status => Some(render_file_status_badge(status)),
         };
+        // The current file keeps its highlight under the pointer, so a click
+        // shows where it landed.
+        let hover_background = if is_current {
+            theme::selected()
+        } else {
+            theme::hover()
+        };
         base.when(is_current, |row| row.bg(theme::selected()))
+            .hover(move |style| style.bg(hover_background))
             .on_click(cx.listener(move |detail, _, _, cx| detail.show_file_in_diff(file, cx)))
             .child(render_file_icon(loaded.facets.icon, is_viewed))
             .child(
