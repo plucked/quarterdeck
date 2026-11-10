@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::diff_line_ref::DiffLineRef;
-use super::review_comments::PlacedCard;
+use super::placed_card::PlacedCard;
 
 /// Where the comment cards and the open composer go in the diff: by file
 /// index and line.

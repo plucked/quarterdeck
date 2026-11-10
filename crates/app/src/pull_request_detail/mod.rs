@@ -42,6 +42,8 @@
 //! - `stack_bar_rendering.rs`: the header's stack line: layer, neighbours, review mode, range.
 //! - `review_pane.rs`: `ReviewPane`, the detail's review state: comments, cards, editor, tab.
 //! - `review_comments.rs`: `ReviewComments`, GitHub's conversations and the user's notes, as cards.
+//! - `comment_card.rs`: `CommentCard`, one card of comments: a GitHub conversation or a note.
+//! - `placed_card.rs`: `PlacedCard`, a card with the file and line it goes under.
 //! - `comment_placement.rs`: `CommentPlacement`, which line each card and the composer go under.
 //! - `diff_line_ref.rs`: `DiffLineRef`, one line of a loaded file's diff, by file, side and number.
 //! - `comment_range.rs`: `CommentRange`, the lines the comment being written is about.
@@ -89,6 +91,7 @@ mod brief_pane_rendering;
 mod brief_row;
 mod changed_files;
 mod changed_rows;
+mod comment_card;
 mod comment_card_rendering;
 mod comment_editor;
 mod comment_placement;
@@ -125,6 +128,7 @@ mod loaded_file;
 mod local_review_export;
 mod operation_status;
 mod parsed_description;
+mod placed_card;
 mod pull_request_actions;
 mod pull_request_detail;
 mod review_actions;

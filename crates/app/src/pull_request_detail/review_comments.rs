@@ -3,33 +3,12 @@ use std::sync::Arc;
 
 use gpui::SharedString;
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewSummary};
-use qd_github::{LineSide, PullRequestReviewState};
+use qd_github::PullRequestReviewState;
 use qd_markdown::MarkdownDocument;
 
+use super::comment_card::CommentCard;
 use super::comment_scope::CommentScope;
-
-/// One card of comments in the diff.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommentCard {
-    /// A GitHub conversation (an index into the review state's threads),
-    /// with the viewer's draft replies to it.
-    Thread { thread: usize, replies: Vec<NoteId> },
-    /// One of the user's notes: a local note, or a draft of a new GitHub
-    /// conversation.
-    Note(NoteId),
-}
-
-/// A card with where it goes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PlacedCard {
-    pub card: CommentCard,
-    pub path: String,
-    /// The line it sits under; `None` for an outdated GitHub conversation,
-    /// shown at the top of its file.
-    pub anchor: Option<(LineSide, u32)>,
-    /// The first line of a comment on several lines.
-    pub start_line: Option<u32>,
-}
+use super::placed_card::PlacedCard;
 
 /// The review comments of the shown files: GitHub's conversations (a single
 /// pull request only), the user's notes (local ones and GitHub drafts) and

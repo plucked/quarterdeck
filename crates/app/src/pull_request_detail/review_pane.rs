@@ -4,7 +4,8 @@ use qd_cache::NoteDestination;
 use super::comment_editor::CommentEditor;
 use super::comment_placement::CommentPlacement;
 use super::operation_status::OperationStatus;
-use super::review_comments::{PlacedCard, ReviewComments};
+use super::placed_card::PlacedCard;
+use super::review_comments::ReviewComments;
 use super::side_panel_tab::SidePanelTab;
 use crate::text_area::TextArea;
 

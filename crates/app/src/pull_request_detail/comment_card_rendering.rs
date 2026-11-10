@@ -2,10 +2,11 @@ use gpui::{AnyElement, Context, Div, FontWeight, IntoElement, SharedString, div,
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote};
 use qd_github::{ReviewThread, ThreadComment};
 
+use super::comment_card::CommentCard;
 use super::comment_editor::{CommentEditor, EditorTarget};
 use super::lines_label::lines_label;
 use super::pull_request_detail::PullRequestDetail;
-use super::review_comments::{CommentCard, note_key};
+use super::review_comments::note_key;
 use super::thread_resolution::ThreadResolution;
 use crate::avatar_images::Avatar;
 use crate::button::Button;

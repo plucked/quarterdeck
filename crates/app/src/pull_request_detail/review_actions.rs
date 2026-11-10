@@ -4,6 +4,7 @@ use gpui::{AppContext as _, ClipboardItem, Context, Window};
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewScope, ReviewSummary};
 use qd_github::{NewReviewThread, NewThreadReply, ReviewEvent, ReviewSubmission, SubmittedPart};
 
+use super::comment_card::CommentCard;
 use super::comment_editor::{CommentEditor, EditorTarget};
 use super::comment_placement::CommentPlacement;
 use super::comment_range::CommentRange;
@@ -14,7 +15,7 @@ use super::diff_line_ref::DiffLineRef;
 use super::local_review_export::{ReviewExportHeader, local_review_markdown};
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
-use super::review_comments::{CommentCard, ReviewComments};
+use super::review_comments::ReviewComments;
 use super::review_target::ReviewTarget;
 use super::side_panel_tab::SidePanelTab;
 use super::thread_resolution::ThreadResolution;
