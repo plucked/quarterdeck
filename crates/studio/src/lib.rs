@@ -53,6 +53,7 @@
 //! - `clean_orphan_workspaces.rs`: removes workspaces left by an app process that is gone.
 //! - `brief_record.rs`: `BriefRecord`, everything about how one brief was made.
 //! - `write_brief_report.rs`: `write_brief_report` and `report_root`, a folder reporting a brief for later tuning.
+//! - `utc_stamp.rs`: `utc_stamp`, a time as a UTC file-name stamp and readable text, for a report's folder.
 //! - `shown_page.rs`: `ShownPage`, the page of a brief a reader had open when they reported it.
 //! - `tool_call.rs`: `ToolCall`, a tool call of a run as readable text, read from its transcript.
 //! - `find_claude.rs`: finds the `claude` executable.
@@ -119,6 +120,7 @@ mod table_role;
 mod text_tail;
 mod tool_call;
 mod tour_step;
+mod utc_stamp;
 mod wire_anchor;
 mod wire_graph;
 mod wire_role;
