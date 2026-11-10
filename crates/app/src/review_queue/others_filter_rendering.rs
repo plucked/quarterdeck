@@ -9,7 +9,8 @@ use super::others_facet::OthersFacet;
 use super::others_filtering::describe;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::facet_chips::{
-    COLLAPSED_CHIPS, ChipClick, CollapsedChipRow, render_chip, render_chip_row, render_more_chip,
+    CHIP_HINT, COLLAPSED_CHIPS, ChipClick, CollapsedChipRow, FacetChip, render_chip_row,
+    render_more_chip,
 };
 use crate::segmented_control::SegmentedControl;
 use crate::settings_window::{SettingsCategory, open_settings_window_at};
@@ -197,13 +198,13 @@ impl ReviewQueue {
             .map(|count| {
                 let value = count.value.clone();
                 let repo = repo.clone();
-                render_chip(
-                    format!("others-{}-{value}", facet.id_part()).into(),
-                    &count.value,
+                FacetChip::new(
+                    format!("others-{}-{value}", facet.id_part()),
+                    count.value.clone(),
                     count,
                     chips_filter.choice_of(&count.value),
-                    chip_marks.mark_of(facet, &count.value),
                 )
+                .leading(chip_marks.mark_of(facet, &count.value))
                 .on_click(cx.listener(move |queue, event: &ClickEvent, _, cx| {
                     let click = ChipClick::of(event);
                     queue.change_others_filter(
@@ -392,7 +393,7 @@ fn render_reset_link(
 /// What narrows the list, or how the chips work while nothing does.
 fn filter_summary_text(parts: &[String]) -> String {
     if parts.is_empty() {
-        "Click to show only · ⌥-click to hide".to_owned()
+        CHIP_HINT.to_owned()
     } else {
         parts.join(" · ")
     }

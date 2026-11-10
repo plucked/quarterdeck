@@ -1,6 +1,7 @@
 use qd_file_tree::FacetCount;
 
-use super::COLLAPSED_CHIPS;
+/// Chips a collapsed row shows before "more"; picked or hidden ones always show.
+pub const COLLAPSED_CHIPS: usize = 8;
 
 /// Which chips of a row show and the `+n more` / `less` link closing it:
 /// collapsed, the most common chips and every picked or hidden one (so a
@@ -38,4 +39,16 @@ impl<'count> CollapsedChipRow<'count> {
         };
         Self { shown, more_label }
     }
+}
+
+/// The [`COLLAPSED_CHIPS`] values with the most items (ties keep the
+/// counts' order), which a collapsed row shows.
+pub fn most_common_values(counts: &[FacetCount<String>]) -> Vec<&str> {
+    let mut by_size: Vec<&FacetCount<String>> = counts.iter().collect();
+    by_size.sort_by_key(|count| std::cmp::Reverse(count.total));
+    by_size
+        .into_iter()
+        .take(COLLAPSED_CHIPS)
+        .map(|count| count.value.as_str())
+        .collect()
 }

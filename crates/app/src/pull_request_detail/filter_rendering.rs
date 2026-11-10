@@ -4,7 +4,8 @@ use super::pull_request_detail::PullRequestDetail;
 use crate::button::Button;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::facet_chips::{
-    ChipClick, CollapsedChipRow, most_common_values, render_chip, render_chip_row, render_more_chip,
+    CHIP_HINT, ChipClick, CollapsedChipRow, FacetChip, most_common_values, render_chip_row,
+    render_more_chip,
 };
 use crate::theme;
 
@@ -82,12 +83,11 @@ impl PullRequestDetail {
             .iter()
             .map(|count| {
                 let kind = count.value;
-                render_chip(
-                    format!("kind-{}", kind.label()).into(),
+                FacetChip::new(
+                    format!("kind-{}", kind.label()),
                     kind.label(),
                     count,
                     filter.kinds.choice_of(&kind),
-                    None,
                 )
                 .on_click(cx.listener(move |detail, event: &ClickEvent, _, cx| {
                     detail.click_kind(kind, ChipClick::of(event), cx);
@@ -115,12 +115,11 @@ impl PullRequestDetail {
             .into_iter()
             .map(|count| {
                 let file_type = count.value.clone();
-                render_chip(
-                    format!("type-{file_type}").into(),
-                    &count.value,
+                FacetChip::new(
+                    format!("type-{file_type}"),
+                    count.value.clone(),
                     count,
                     filter.file_types.choice_of(&count.value),
-                    None,
                 )
                 .on_click(cx.listener(move |detail, event: &ClickEvent, _, cx| {
                     detail.click_file_type(&file_type, ChipClick::of(event), cx);
@@ -149,7 +148,7 @@ impl PullRequestDetail {
             return div()
                 .text_xs()
                 .text_color(theme::subtle())
-                .child("Click to show only · ⌥-click to hide")
+                .child(CHIP_HINT)
                 .into_any_element();
         }
         let (shown, total) = self.file_tree().shown_of_total();
