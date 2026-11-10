@@ -1,14 +1,16 @@
-use gpui::{AnyElement, IntoElement, Rgba, Styled, canvas, div, prelude::*, px};
+use gpui::{AnyElement, IntoElement, Rgba, Styled, div, prelude::*, px};
 use qd_studio::NodeRole;
 
 use super::diagram_geometry::DiagramPoint;
-use super::diagram_rendering::role_color;
-use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse, paint_strokes};
+use super::diagram_rendering::{role_color, stroke_painting};
+use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse};
 use crate::theme;
 
 /// Size of a legend's line sample.
 const LEGEND_SAMPLE_WIDTH: f32 = 26.;
 const LEGEND_SAMPLE_HEIGHT: f32 = 10.;
+/// Space between a line sample's ends and its box, so its tip is not cut.
+const LEGEND_SAMPLE_INSET: f32 = 1.;
 /// Size of a legend's role swatch.
 const LEGEND_SWATCH: f32 = 10.;
 
@@ -33,9 +35,12 @@ pub(super) fn line_sample(color: Rgba, dashes: Option<(f32, f32)>, head: ArrowHe
     let middle = LEGEND_SAMPLE_HEIGHT / 2.;
     let strokes = vec![DiagramStroke {
         course: StrokeCourse::Polyline(vec![
-            DiagramPoint { x: 1., y: middle },
             DiagramPoint {
-                x: LEGEND_SAMPLE_WIDTH - 1.,
+                x: LEGEND_SAMPLE_INSET,
+                y: middle,
+            },
+            DiagramPoint {
+                x: LEGEND_SAMPLE_WIDTH - LEGEND_SAMPLE_INSET,
                 y: middle,
             },
         ]),
@@ -43,13 +48,10 @@ pub(super) fn line_sample(color: Rgba, dashes: Option<(f32, f32)>, head: ArrowHe
         dashes,
         head,
     }];
-    canvas(
-        |_, _, _| {},
-        move |bounds, (), window, _| paint_strokes(bounds, &strokes, window),
-    )
-    .w(px(LEGEND_SAMPLE_WIDTH))
-    .h(px(LEGEND_SAMPLE_HEIGHT))
-    .into_any_element()
+    stroke_painting(strokes)
+        .w(px(LEGEND_SAMPLE_WIDTH))
+        .h(px(LEGEND_SAMPLE_HEIGHT))
+        .into_any_element()
 }
 
 /// A small box bordered in a change's color.

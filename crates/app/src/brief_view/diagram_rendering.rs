@@ -1,7 +1,6 @@
-use gpui::{Div, IntoElement, Rgba, Styled, canvas, div, px};
-use qd_studio::{CodeAnchor, NodeRole};
+use gpui::{Canvas, Div, IntoElement, Rgba, Styled, canvas, div, px};
+use qd_studio::NodeRole;
 
-use super::brief_handlers::BriefHandlers;
 use super::diagram_geometry::DiagramRect;
 use super::diagram_stroke::{DiagramStroke, paint_strokes};
 use crate::theme;
@@ -12,17 +11,31 @@ pub(super) const ROLE_STRIPE: f32 = 3.;
 pub(super) const DASHED: (f32, f32) = (5., 4.);
 /// Dash and gap of optional arrows and lifelines.
 pub(super) const DOTTED: (f32, f32) = (2., 3.);
+/// Where each role's color sits in `theme::label_colors()`: blue for a
+/// transport, purple for an outside system, teal for stored state, orange
+/// for a state owner, green for an actor, olive for a constraint.
+const TRANSPORT_COLOR: usize = 0;
+const EXTERNAL_COLOR: usize = 1;
+const STORE_COLOR: usize = 2;
+const OWNER_COLOR: usize = 3;
+const ACTOR_COLOR: usize = 5;
+const CONSTRAINT_COLOR: usize = 6;
 
 /// A canvas filling its diagram that paints `strokes` behind the boxes.
 pub(super) fn stroke_canvas(strokes: Vec<DiagramStroke>) -> impl IntoElement {
+    stroke_painting(strokes)
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+}
+
+/// A canvas painting `strokes` from its top left corner; its caller sizes it.
+pub(super) fn stroke_painting(strokes: Vec<DiagramStroke>) -> Canvas<()> {
     canvas(
         |_, _, _| {},
         move |bounds, (), window, _| paint_strokes(bounds, &strokes, window),
     )
-    .absolute()
-    .top_0()
-    .left_0()
-    .size_full()
 }
 
 /// A div placed at `rect` inside its diagram.
@@ -35,27 +48,17 @@ pub(super) fn placed(rect: DiagramRect) -> Div {
         .h(px(rect.height))
 }
 
-/// A click handler opening `anchor`'s lines.
-pub(super) fn anchor_click(
-    anchor: &CodeAnchor,
-    handlers: &BriefHandlers,
-) -> impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static {
-    let target = anchor.clone();
-    let show_anchor = handlers.show_anchor.clone();
-    move |_, window, cx| show_anchor(&target, window, cx)
-}
-
 /// The color standing for a role, as a second cue next to the label:
 /// orange for a state owner, blue for a transport, teal for stored state,
 /// purple for an outside system, olive for a constraint, green for an actor.
 pub(super) fn role_color(role: NodeRole) -> Rgba {
     let colors = theme::label_colors();
     match role {
-        NodeRole::Transport => colors[0],
-        NodeRole::External => colors[1],
-        NodeRole::Store => colors[2],
-        NodeRole::Owner => colors[3],
-        NodeRole::Actor => colors[5],
-        NodeRole::Constraint => colors[6],
+        NodeRole::Transport => colors[TRANSPORT_COLOR],
+        NodeRole::External => colors[EXTERNAL_COLOR],
+        NodeRole::Store => colors[STORE_COLOR],
+        NodeRole::Owner => colors[OWNER_COLOR],
+        NodeRole::Actor => colors[ACTOR_COLOR],
+        NodeRole::Constraint => colors[CONSTRAINT_COLOR],
     }
 }

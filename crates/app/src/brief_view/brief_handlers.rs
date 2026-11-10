@@ -69,3 +69,13 @@ pub fn on_click(handler: &ActionHandler) -> impl Fn(&ClickEvent, &mut Window, &m
     let handler = handler.clone();
     move |_, window, cx| handler(window, cx)
 }
+
+/// A click handler opening `anchor`'s lines through `handler`.
+pub fn on_anchor_click(
+    handler: &AnchorHandler,
+    anchor: &CodeAnchor,
+) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    let handler = handler.clone();
+    let anchor = anchor.clone();
+    move |_, window, cx| handler(&anchor, window, cx)
+}

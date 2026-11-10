@@ -1,13 +1,11 @@
 use gpui::{AnyElement, FontWeight, IntoElement, Rgba, SharedString, Styled, div, prelude::*, px};
 use qd_studio::{DiagramChange, EdgeStyle, GraphNode, NodeRole, StudioGraph};
 
-use super::brief_handlers::BriefHandlers;
+use super::brief_handlers::{BriefHandlers, on_anchor_click};
 use super::brief_text_rendering::caption_line;
 use super::diagram_geometry::DiagramRect;
 use super::diagram_legend::{change_swatch, legend_item, line_sample, render_legend, role_legend};
-use super::diagram_rendering::{
-    DASHED, DOTTED, ROLE_STRIPE, anchor_click, placed, role_color, stroke_canvas,
-};
+use super::diagram_rendering::{DASHED, DOTTED, ROLE_STRIPE, placed, role_color, stroke_canvas};
 use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse};
 use super::graph_layout::{
     EDGE_LABEL_PADDING, GROUP_LABEL_HEIGHT, GraphLayout, NODE_PADDING_X, NODE_PADDING_Y,
@@ -249,7 +247,7 @@ fn render_graph_node(
         Some(anchor) => box_element
             .cursor_pointer()
             .hover(|style| style.border_color(theme::accent()))
-            .on_click(anchor_click(anchor, handlers))
+            .on_click(on_anchor_click(&handlers.show_anchor, anchor))
             .into_any_element(),
         None => box_element.into_any_element(),
     }

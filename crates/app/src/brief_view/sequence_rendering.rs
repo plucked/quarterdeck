@@ -1,13 +1,11 @@
 use gpui::{AnyElement, FontWeight, IntoElement, Rgba, SharedString, Styled, div, prelude::*, px};
 use qd_studio::{MessageStyle, NodeRole, SequenceMessage, StudioSequence};
 
-use super::brief_handlers::BriefHandlers;
+use super::brief_handlers::{BriefHandlers, on_anchor_click};
 use super::brief_text_rendering::caption_line;
 use super::diagram_geometry::{DiagramPoint, DiagramRect};
 use super::diagram_legend::{legend_item, line_sample, render_legend, role_legend};
-use super::diagram_rendering::{
-    DASHED, DOTTED, ROLE_STRIPE, anchor_click, placed, role_color, stroke_canvas,
-};
+use super::diagram_rendering::{DASHED, DOTTED, ROLE_STRIPE, placed, role_color, stroke_canvas};
 use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse};
 use super::sequence_layout::{
     HEADER_PADDING, MessagePlace, SELF_LOOP_HEIGHT, SELF_LOOP_WIDTH, SequenceLayout,
@@ -195,7 +193,7 @@ fn render_message_texts(
             .cursor_pointer()
             .text_color(theme::accent())
             .hover(Styled::underline)
-            .on_click(anchor_click(anchor, handlers))
+            .on_click(on_anchor_click(&handlers.show_anchor, anchor))
             .into_any_element(),
         None => label.into_any_element(),
     };

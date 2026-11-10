@@ -3,7 +3,7 @@ use qd_diff::DiffLineKind;
 use qd_studio::CodeAnchor;
 
 use super::brief_excerpt::{ExcerptLine, brief_excerpt};
-use super::brief_handlers::BriefHandlers;
+use super::brief_handlers::{BriefHandlers, on_anchor_click};
 use super::brief_widget_context::BriefWidgetContext;
 use crate::counted::counted;
 use crate::diff_view::DIFF_ROW_HEIGHT;
@@ -47,8 +47,6 @@ pub(super) fn render_anchor_link(
     anchor: &CodeAnchor,
     handlers: &BriefHandlers,
 ) -> AnyElement {
-    let target = anchor.clone();
-    let show_anchor = handlers.show_anchor.clone();
     div()
         .id(SharedString::from(format!("brief-{widget}-{part}-anchor")))
         .cursor_pointer()
@@ -57,7 +55,7 @@ pub(super) fn render_anchor_link(
         .text_color(theme::accent())
         .hover(Styled::underline)
         .child(anchor.to_string())
-        .on_click(move |_, window, cx| show_anchor(&target, window, cx))
+        .on_click(on_anchor_click(&handlers.show_anchor, anchor))
         .into_any_element()
 }
 
