@@ -22,7 +22,10 @@
 //! - `ui_state_store.rs`: `UiStateStore`, the UI state connection; each topic's reads and writes sit in its `…_storage.rs` file.
 //! - `window_placement_storage.rs`: reads and writes of the window placement.
 //! - `review_queue_view_storage.rs`: reads and writes of the review queue's selection, scroll, tab and sidebar.
-//! - `brief_storage.rs`: stored briefs (user data): one per review scope, every part in typed rows; `brief_index` for the queue.
+//! - `brief_storage.rs`: stored briefs (user data): one per review scope, its own row, pages and record lists; `brief_index` for the queue.
+//! - `brief_widget_writing.rs`: writing a brief's widgets, each kind's parts in their own rows.
+//! - `brief_widget_reading.rs`: reading a brief's pages and widgets back from their rows.
+//! - `brief_anchor_columns.rs`: `AnchorColumns`, a code anchor as its four nullable columns.
 //! - `stored_brief.rs`: `StoredBrief`, a checked studio with the record of its run.
 //! - `brief_index.rs`: `BriefIndex`, which pull requests have a brief.
 //! - `brief_sql_text.rs`: SQL text of the `qd-studio` enums a brief stores.
@@ -74,9 +77,12 @@
 
 mod appearance_settings_storage;
 mod branch_side;
+mod brief_anchor_columns;
 mod brief_index;
 mod brief_sql_text;
 mod brief_storage;
+mod brief_widget_reading;
+mod brief_widget_writing;
 mod cache_cleanup;
 mod cache_settings_storage;
 mod cache_ttl;
