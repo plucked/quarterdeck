@@ -5,6 +5,7 @@ use super::ReviewQueue;
 use super::review_verdict_badge::ReviewVerdictBadge;
 use super::sidebar_rendering::{render_meta, row_frame};
 use crate::avatar_images::Avatar;
+use crate::controls::Pill;
 use crate::display_text::relative_age;
 use crate::theme;
 
@@ -18,8 +19,6 @@ const ROW_AVATAR_SIZE: f32 = 14.;
 pub(super) const VERDICT_BADGE_ID: &str = "review-verdict";
 /// Space above the state ring, so it sits level with the title's first line.
 const STATE_RING_TOP: f32 = 4.;
-/// Text size of the Draft pill.
-const DRAFT_PILL_TEXT_SIZE: f32 = 10.;
 
 /// Whether a pull request is ready for review or still a draft, as its
 /// sidebar row shows it.
@@ -121,7 +120,7 @@ pub(super) fn render_pull_request_row(
                                 .map(|review| ReviewVerdictBadge::new(VERDICT_BADGE_ID, review)),
                         )
                         .when(state == PullRequestState::Draft, |meta| {
-                            meta.child(render_draft_pill())
+                            meta.child(Pill::draft())
                         })
                         .when(has_brief, |meta| meta.child(render_brief_mark())),
                 )
@@ -161,17 +160,4 @@ pub(super) fn render_brief_mark() -> impl IntoElement {
         .text_size(px(BRIEF_MARK_SIZE))
         .text_color(theme::accent())
         .child("✦")
-}
-
-/// The pill marking a draft.
-fn render_draft_pill() -> impl IntoElement {
-    div()
-        .flex_none()
-        .px_1p5()
-        .rounded_full()
-        .border_1()
-        .border_color(theme::border_strong())
-        .text_size(px(DRAFT_PILL_TEXT_SIZE))
-        .text_color(theme::muted())
-        .child("Draft")
 }

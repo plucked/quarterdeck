@@ -1,9 +1,9 @@
-use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*};
+use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use qd_cache::StackReviewMode;
 
 use super::pull_request_detail::PullRequestDetail;
 use super::review_target::ReviewTarget;
-use crate::controls::{Button, SegmentedControl, view_option};
+use crate::controls::{Button, Pill, PillStyle, SegmentedControl, view_option};
 use crate::theme;
 
 impl PullRequestDetail {
@@ -40,17 +40,7 @@ impl PullRequestDetail {
                 .gap_2()
                 .pl_8()
                 .text_xs()
-                .child(
-                    div()
-                        .flex_none()
-                        .px_2()
-                        .py_0p5()
-                        .rounded_full()
-                        .bg(theme::selected())
-                        .text_color(theme::accent())
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(format!("Layer {position} of {size}")),
-                )
+                .child(Pill::new(format!("Layer {position} of {size}"), PillStyle::Accent).roomy())
                 .child(
                     div()
                         .flex_none()

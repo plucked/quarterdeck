@@ -9,7 +9,7 @@ use super::refresh_status::RefreshStatus;
 use super::repo_group::RepoGroup;
 use super::stack_row_rendering::{on_layer_click, render_layer_row, render_stack_header};
 use crate::controls::{
-    FoldChevron, FoldState, PulsingStatus, RepoMonogram, ResizeEdge, ResizeHandle,
+    FoldChevron, FoldState, Pill, PillStyle, PulsingStatus, RepoMonogram, ResizeEdge, ResizeHandle,
     SegmentedControl, view_option,
 };
 use crate::display_text::unix_now;
@@ -308,16 +308,7 @@ fn render_repo_header(
                         .child(group.repo.owner.clone()),
                 ),
         )
-        .child(
-            div()
-                .flex_none()
-                .px_1p5()
-                .rounded_full()
-                .bg(theme::surface())
-                .text_xs()
-                .text_color(theme::muted())
-                .child(repo_count_text(group)),
-        )
+        .child(Pill::new(repo_count_text(group), PillStyle::Filled))
         .children(group.others.as_ref().map(|others| {
             render_filter_button(
                 row_index,

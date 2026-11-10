@@ -9,7 +9,7 @@ use super::pull_request_row_rendering::{VERDICT_BADGE_ID, render_brief_mark};
 use super::review_verdict_badge::ReviewVerdictBadge;
 use super::sidebar_rendering::{render_meta, row_frame};
 use super::stack_group::StackGroup;
-use crate::controls::{FoldChevron, FoldState};
+use crate::controls::{FoldChevron, FoldState, Pill, PillStyle};
 use crate::theme;
 
 /// Width of the column holding a stack layer's position and rail.
@@ -262,7 +262,7 @@ pub(super) fn render_layer_row(
                 .child(row.title),
         )
         .when(row.marks.needs_review, |line| {
-            line.child(render_review_badge())
+            line.child(Pill::new("Review", PillStyle::Accent))
         })
         .when(row.marks.has_brief, |line| line.child(render_brief_mark()))
         .children(
@@ -278,19 +278,6 @@ pub(super) fn render_layer_row(
                 .child(row.meta),
         )
         .into_any_element()
-}
-
-/// The badge on a layer that asks for the viewer's review.
-fn render_review_badge() -> impl IntoElement {
-    div()
-        .flex_none()
-        .px_1p5()
-        .rounded_full()
-        .bg(theme::selected())
-        .text_xs()
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(theme::accent())
-        .child("Review")
 }
 
 /// ` · merged`, ` · closed` or ` · draft` for a layer not simply open.

@@ -5,7 +5,9 @@ use super::detail_mode::DetailMode;
 use super::github_link::GitHubLink;
 use super::pull_request_detail::PullRequestDetail;
 use crate::avatar_images::Avatar;
-use crate::controls::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState, SegmentedControl, view_option};
+use crate::controls::{
+    FOLD_CHEVRON_SIZE, FoldChevron, FoldState, Pill, PillStyle, SegmentedControl, view_option,
+};
 use crate::display_text::short_date;
 use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
@@ -126,15 +128,7 @@ impl PullRequestDetail {
             .text_xs()
             .text_color(theme::muted())
             .when(pull_request.draft, |meta| {
-                meta.child(
-                    div()
-                        .flex_none()
-                        .px_1p5()
-                        .rounded_full()
-                        .bg(theme::surface())
-                        .text_color(theme::muted())
-                        .child("Draft"),
-                )
+                meta.child(Pill::new("Draft", PillStyle::Filled))
             })
             .child(div().min_w_0().truncate().child(format!(
                 "{} #{}  ·",

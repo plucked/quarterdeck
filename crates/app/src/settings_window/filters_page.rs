@@ -10,7 +10,7 @@ use super::removable_row::RemovableRow;
 use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
 use super::settings_window::SettingsWindow;
 use crate::app_settings::AppSettings;
-use crate::controls::{Button, SectionLabel, SegmentedControl, view_option};
+use crate::controls::{Button, Pill, PillStyle, SectionLabel, SegmentedControl, view_option};
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
 
@@ -171,18 +171,7 @@ fn render_rule_list(rules: &[HiddenBranchRule]) -> AnyElement {
             RemovableRow::new(("remove-branch-rule", index), move |cx| {
                 remove_branch_rule(&removed, cx);
             })
-            .child(
-                div()
-                    .px_2()
-                    .py_0p5()
-                    .rounded_full()
-                    .border_1()
-                    .border_color(theme::border())
-                    .bg(theme::surface())
-                    .text_xs()
-                    .text_color(theme::muted())
-                    .child(side_description(rule.side)),
-            )
+            .child(Pill::new(side_description(rule.side), PillStyle::Framed).roomy())
             .child(
                 div()
                     .flex_1()

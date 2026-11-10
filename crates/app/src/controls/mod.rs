@@ -12,10 +12,12 @@
 //! - `section_label.rs`: `SectionLabel`, the small uppercase subtle label heading a section.
 //! - `pulsing_status.rs`: `PulsingStatus`, an accent status that pulses while it lasts, and the shared dot pulse.
 //! - `repo_monogram.rs`: `RepoMonogram`, a repository's colored letter (sidebar, settings).
+//! - `pill.rs`: `Pill` + `PillStyle`, a short label on a fully rounded shape (badges, counts, status).
 
 mod button;
 mod checkbox;
 mod fold_chevron;
+mod pill;
 mod pulsing_status;
 mod repo_monogram;
 mod resize_handle;
@@ -27,6 +29,7 @@ mod view_option;
 pub use button::Button;
 pub use checkbox::{CheckState, Checkbox};
 pub use fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
+pub use pill::{Pill, PillStyle};
 pub use pulsing_status::{PulsingStatus, dot_pulse};
 pub use repo_monogram::RepoMonogram;
 pub use resize_handle::{ResizeEdge, ResizeHandle};

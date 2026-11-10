@@ -9,7 +9,7 @@ use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::note_key;
 use super::thread_resolution::ThreadResolution;
 use crate::avatar_images::Avatar;
-use crate::controls::Button;
+use crate::controls::{Button, Pill, PillStyle};
 use crate::diff_view::frame_file_row;
 use crate::display_text::short_date;
 use crate::markdown_view::MarkdownView;
@@ -422,16 +422,9 @@ fn card_frame() -> Div {
         .bg(theme::surface())
 }
 
-/// A small colored pill.
-fn render_badge(text: impl Into<SharedString>, color: gpui::Rgba) -> impl IntoElement {
-    div()
-        .flex_none()
-        .px_1p5()
-        .rounded_full()
-        .border_1()
-        .border_color(color)
-        .text_size(px(10.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(color)
-        .child(text.into())
+/// A small pill in `color` saying a comment's state.
+fn render_badge(text: impl Into<SharedString>, color: gpui::Rgba) -> Pill {
+    Pill::new(text, PillStyle::Tinted(color))
+        .compact()
+        .weight(FontWeight::MEDIUM)
 }

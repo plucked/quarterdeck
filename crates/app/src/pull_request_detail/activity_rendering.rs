@@ -7,7 +7,7 @@ use gpui::{
 
 use super::batch_progress::BatchProgress;
 use super::pull_request_detail::PullRequestDetail;
-use crate::controls::dot_pulse;
+use crate::controls::{Pill, PillStyle, dot_pulse};
 use crate::count_as_f32::count_as_f32;
 use crate::theme;
 
@@ -65,25 +65,13 @@ impl PullRequestDetail {
             theme::muted()
         };
         Some(
-            div()
-                .flex_none()
-                .flex()
-                .items_center()
-                .gap_1p5()
-                .px_2()
-                .py_0p5()
-                .rounded_full()
-                .border_1()
-                .border_color(theme::border())
-                .bg(theme::surface())
-                .text_xs()
-                .text_color(theme::muted())
-                .child(div().size_2().rounded_full().bg(color).with_animation(
+            Pill::new(activity.label, PillStyle::Framed)
+                .roomy()
+                .mark(div().size_2().rounded_full().bg(color).with_animation(
                     "activity-pulse",
                     dot_pulse(),
                     Styled::opacity,
                 ))
-                .child(activity.label)
                 .into_any_element(),
         )
     }

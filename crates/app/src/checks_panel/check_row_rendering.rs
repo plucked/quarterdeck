@@ -8,7 +8,7 @@ use super::check_row::TreeDepth;
 use super::check_tally::CheckTally;
 use super::check_tree::CheckTree;
 use super::checks_panel::ChecksPanel;
-use crate::controls::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
+use crate::controls::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState, Pill, PillStyle};
 use crate::display_text::{short_duration, unix_now, unix_seconds};
 use crate::markdown_view::is_openable;
 use crate::theme;
@@ -24,8 +24,6 @@ const TREE_PADDING: f32 = 6.;
 /// How far a flagged row's mark and its right column sit down, to line up
 /// with the check's name.
 const FLAGGED_ROW_DROP: f32 = 2.;
-/// Size of the text in a `Required` pill.
-const REQUIRED_PILL_TEXT_SIZE: f32 = 10.;
 
 /// The parts of a workflow or group row.
 pub(super) struct NodeRow {
@@ -244,21 +242,14 @@ enum RequiredState {
     Broken,
 }
 
-/// The pill marking required checks.
-fn render_required_pill(label: String, state: RequiredState) -> impl IntoElement {
-    let (border, text) = match state {
-        RequiredState::Fine => (theme::border_strong(), theme::muted()),
-        RequiredState::Broken => (theme::danger(), theme::danger()),
+/// The pill marking required checks: outlined, in the danger color while
+/// one of them fails.
+fn render_required_pill(label: String, state: RequiredState) -> Pill {
+    let style = match state {
+        RequiredState::Fine => PillStyle::Outlined,
+        RequiredState::Broken => PillStyle::Tinted(theme::danger()),
     };
-    div()
-        .flex_none()
-        .px_1p5()
-        .rounded_full()
-        .border_1()
-        .border_color(border)
-        .text_size(px(REQUIRED_PILL_TEXT_SIZE))
-        .text_color(text)
-        .child(label)
+    Pill::new(label, style).compact()
 }
 
 /// How long a finished check took, how long a running one runs, or that it waits.
