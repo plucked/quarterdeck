@@ -1,4 +1,6 @@
-use qd_studio::StudioSequence;
+use std::cmp::Ordering;
+
+use qd_studio::{SequenceMessage, StudioSequence};
 
 use super::diagram_geometry::{DIAGRAM_MARGIN, DiagramRect};
 use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
@@ -27,6 +29,51 @@ pub const SELF_LOOP_HEIGHT: f32 = 16.;
 /// Space below the last message before the lifelines end.
 const LIFELINE_TAIL: f32 = 14.;
 
+/// How a message's arrow runs, which decides where its texts go and how
+/// much room the arrow takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MessageCourse {
+    /// From a lane back to itself: a loop right of its lifeline, the texts
+    /// beside the lifeline.
+    SelfLoop,
+    /// From one lane to another: a straight arrow, the texts centred over it.
+    Between,
+}
+
+impl MessageCourse {
+    fn of(message: &SequenceMessage) -> Self {
+        match message.from.cmp(&message.to) {
+            Ordering::Equal => Self::SelfLoop,
+            Ordering::Less | Ordering::Greater => Self::Between,
+        }
+    }
+
+    /// Where a text `width` wide starts: just right of the start lifeline
+    /// for a loop, else centred between the two lifelines.
+    fn text_x(self, from_x: f32, to_x: f32, width: f32) -> f32 {
+        match self {
+            Self::SelfLoop => from_x + LABEL_SIDE_SPACE / 2.,
+            Self::Between => f32::midpoint(from_x, to_x) - width / 2.,
+        }
+    }
+
+    /// How far the arrow reaches down from where it starts.
+    fn arrow_height(self) -> f32 {
+        match self {
+            Self::SelfLoop => SELF_LOOP_HEIGHT,
+            Self::Between => 0.,
+        }
+    }
+
+    /// How far right of its start lifeline the arrow reaches on its own.
+    fn loop_reach(self) -> f32 {
+        match self {
+            Self::SelfLoop => SELF_LOOP_WIDTH,
+            Self::Between => 0.,
+        }
+    }
+}
+
 /// Where every part of a sequence goes: lane headers and lifelines, and
 /// each message's arrow, label and note. Computed when the brief is prepared.
 #[derive(Debug, Clone)]
@@ -48,7 +95,7 @@ pub struct MessagePlace {
     pub arrow_y: f32,
     pub from_x: f32,
     pub to_x: f32,
-    /// The label (and note under it), above the arrow.
+    /// The label, above the note (when there is one) and the arrow.
     pub label: DiagramRect,
     /// The note, under the label; `None` without one.
     pub note: Option<DiagramRect>,
@@ -103,40 +150,36 @@ pub fn lay_out_sequence(sequence: &StudioSequence, width: f32) -> SequenceLayout
         .iter()
         .map(|message| {
             let (from_x, to_x) = (lane_x(message.from), lane_x(message.to));
-            let is_self = message.from == message.to;
+            let course = MessageCourse::of(message);
             let span = message.from.abs_diff(message.to).max(1);
             let text_width = count_as_f32(span) * spacing - 2. * LABEL_SIDE_SPACE;
+
+            // The label, then the note under it, wrapped to the lanes spanned.
             let label_width = SMALL_TEXT.width_of(&message.label).min(text_width);
-            let label_height = SMALL_TEXT.height_of(&message.label, text_width);
-            let label_x = if is_self {
-                from_x + LABEL_SIDE_SPACE / 2.
-            } else {
-                f32::midpoint(from_x, to_x) - label_width / 2.
-            };
             let label = DiagramRect {
-                x: label_x,
+                x: course.text_x(from_x, to_x, label_width),
                 y,
                 width: label_width,
-                height: label_height,
+                height: SMALL_TEXT.height_of(&message.label, text_width),
             };
-            let note = message.note.as_deref().map(|note| DiagramRect {
-                x: if is_self {
-                    label_x
-                } else {
-                    f32::midpoint(from_x, to_x) - SMALL_TEXT.width_of(note).min(text_width) / 2.
-                },
-                y: label.bottom(),
-                width: SMALL_TEXT.width_of(note).min(text_width),
-                height: SMALL_TEXT.height_of(note, text_width),
+            let note = message.note.as_deref().map(|note| {
+                let note_width = SMALL_TEXT.width_of(note).min(text_width);
+                DiagramRect {
+                    x: course.text_x(from_x, to_x, note_width),
+                    y: label.bottom(),
+                    width: note_width,
+                    height: SMALL_TEXT.height_of(note, text_width),
+                }
             });
+
+            // The arrow under the texts; the next message starts below it.
             let text_bottom = note.map_or(label.bottom(), |note| note.bottom());
             let arrow_y = text_bottom + ARROW_GAP;
-            let loop_height = if is_self { SELF_LOOP_HEIGHT } else { 0. };
-            y = arrow_y + loop_height + MESSAGE_GAP;
+            y = arrow_y + course.arrow_height() + MESSAGE_GAP;
             right = right
                 .max(label.right())
                 .max(note.map_or(0., |note| note.right()))
-                .max(from_x + if is_self { SELF_LOOP_WIDTH } else { 0. });
+                .max(from_x + course.loop_reach());
             MessagePlace {
                 arrow_y,
                 from_x,
