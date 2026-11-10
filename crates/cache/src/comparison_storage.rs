@@ -94,18 +94,7 @@ impl GitHubCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn file(filename: &str) -> PullRequestFile {
-        PullRequestFile {
-            filename: filename.into(),
-            previous_filename: None,
-            status: "modified".into(),
-            additions: 1,
-            deletions: 2,
-            patch: Some("@@ -1 +1 @@".into()),
-            sha: None,
-        }
-    }
+    use crate::sample_pull_requests::sample_file;
 
     /// A comparison reads back in order, and only for its own commits.
     #[test]
@@ -117,7 +106,7 @@ mod tests {
         };
         assert_eq!(cache.compare_files(&repo, "base", "head").unwrap(), None);
 
-        let files = [file("b.rs"), file("a.rs")];
+        let files = [sample_file("b.rs"), sample_file("a.rs")];
         cache
             .put_compare_files(&repo, "base", "head", &files)
             .unwrap();

@@ -178,47 +178,9 @@ pub(crate) fn pull_request_file_from_row(row: &Row<'_>) -> rusqlite::Result<Pull
 
 #[cfg(test)]
 mod tests {
-    use qd_github::{RepoRef, User};
-
     use super::*;
     use crate::PullRequestListKey;
-
-    fn pull_request(updated_at: &str) -> PullRequest {
-        PullRequest {
-            id: 1,
-            number: 1,
-            repo: RepoRef {
-                owner: "a".into(),
-                name: "b".into(),
-            },
-            title: "PR".into(),
-            body: None,
-            author: User {
-                login: "octo".into(),
-                avatar_url: String::new(),
-            },
-            html_url: String::new(),
-            draft: false,
-            created_at: "2026-01-01T00:00:00Z".into(),
-            updated_at: updated_at.into(),
-            branches: None,
-            viewer_review: None,
-            labels: Vec::new(),
-            stack: None,
-        }
-    }
-
-    fn file(filename: &str) -> PullRequestFile {
-        PullRequestFile {
-            filename: filename.into(),
-            previous_filename: None,
-            status: "modified".into(),
-            additions: 3,
-            deletions: 1,
-            patch: Some("@@ -1 +1 @@".into()),
-            sha: None,
-        }
-    }
+    use crate::sample_pull_requests::{sample_file, sample_pull_request};
 
     fn revision(head: &str, etag: &str) -> FileSetRevision {
         FileSetRevision {
@@ -244,12 +206,12 @@ mod tests {
     /// A stored set reads back with its files in order and what it was fetched for.
     #[test]
     fn file_set_round_trips() {
-        let pull_request = pull_request("t1");
+        let pull_request = sample_pull_request(1, "t1");
         let mut cache = cache_with(&pull_request);
         cache
             .put_files(
                 &pull_request,
-                &[file("b.rs"), file("a.rs")],
+                &[sample_file("b.rs"), sample_file("a.rs")],
                 &revision("head1", "tag1"),
             )
             .unwrap();
@@ -259,36 +221,36 @@ mod tests {
             cache.file_set_commits(1).unwrap(),
             Some(set.revision.commits.clone())
         );
-        assert_eq!(set.files, [file("b.rs"), file("a.rs")]);
+        assert_eq!(set.files, [sample_file("b.rs"), sample_file("a.rs")]);
         assert_eq!(set.revision, revision("head1", "tag1"));
         assert!(set.is_current_for(&pull_request));
-        assert!(!set.is_current_for(&self::pull_request("t2")));
+        assert!(!set.is_current_for(&sample_pull_request(1, "t2")));
     }
 
     /// Confirming keeps the files and commits but moves the set to the new version and tag.
     #[test]
     fn confirm_moves_set_to_new_version() {
-        let old = pull_request("t1");
+        let old = sample_pull_request(1, "t1");
         let mut cache = cache_with(&old);
         cache
-            .put_files(&old, &[file("a.rs")], &revision("head1", "tag1"))
+            .put_files(&old, &[sample_file("a.rs")], &revision("head1", "tag1"))
             .unwrap();
 
-        let commented = pull_request("t2");
+        let commented = sample_pull_request(1, "t2");
         cache
             .confirm_files(&commented, &revision("head1", "tag2"))
             .unwrap();
 
         let set = cache.file_set(1).unwrap().unwrap();
         assert!(set.is_current_for(&commented));
-        assert_eq!(set.files, [file("a.rs")]);
+        assert_eq!(set.files, [sample_file("a.rs")]);
         assert_eq!(set.revision.etag, Some(ETag::new("tag2")));
     }
 
     /// A pull request without cached files has no set.
     #[test]
     fn missing_set_is_none() {
-        let cache = cache_with(&pull_request("t1"));
+        let cache = cache_with(&sample_pull_request(1, "t1"));
         assert_eq!(cache.file_set(1).unwrap(), None);
     }
 }

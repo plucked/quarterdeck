@@ -74,6 +74,7 @@
 //! - `note_anchor.rs`: `NoteAnchor`, a line (or lines) or a reply to a GitHub thread.
 //! - `review_summary.rs`: `ReviewSummary`, the verdict and summary of a GitHub review.
 //! - `review_notes_storage.rs`: reads and writes of notes and summaries.
+//! - `sample_pull_requests.rs` (tests only): sample pull requests and changed files for the tests.
 
 mod appearance_settings_storage;
 mod branch_side;
@@ -131,6 +132,8 @@ mod review_queue_view_state;
 mod review_queue_view_storage;
 mod review_scope;
 mod review_summary;
+#[cfg(test)]
+mod sample_pull_requests;
 mod schema_migrations;
 mod scope_columns;
 mod sql_integers;

@@ -18,6 +18,7 @@
 | `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
 | `color_theme` / `appearance_settings_storage` | `ColorTheme` (Ledger, Vellum, Overcast, Signal, Graphite (default), Tide, Lantern, Beacon), stored by name in `appearance_settings` (one row) |
 | `sql_integers` / `unix_now` | checked integer conversions; current time |
+| `sample_pull_requests` | tests only: `sample_pull_request(id, updated_at)` and `sample_file(filename)`, the pull requests and changed files the tests store |
 | `cached_statements` | `execute_cached`: a write through the connection's statement cache, for statements run once per row (files, layers, list members, labels, brief parts) |
 | `review_queue_view_state` / `detail_scroll_position` | `ReviewQueueViewState`: selection + detail scroll as row and offset, tab, sidebar visibility |
 | `diff_view_settings` / `diff_layout` / `line_wrapping` / `diff_option_sql_text` / `diff_view_settings_storage` | diff view settings (one row) and their SQL text, incl. the `qd-diff` enums |

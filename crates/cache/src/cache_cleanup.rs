@@ -61,39 +61,15 @@ impl GitHubCache {
 
 #[cfg(test)]
 mod tests {
-    use qd_github::{ETag, PullRequest, PullRequestFile, PullRequestRevision, RepoRef, User};
+    use qd_github::{ETag, PullRequestRevision};
     use rusqlite::params;
 
     use super::*;
+    use crate::sample_pull_requests::{sample_file, sample_pull_request};
     use crate::{FileSetRevision, PullRequestListKey};
 
     const LIST: PullRequestListKey = PullRequestListKey::REVIEW_REQUESTED;
     const ONE_DAY: Duration = Duration::from_hours(24);
-
-    fn pull_request(id: u64) -> PullRequest {
-        PullRequest {
-            id,
-            number: id,
-            repo: RepoRef {
-                owner: "a".into(),
-                name: "b".into(),
-            },
-            title: String::new(),
-            body: None,
-            author: User {
-                login: String::new(),
-                avatar_url: String::new(),
-            },
-            html_url: String::new(),
-            draft: false,
-            created_at: String::new(),
-            updated_at: "t".into(),
-            branches: None,
-            viewer_review: None,
-            labels: Vec::new(),
-            stack: None,
-        }
-    }
 
     fn revision() -> FileSetRevision {
         FileSetRevision {
@@ -102,18 +78,6 @@ mod tests {
                 base_sha: "base".into(),
             },
             etag: Some(ETag::new("tag")),
-        }
-    }
-
-    fn file() -> PullRequestFile {
-        PullRequestFile {
-            filename: "a.rs".into(),
-            previous_filename: None,
-            status: "added".into(),
-            additions: 1,
-            deletions: 0,
-            patch: None,
-            sha: None,
         }
     }
 
@@ -141,15 +105,28 @@ mod tests {
         // Set up: two pull requests with files, then the second leaves the queue.
         let mut cache = GitHubCache::open_in_memory().unwrap();
         cache
-            .replace_list(LIST, &[pull_request(1), pull_request(2)])
+            .replace_list(
+                LIST,
+                &[sample_pull_request(1, "t"), sample_pull_request(2, "t")],
+            )
             .unwrap();
         cache
-            .put_files(&pull_request(1), &[file()], &revision())
+            .put_files(
+                &sample_pull_request(1, "t"),
+                &[sample_file("a.rs")],
+                &revision(),
+            )
             .unwrap();
         cache
-            .put_files(&pull_request(2), &[file()], &revision())
+            .put_files(
+                &sample_pull_request(2, "t"),
+                &[sample_file("a.rs")],
+                &revision(),
+            )
             .unwrap();
-        cache.replace_list(LIST, &[pull_request(1)]).unwrap();
+        cache
+            .replace_list(LIST, &[sample_pull_request(1, "t")])
+            .unwrap();
 
         // Act: two days pass with a one-day TTL.
         age_everything(&cache, 2 * 24 * 60 * 60);
@@ -172,9 +149,15 @@ mod tests {
     #[test]
     fn keeps_recent_data() {
         let mut cache = GitHubCache::open_in_memory().unwrap();
-        cache.replace_list(LIST, &[pull_request(1)]).unwrap();
         cache
-            .put_files(&pull_request(1), &[file()], &revision())
+            .replace_list(LIST, &[sample_pull_request(1, "t")])
+            .unwrap();
+        cache
+            .put_files(
+                &sample_pull_request(1, "t"),
+                &[sample_file("a.rs")],
+                &revision(),
+            )
             .unwrap();
         assert_eq!(
             cache.delete_expired(ONE_DAY).unwrap(),
@@ -187,9 +170,15 @@ mod tests {
     #[test]
     fn clear_removes_everything_cached() {
         let mut cache = GitHubCache::open_in_memory().unwrap();
-        cache.replace_list(LIST, &[pull_request(1)]).unwrap();
         cache
-            .put_files(&pull_request(1), &[file()], &revision())
+            .replace_list(LIST, &[sample_pull_request(1, "t")])
+            .unwrap();
+        cache
+            .put_files(
+                &sample_pull_request(1, "t"),
+                &[sample_file("a.rs")],
+                &revision(),
+            )
             .unwrap();
         cache.clear().unwrap();
         assert_eq!(cache.list(LIST).unwrap().len(), 0);

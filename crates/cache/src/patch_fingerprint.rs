@@ -45,16 +45,13 @@ impl PatchFingerprint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sample_pull_requests::sample_file;
 
+    /// A file whose patch is `patch`.
     fn file(patch: &str) -> PullRequestFile {
         PullRequestFile {
-            filename: "a.rs".into(),
-            previous_filename: None,
-            status: "modified".into(),
-            additions: 1,
-            deletions: 1,
             patch: Some(patch.into()),
-            sha: None,
+            ..sample_file("a.rs")
         }
     }
 

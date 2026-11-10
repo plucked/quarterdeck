@@ -293,43 +293,25 @@ fn stack_membership_from_row(row: &Row<'_>) -> rusqlite::Result<Option<StackMemb
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sample_pull_requests::sample_pull_request;
 
     const LIST: PullRequestListKey = PullRequestListKey::REVIEW_REQUESTED;
-
-    fn pull_request(id: u64, updated_at: &str) -> PullRequest {
-        PullRequest {
-            id,
-            number: id,
-            repo: RepoRef {
-                owner: "a".into(),
-                name: "b".into(),
-            },
-            title: format!("PR {id}"),
-            body: None,
-            author: User {
-                login: "octo".into(),
-                avatar_url: String::new(),
-            },
-            html_url: String::new(),
-            draft: false,
-            created_at: "2026-01-01T00:00:00Z".into(),
-            updated_at: updated_at.into(),
-            branches: None,
-            viewer_review: None,
-            labels: Vec::new(),
-            stack: None,
-        }
-    }
 
     /// A list replacement keeps the new order and drops members not in it.
     #[test]
     fn replace_list_keeps_order_and_drops_old_members() {
         let mut cache = GitHubCache::open_in_memory().unwrap();
         cache
-            .replace_list(LIST, &[pull_request(1, "t"), pull_request(2, "t")])
+            .replace_list(
+                LIST,
+                &[sample_pull_request(1, "t"), sample_pull_request(2, "t")],
+            )
             .unwrap();
         cache
-            .replace_list(LIST, &[pull_request(3, "t"), pull_request(1, "t2")])
+            .replace_list(
+                LIST,
+                &[sample_pull_request(3, "t"), sample_pull_request(1, "t2")],
+            )
             .unwrap();
         let listed = cache.list(LIST).unwrap();
         let ids: Vec<_> = listed.iter().map(|listed| listed.id).collect();
@@ -345,9 +327,9 @@ mod tests {
             name: name.into(),
             color: "ffffff".into(),
         };
-        let mut first = pull_request(1, "t");
+        let mut first = sample_pull_request(1, "t");
         first.labels = vec![label("bug"), label("ui")];
-        let second = pull_request(2, "t");
+        let second = sample_pull_request(2, "t");
         cache.replace_list(LIST, &[first, second]).unwrap();
 
         let listed = cache.list(LIST).unwrap();
@@ -359,7 +341,7 @@ mod tests {
     #[test]
     fn pull_request_fields_round_trip() {
         let mut cache = GitHubCache::open_in_memory().unwrap();
-        let mut stored = pull_request(7, "t");
+        let mut stored = sample_pull_request(7, "t");
         stored.body = Some("Description".into());
         stored.draft = true;
         stored.html_url = "https://github.com/a/b/pull/7".into();

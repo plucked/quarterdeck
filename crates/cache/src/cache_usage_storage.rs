@@ -72,32 +72,16 @@ fn write_ahead_log_bytes(connection: &Connection) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use qd_github::{PullRequest, RepoRef, User};
+    use qd_github::PullRequest;
 
+    use crate::sample_pull_requests::sample_pull_request;
     use crate::{GitHubCache, PullRequestListKey};
 
-    fn pull_request(id: u64, title: &str) -> PullRequest {
+    /// Pull request `id` titled `title`.
+    fn titled(id: u64, title: &str) -> PullRequest {
         PullRequest {
-            id,
-            number: id,
-            repo: RepoRef {
-                owner: "a".into(),
-                name: "b".into(),
-            },
             title: title.into(),
-            body: None,
-            author: User {
-                login: String::new(),
-                avatar_url: String::new(),
-            },
-            html_url: String::new(),
-            draft: false,
-            created_at: String::new(),
-            updated_at: "t".into(),
-            branches: None,
-            viewer_review: None,
-            labels: Vec::new(),
-            stack: None,
+            ..sample_pull_request(id, "t")
         }
     }
 
@@ -110,7 +94,7 @@ mod tests {
         cache
             .replace_list(
                 PullRequestListKey::AUTHORED,
-                &[pull_request(1, "abc"), pull_request(2, "héllo")],
+                &[titled(1, "abc"), titled(2, "héllo")],
             )
             .unwrap();
         let usage = cache.usage().unwrap();
