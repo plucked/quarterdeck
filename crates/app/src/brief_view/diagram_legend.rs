@@ -1,6 +1,7 @@
 use gpui::{AnyElement, IntoElement, Rgba, Styled, div, prelude::*, px};
 use qd_studio::NodeRole;
 
+use super::dash_pattern::DashPattern;
 use super::diagram_geometry::DiagramPoint;
 use super::diagram_rendering::{role_color, stroke_painting};
 use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse};
@@ -31,7 +32,7 @@ pub(super) fn role_legend(roles: &[NodeRole]) -> Vec<AnyElement> {
 }
 
 /// A legend's line sample.
-pub(super) fn line_sample(color: Rgba, dashes: Option<(f32, f32)>, head: ArrowHead) -> AnyElement {
+pub(super) fn line_sample(color: Rgba, dashes: Option<DashPattern>, head: ArrowHead) -> AnyElement {
     let middle = LEGEND_SAMPLE_HEIGHT / 2.;
     let strokes = vec![DiagramStroke {
         course: StrokeCourse::Polyline(vec![

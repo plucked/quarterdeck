@@ -22,11 +22,12 @@
 //! - `text_estimate.rs`: `TextMetrics`, text sizes estimated for laying diagrams out before drawing.
 //! - `graph_layout.rs`: `GraphLayout` and `lay_out_graph`: columns along the arrows, a band per boundary, routed arrows, labels kept apart.
 //! - `sequence_layout.rs`: `SequenceLayout` and `lay_out_sequence`: lanes, and messages top to bottom.
+//! - `dash_pattern.rs`: `DashPattern`, the dash and gap of a dashed or dotted diagram line.
 //! - `diagram_stroke.rs`: `DiagramStroke` and `paint_strokes`: lines, dashes and arrowheads painted on a canvas.
 //! - `graph_rendering.rs`: a graph: boundaries, arrows, boxes and labels, drawn twice (before and after) when changed.
 //! - `sequence_rendering.rs`: a sequence: lane headers, lifelines, and each message's arrow, label and note.
 //! - `diagram_legend.rs`: the legend under a diagram: role swatches, line samples, change marks.
-//! - `diagram_rendering.rs`: what graphs and sequences share: placed parts, the stroke canvas, role colors, dash patterns, anchor clicks.
+//! - `diagram_rendering.rs`: what graphs and sequences share: placed parts, the stroke canvas, role colors.
 //! - `familiarity_picker.rs`: how well do you know this area: the three answers and what the picked one does.
 //! - `report_state.rs`: `ReportState`, where reporting the shown brief stands.
 //! - `brief_report.rs`: `BriefReport` and `ReportHost`: the report's state and save task, and the steps every view shares.
@@ -54,6 +55,7 @@ mod brief_text_rendering;
 mod brief_widget_context;
 mod code_excerpt_rendering;
 mod column_width_probe;
+mod dash_pattern;
 mod diagram_geometry;
 mod diagram_legend;
 mod diagram_rendering;

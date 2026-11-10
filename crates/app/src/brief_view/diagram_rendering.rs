@@ -7,10 +7,6 @@ use crate::theme;
 
 /// Width of the role stripe at a box's left edge (a lane header's top).
 pub(super) const ROLE_STRIPE: f32 = 3.;
-/// Dash and gap of async arrows and replies.
-pub(super) const DASHED: (f32, f32) = (5., 4.);
-/// Dash and gap of optional arrows and lifelines.
-pub(super) const DOTTED: (f32, f32) = (2., 3.);
 /// Where each role's color sits in `theme::label_colors()`: blue for a
 /// transport, purple for an outside system, teal for stored state, orange
 /// for a state owner, green for an actor, olive for a constraint.

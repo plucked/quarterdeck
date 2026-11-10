@@ -1,5 +1,6 @@
 use gpui::{Bounds, PathBuilder, Pixels, Rgba, Window, point, px};
 
+use super::dash_pattern::DashPattern;
 use super::diagram_geometry::{CubicCurve, DiagramPoint};
 
 /// Width of an arrow's line.
@@ -27,14 +28,14 @@ pub enum ArrowHead {
     Open,
 }
 
-/// One line of a diagram as it is painted: course, color, dashes (dash
-/// and gap length) and tip. Built while rendering (colors come from the
+/// One line of a diagram as it is painted: course, color, dashes (none
+/// for a solid line) and tip. Built while rendering (colors come from the
 /// active theme) and painted from a canvas.
 #[derive(Debug, Clone)]
 pub struct DiagramStroke {
     pub course: StrokeCourse,
     pub color: Rgba,
-    pub dashes: Option<(f32, f32)>,
+    pub dashes: Option<DashPattern>,
     pub head: ArrowHead,
 }
 
@@ -49,8 +50,8 @@ pub fn paint_strokes(bounds: Bounds<Pixels>, strokes: &[DiagramStroke], window: 
     for stroke in strokes {
         // The line itself, dashed when asked.
         let mut line = PathBuilder::stroke(px(STROKE_WIDTH));
-        if let Some((dash, gap)) = stroke.dashes {
-            line = line.dash_array(&[px(dash), px(gap)]);
+        if let Some(pattern) = stroke.dashes {
+            line = line.dash_array(&[px(pattern.dash), px(pattern.gap)]);
         }
         let (tip, toward_tip) = match &stroke.course {
             StrokeCourse::Curve(curve) => {

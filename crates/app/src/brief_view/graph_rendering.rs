@@ -3,9 +3,10 @@ use qd_studio::{DiagramChange, EdgeStyle, GraphNode, NodeRole, StudioGraph};
 
 use super::brief_handlers::{BriefHandlers, on_anchor_click};
 use super::brief_text_rendering::caption_line;
+use super::dash_pattern::DashPattern;
 use super::diagram_geometry::DiagramRect;
 use super::diagram_legend::{change_swatch, legend_item, line_sample, render_legend, role_legend};
-use super::diagram_rendering::{DASHED, DOTTED, ROLE_STRIPE, placed, role_color, stroke_canvas};
+use super::diagram_rendering::{ROLE_STRIPE, placed, role_color, stroke_canvas};
 use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse};
 use super::graph_layout::{
     EDGE_LABEL_PADDING, GROUP_LABEL_HEIGHT, GraphLayout, NODE_PADDING_X, NODE_PADDING_Y,
@@ -272,12 +273,12 @@ fn render_edge_label(label: &str, rect: DiagramRect, mark: Option<Rgba>) -> AnyE
 }
 
 /// An arrow style's color and dashes.
-fn edge_look(style: EdgeStyle) -> (Rgba, Option<(f32, f32)>) {
+fn edge_look(style: EdgeStyle) -> (Rgba, Option<DashPattern>) {
     match style {
         EdgeStyle::Control => (theme::muted(), None),
         EdgeStyle::Data => (theme::accent(), None),
-        EdgeStyle::Async => (theme::muted(), Some(DASHED)),
-        EdgeStyle::Optional => (theme::subtle(), Some(DOTTED)),
+        EdgeStyle::Async => (theme::muted(), Some(DashPattern::DASHED)),
+        EdgeStyle::Optional => (theme::subtle(), Some(DashPattern::DOTTED)),
     }
 }
 

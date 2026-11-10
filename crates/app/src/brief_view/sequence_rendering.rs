@@ -3,9 +3,10 @@ use qd_studio::{MessageStyle, NodeRole, SequenceMessage, StudioSequence};
 
 use super::brief_handlers::{BriefHandlers, on_anchor_click};
 use super::brief_text_rendering::caption_line;
+use super::dash_pattern::DashPattern;
 use super::diagram_geometry::{DiagramPoint, DiagramRect};
 use super::diagram_legend::{legend_item, line_sample, render_legend, role_legend};
-use super::diagram_rendering::{DASHED, DOTTED, ROLE_STRIPE, placed, role_color, stroke_canvas};
+use super::diagram_rendering::{ROLE_STRIPE, placed, role_color, stroke_canvas};
 use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse};
 use super::sequence_layout::{
     HEADER_PADDING, MessagePlace, SELF_LOOP_HEIGHT, SELF_LOOP_WIDTH, SequenceLayout,
@@ -97,7 +98,7 @@ fn sequence_strokes(sequence: &StudioSequence, layout: &SequenceLayout) -> Vec<D
             },
         ]),
         color: theme::border_strong(),
-        dashes: Some(DOTTED),
+        dashes: Some(DashPattern::DOTTED),
         head: ArrowHead::Without,
     });
     let arrows = sequence
@@ -215,10 +216,10 @@ fn render_message_texts(
 }
 
 /// A message style's color, dashes and tip.
-fn message_look(style: MessageStyle) -> (Rgba, Option<(f32, f32)>, ArrowHead) {
+fn message_look(style: MessageStyle) -> (Rgba, Option<DashPattern>, ArrowHead) {
     match style {
         MessageStyle::Call => (theme::muted(), None, ArrowHead::Filled),
-        MessageStyle::Reply => (theme::subtle(), Some(DASHED), ArrowHead::Open),
+        MessageStyle::Reply => (theme::subtle(), Some(DashPattern::DASHED), ArrowHead::Open),
         MessageStyle::Async => (theme::accent(), None, ArrowHead::Open),
     }
 }
