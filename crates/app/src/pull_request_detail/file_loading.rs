@@ -1,9 +1,7 @@
-use std::sync::{Arc, Mutex};
-
 use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::Context;
-use qd_cache::{ReviewScope, UiStateStore, ViewedFile};
+use qd_cache::{ReviewScope, ViewedFile};
 use qd_diff::DiffOptions;
 use qd_file_tree::FileTree;
 use qd_github::{GitHubClient, PullRequest, PullRequestFile};
@@ -23,7 +21,9 @@ use super::scroll_anchor::ScrollAnchor;
 use super::side_panel_tab::SidePanelTab;
 use crate::brief_view::PreparedBrief;
 use crate::shared_cache::SharedCache;
-use crate::ui_state::{UiStateRecorder, read_brief, read_review_notes, read_viewed_files};
+use crate::ui_state::{
+    SharedUiStateStore, UiStateRecorder, read_brief, read_review_notes, read_viewed_files,
+};
 
 /// A download is reported again only after this many more bytes, so the
 /// pane redraws a few times a second rather than for every chunk.
@@ -195,7 +195,7 @@ fn fetch_target_files(
 struct ChangesRequest {
     client: Result<GitHubClient, String>,
     cache: SharedCache,
-    ui_state: Arc<Mutex<UiStateStore>>,
+    ui_state: SharedUiStateStore,
     pull_request: PullRequest,
     target: ReviewTarget,
     /// Whose marks, notes and brief to read.
@@ -266,6 +266,6 @@ fn fetch_changes(
 
 /// The brief stored for `scope`, prepared for drawing (Markdown parsed,
 /// diagrams laid out); `None` without one. Blocks: background executor.
-fn read_prepared_brief(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Option<PreparedBrief> {
+fn read_prepared_brief(store: &SharedUiStateStore, scope: &ReviewScope) -> Option<PreparedBrief> {
     read_brief(store, scope).map(|stored| PreparedBrief::prepare(stored.studio, stored.record))
 }

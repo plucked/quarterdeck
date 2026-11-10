@@ -1,21 +1,18 @@
-use std::sync::Mutex;
-
 use qd_cache::{
-    BriefIndex, NoteDestination, ReviewNote, ReviewScope, ReviewSummary, StoredBrief, UiStateStore,
-    ViewedFile,
+    BriefIndex, NoteDestination, ReviewNote, ReviewScope, ReviewSummary, StoredBrief, ViewedFile,
 };
 use qd_studio::{BriefRecord, Studio};
 
-use super::lock_store::lock_store;
+use super::SharedUiStateStore;
 
 /// The review notes of `scope` (both destinations) and, for a pull request,
 /// the GitHub review's summary, read through the shared store on the
 /// background executor; unreadable rows count as none.
 pub fn read_review_notes(
-    store: &Mutex<UiStateStore>,
+    store: &SharedUiStateStore,
     scope: &ReviewScope,
 ) -> (Vec<ReviewNote>, Option<ReviewSummary>) {
-    let store = lock_store(store);
+    let store = store.lock();
     let mut notes = Vec::new();
     for destination in [NoteDestination::Local, NoteDestination::GitHub] {
         match store.review_notes(scope, destination) {
@@ -37,8 +34,8 @@ pub fn read_review_notes(
 
 /// The stored brief of `scope`, read through the shared store on the
 /// background executor; an unreadable brief counts as none.
-pub fn read_brief(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Option<StoredBrief> {
-    lock_store(store).brief(scope).unwrap_or_else(|error| {
+pub fn read_brief(store: &SharedUiStateStore, scope: &ReviewScope) -> Option<StoredBrief> {
+    store.lock().brief(scope).unwrap_or_else(|error| {
         eprintln!("ui state: ignoring a stored brief: {error:#}");
         None
     })
@@ -48,20 +45,20 @@ pub fn read_brief(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Option<St
 /// through the shared store on the background executor; a failure is
 /// reported on stderr (the brief still shows for the session).
 pub fn write_brief(
-    store: &Mutex<UiStateStore>,
+    store: &SharedUiStateStore,
     scope: &ReviewScope,
     studio: &Studio,
     record: &BriefRecord,
 ) {
-    if let Err(error) = lock_store(store).put_brief(scope, studio, record) {
+    if let Err(error) = store.lock().put_brief(scope, studio, record) {
         eprintln!("ui state: cannot store a brief: {error:#}");
     }
 }
 
 /// Which pull requests have a stored brief, read through the shared store
 /// on the background executor; unreadable means none.
-pub fn read_brief_index(store: &Mutex<UiStateStore>) -> BriefIndex {
-    lock_store(store).brief_index().unwrap_or_else(|error| {
+pub fn read_brief_index(store: &SharedUiStateStore) -> BriefIndex {
+    store.lock().brief_index().unwrap_or_else(|error| {
         eprintln!("ui state: ignoring the stored briefs: {error:#}");
         BriefIndex::default()
     })
@@ -69,11 +66,9 @@ pub fn read_brief_index(store: &Mutex<UiStateStore>) -> BriefIndex {
 
 /// The viewed marks of a pull request, read through the shared store on the
 /// background executor; an unreadable table counts as no marks.
-pub fn read_viewed_files(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Vec<ViewedFile> {
-    lock_store(store)
-        .viewed_files(scope)
-        .unwrap_or_else(|error| {
-            eprintln!("ui state: ignoring viewed marks: {error:#}");
-            Vec::new()
-        })
+pub fn read_viewed_files(store: &SharedUiStateStore, scope: &ReviewScope) -> Vec<ViewedFile> {
+    store.lock().viewed_files(scope).unwrap_or_else(|error| {
+        eprintln!("ui state: ignoring viewed marks: {error:#}");
+        Vec::new()
+    })
 }

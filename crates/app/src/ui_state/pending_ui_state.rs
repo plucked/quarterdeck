@@ -1,14 +1,12 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 use qd_cache::{
     CacheTtl, ColorTheme, DiffViewSettings, FoldedGroups, HiddenBranchRule, OthersFilter,
-    ReviewLayoutState, ReviewQueueViewState, ReviewScope, UiStateStore, ViewedFile,
-    WindowPlacement,
+    ReviewLayoutState, ReviewQueueViewState, ReviewScope, ViewedFile, WindowPlacement,
 };
 use qd_github::RepoRef;
 
-use super::lock_store::lock_store;
+use super::SharedUiStateStore;
 use super::review_change::ReviewChange;
 
 /// Changes recorded since the last write; only the latest value of each part
@@ -69,8 +67,8 @@ impl PendingUiState {
     /// a part that fails does not stop the rest.
     ///
     /// Blocking: runs on the background executor.
-    pub fn write_to(&self, store: &Mutex<UiStateStore>) {
-        let store = lock_store(store);
+    pub fn write_to(&self, store: &SharedUiStateStore) {
+        let store = store.lock();
 
         // The one-value parts, each written when recorded.
         if let Some(placement) = &self.window_placement {

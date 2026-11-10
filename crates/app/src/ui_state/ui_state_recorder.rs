@@ -1,4 +1,3 @@
-use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -10,7 +9,7 @@ use qd_cache::{
 };
 use qd_github::RepoRef;
 
-use super::lock_store::lock_store;
+use super::SharedUiStateStore;
 use super::pending_ui_state::{PendingUiState, ViewedChange};
 use super::review_change::ReviewChange;
 
@@ -19,7 +18,7 @@ const WRITE_DELAY: Duration = Duration::from_millis(300);
 
 /// A batch of pending changes taken for one write, with the store to write them to.
 struct PendingWrite {
-    store: Arc<Mutex<UiStateStore>>,
+    store: SharedUiStateStore,
     pending: PendingUiState,
 }
 
@@ -33,7 +32,7 @@ struct PendingWrite {
 /// restored position.
 pub struct UiStateRecorder {
     /// Shared with the write running on the background executor.
-    store: Arc<Mutex<UiStateStore>>,
+    store: SharedUiStateStore,
     pending: PendingUiState,
     /// The task waiting to write or writing; while it runs, changes join it.
     write_task: Option<Task<()>>,
@@ -45,7 +44,7 @@ impl UiStateRecorder {
     /// Opens the UI state tables of the default database.
     pub fn open_default() -> Result<Self> {
         Ok(Self {
-            store: Arc::new(Mutex::new(UiStateStore::open_default()?)),
+            store: SharedUiStateStore::new(UiStateStore::open_default()?),
             pending: PendingUiState::default(),
             write_task: None,
         })
@@ -55,7 +54,8 @@ impl UiStateRecorder {
     /// there is none or it no longer reads. Reads on the main thread: one
     /// small local row, read at startup only.
     pub fn saved_window_placement(&self) -> Option<WindowPlacement> {
-        self.lock_store()
+        self.store
+            .lock()
             .window_placement()
             .unwrap_or_else(|error| report_unreadable("window placement", &error))
     }
@@ -64,7 +64,8 @@ impl UiStateRecorder {
     /// there is none or it no longer reads. Reads on the main thread: one
     /// small local row, read at startup only.
     pub fn saved_review_queue_view_state(&self) -> Option<ReviewQueueViewState> {
-        self.lock_store()
+        self.store
+            .lock()
             .review_queue_view_state()
             .unwrap_or_else(|error| report_unreadable("review queue state", &error))
     }
@@ -73,7 +74,8 @@ impl UiStateRecorder {
     /// there are none or they no longer read. Reads on the main thread: one
     /// small local row, read at startup only.
     pub fn saved_diff_view_settings(&self) -> Option<DiffViewSettings> {
-        self.lock_store()
+        self.store
+            .lock()
             .diff_view_settings()
             .unwrap_or_else(|error| report_unreadable("diff view settings", &error))
     }
@@ -81,7 +83,8 @@ impl UiStateRecorder {
     /// The cache TTL saved before the last relaunch; `None` when there is
     /// none or it no longer reads. Reads on the main thread at startup only.
     pub fn saved_cache_ttl(&self) -> Option<CacheTtl> {
-        self.lock_store()
+        self.store
+            .lock()
             .cache_ttl()
             .unwrap_or_else(|error| report_unreadable("cache TTL", &error))
     }
@@ -94,7 +97,8 @@ impl UiStateRecorder {
     /// The color theme saved before the last relaunch; `None` when there is
     /// none or it no longer reads. Reads on the main thread at startup only.
     pub fn saved_color_theme(&self) -> Option<ColorTheme> {
-        self.lock_store()
+        self.store
+            .lock()
             .color_theme()
             .unwrap_or_else(|error| report_unreadable("color theme", &error))
     }
@@ -107,7 +111,8 @@ impl UiStateRecorder {
     /// The review layout saved before the last relaunch; `None` when there
     /// is none or it no longer reads. Reads on the main thread at startup only.
     pub fn saved_review_layout(&self) -> Option<ReviewLayoutState> {
-        self.lock_store()
+        self.store
+            .lock()
             .review_layout()
             .unwrap_or_else(|error| report_unreadable("review layout", &error))
     }
@@ -120,7 +125,8 @@ impl UiStateRecorder {
     /// The panel widths saved before the last relaunch; `None` when there
     /// are none or they no longer read. Reads on the main thread at startup only.
     pub fn saved_panel_widths(&self) -> Option<PanelWidths> {
-        self.lock_store()
+        self.store
+            .lock()
             .panel_widths()
             .unwrap_or_else(|error| report_unreadable("panel widths", &error))
     }
@@ -128,7 +134,7 @@ impl UiStateRecorder {
     /// The sidebar groups folded before the last relaunch; none when there
     /// are none or they no longer read. Reads on the main thread at startup only.
     pub fn saved_folded_groups(&self) -> FoldedGroups {
-        self.lock_store().folded_groups().unwrap_or_else(|error| {
+        self.store.lock().folded_groups().unwrap_or_else(|error| {
             report_unreadable::<()>("folded groups", &error);
             FoldedGroups::default()
         })
@@ -142,7 +148,8 @@ impl UiStateRecorder {
     /// The repositories the Others tab lists, as saved; none when there
     /// are none or they no longer read. Reads on the main thread at startup only.
     pub fn saved_watched_repositories(&self) -> Vec<RepoRef> {
-        self.lock_store()
+        self.store
+            .lock()
             .watched_repositories()
             .unwrap_or_else(|error| {
                 report_unreadable::<()>("watched repositories", &error);
@@ -160,7 +167,8 @@ impl UiStateRecorder {
     /// The rules hiding pull requests by branch, as saved; none when there
     /// are none or they no longer read. Reads on the main thread at startup only.
     pub fn saved_hidden_branch_rules(&self) -> Vec<HiddenBranchRule> {
-        self.lock_store()
+        self.store
+            .lock()
             .hidden_branch_rules()
             .unwrap_or_else(|error| {
                 report_unreadable::<()>("hidden branch rules", &error);
@@ -176,7 +184,7 @@ impl UiStateRecorder {
     /// The Others filters saved before the last relaunch; none when there
     /// are none or they no longer read. Reads on the main thread at startup only.
     pub fn saved_others_filters(&self) -> Vec<RepositoryOthersFilter> {
-        self.lock_store().others_filters().unwrap_or_else(|error| {
+        self.store.lock().others_filters().unwrap_or_else(|error| {
             report_unreadable::<()>("Others filters", &error);
             Vec::new()
         })
@@ -202,7 +210,7 @@ impl UiStateRecorder {
 
     /// The store, for reads on the background executor (viewed marks when a
     /// pull request's files load). Shared because those reads outlive the call.
-    pub fn shared_store(&self) -> Arc<Mutex<UiStateStore>> {
+    pub fn shared_store(&self) -> SharedUiStateStore {
         self.store.clone()
     }
 
@@ -283,12 +291,6 @@ impl UiStateRecorder {
             store: self.store.clone(),
             pending: std::mem::take(&mut self.pending),
         })
-    }
-
-    /// Locks the store for one read on the main thread (a poisoned lock is
-    /// used as is: every store write is a single SQL statement).
-    fn lock_store(&self) -> MutexGuard<'_, UiStateStore> {
-        lock_store(&self.store)
     }
 }
 

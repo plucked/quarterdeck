@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use qd_cache::UiStateStore;
 use qd_github::{PullRequest, RepoRef};
 use qd_studio::{
     AgentProgress, BriefRecord, RequestLayer, StudioRequest, ToolCall, WorkspaceDiff, parse_studio,
@@ -17,7 +15,7 @@ use super::review_target::ReviewTarget;
 use crate::app_services::AppServices;
 use crate::brief_view::PreparedBrief;
 use crate::display_text::unix_now;
-use crate::ui_state::write_brief;
+use crate::ui_state::{SharedUiStateStore, write_brief};
 
 /// One brief to write, with everything its background run needs.
 pub struct BriefJob {
@@ -36,7 +34,7 @@ pub struct BriefJob {
     /// workspace's `change.diff` on the background executor.
     pub files: Vec<LoadedFile>,
     /// Where the brief is stored.
-    pub store: Arc<Mutex<UiStateStore>>,
+    pub store: SharedUiStateStore,
 }
 
 impl BriefJob {
