@@ -10,6 +10,13 @@ use crate::{
 /// Text shown for an image without alt text; images render as links.
 const IMAGE_PLACEHOLDER: &str = "image";
 
+/// What a link range came from: images render as links to their source.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LinkKind {
+    Link,
+    Image,
+}
+
 /// Which row of a table ended.
 #[derive(Clone, Copy)]
 enum TableRowKind {
@@ -83,7 +90,7 @@ enum InlineTarget {
 struct OpenLink {
     start: usize,
     url: String,
-    is_image: bool,
+    kind: LinkKind,
 }
 
 /// Inline text being collected, with the styles and links open at its end.
@@ -212,8 +219,8 @@ impl DocumentBuilder {
             Tag::Strikethrough => self.open_style(InlineStyle::STRIKETHROUGH),
             // Not styled, but opened so their end has a style to close.
             Tag::Superscript | Tag::Subscript => self.open_style(InlineStyle::PLAIN),
-            Tag::Link { dest_url, .. } => self.open_link(dest_url.into_string(), false),
-            Tag::Image { dest_url, .. } => self.open_link(dest_url.into_string(), true),
+            Tag::Link { dest_url, .. } => self.open_link(dest_url.into_string(), LinkKind::Link),
+            Tag::Image { dest_url, .. } => self.open_link(dest_url.into_string(), LinkKind::Image),
             // Their content flows into the surrounding blocks.
             Tag::TableHead
             | Tag::TableRow
@@ -274,7 +281,7 @@ impl DocumentBuilder {
         let mut plain_start = 0;
         for url in find_bare_urls(text) {
             self.push_inline(&text[plain_start..url.start], InlineStyle::PLAIN);
-            self.open_link(text[url.clone()].to_owned(), false);
+            self.open_link(text[url.clone()].to_owned(), LinkKind::Link);
             self.push_inline(&text[url.clone()], InlineStyle::PLAIN);
             self.close_link();
             plain_start = url.end;
@@ -321,7 +328,7 @@ impl DocumentBuilder {
             .push(style);
     }
 
-    fn open_link(&mut self, url: String, is_image: bool) {
+    fn open_link(&mut self, url: String, kind: LinkKind) {
         let inline = self
             .inline
             .get_or_insert_with(|| OpenInline::new(InlineTarget::ImplicitParagraph));
@@ -329,7 +336,7 @@ impl DocumentBuilder {
         inline.links.push(OpenLink {
             start: inline.text.len(),
             url,
-            is_image,
+            kind,
         });
     }
 
@@ -342,7 +349,7 @@ impl DocumentBuilder {
         let Some(link) = inline.links.pop() else {
             return;
         };
-        if link.is_image && inline.text.len() == link.start {
+        if link.kind == LinkKind::Image && inline.text.len() == link.start {
             let style = inline.current_style();
             inline.text.push(IMAGE_PLACEHOLDER, style);
         }
