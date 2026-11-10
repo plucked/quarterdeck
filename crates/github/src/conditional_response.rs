@@ -11,3 +11,16 @@ pub enum ConditionalResponse<T> {
         etag: Option<ETag>,
     },
 }
+
+impl<T> ConditionalResponse<T> {
+    /// The same answer with a new value made from the value, the tag kept.
+    pub fn map<U>(self, convert: impl FnOnce(T) -> U) -> ConditionalResponse<U> {
+        match self {
+            Self::NotModified => ConditionalResponse::NotModified,
+            Self::Modified { value, etag } => ConditionalResponse::Modified {
+                value: convert(value),
+                etag,
+            },
+        }
+    }
+}

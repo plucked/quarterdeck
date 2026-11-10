@@ -172,15 +172,8 @@ impl GitHubClient {
         etag: Option<&ETag>,
     ) -> Result<ConditionalResponse<RevisionCheck>, GitHubError> {
         let url = format!("{}/pulls/{number}", repo.api_url());
-        let response = self.get(&url, &[], etag, JSON_MEDIA_TYPE, &mut |_| {})?;
-        if response.status == StatusCode::NOT_MODIFIED {
-            return Ok(ConditionalResponse::NotModified);
-        }
-        let refs: PullRequestRefs = serde_json::from_str(&response.body)?;
-        Ok(ConditionalResponse::Modified {
-            value: refs.into_check(),
-            etag: response.etag,
-        })
+        let refs = self.get_conditional::<PullRequestRefs>(&url, etag)?;
+        Ok(refs.map(PullRequestRefs::into_check))
     }
 
     /// A stack with all its layers, unless unchanged since the response
@@ -192,13 +185,24 @@ impl GitHubClient {
         etag: Option<&ETag>,
     ) -> Result<ConditionalResponse<PullRequestStack>, GitHubError> {
         let url = format!("{}/stacks/{number}", repo.api_url());
-        let response = self.get(&url, &[], etag, JSON_MEDIA_TYPE, &mut |_| {})?;
+        let stack = self.get_conditional::<StackResponse>(&url, etag)?;
+        Ok(stack.map(|stack| stack.into_stack(repo)))
+    }
+
+    /// Sends a GET conditional on `etag` (when given) and decodes the JSON
+    /// body; `304 Not Modified` is [`ConditionalResponse::NotModified`],
+    /// which GitHub does not count against the rate limit.
+    fn get_conditional<T: DeserializeOwned>(
+        &self,
+        url: &str,
+        etag: Option<&ETag>,
+    ) -> Result<ConditionalResponse<T>, GitHubError> {
+        let response = self.get(url, &[], etag, JSON_MEDIA_TYPE, &mut |_| {})?;
         if response.status == StatusCode::NOT_MODIFIED {
             return Ok(ConditionalResponse::NotModified);
         }
-        let stack: StackResponse = serde_json::from_str(&response.body)?;
         Ok(ConditionalResponse::Modified {
-            value: stack.into_stack(repo),
+            value: serde_json::from_str(&response.body)?,
             etag: response.etag,
         })
     }
