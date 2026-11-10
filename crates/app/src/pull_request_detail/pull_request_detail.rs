@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::{
-    ClipboardItem, Context, EventEmitter, FocusHandle, ListAlignment, ListOffset, ListState,
-    Pixels, Point, ScrollHandle, ScrollStrategy, ScrollWheelEvent, SharedString, Subscription,
-    Task, Window, px,
+    AppContext as _, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, ListAlignment,
+    ListOffset, ListState, Pixels, Point, ScrollHandle, ScrollStrategy, ScrollWheelEvent,
+    SharedString, Subscription, Task, Window, px,
 };
 use qd_cache::{
     DetailScrollPosition, DiffViewSettings, LineWrapping, PanelVisibility, ReviewLayoutState,
@@ -48,6 +48,7 @@ use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::avatar_images::{AvatarImages, AvatarLoaded};
 use crate::brief_view::PreparedBrief;
+use crate::checks_panel::{ChecksPanel, ChecksTarget};
 use crate::diff_view::{CodeCells, CodeSegments, DiffPosition, SideSelection};
 use crate::facet_chips::ChipClick;
 use crate::fetch_stack::{cached_stack, refresh_stack};
@@ -198,6 +199,8 @@ pub struct PullRequestDetail {
     /// The head commit of the shown files, when known: what a brief's
     /// version is compared with.
     shown_head_sha: Option<String>,
+    /// The side panel's Checks tab, following the shown pull request.
+    checks: Entity<ChecksPanel>,
     /// Keep the observers of [`AppSettings`] and the avatars (header and
     /// comment authors) registered for the view's lifetime.
     _subscriptions: [Subscription; 2],
@@ -232,6 +235,7 @@ impl PullRequestDetail {
             .global::<UiStateRecorder>()
             .saved_review_layout()
             .unwrap_or_default();
+        let checks = cx.new(|_| ChecksPanel::new(services.clone()));
         let mut detail = Self {
             services,
             pull_request: None,
@@ -269,6 +273,7 @@ impl PullRequestDetail {
             action_panel: None,
             brief: BriefPane::new(detail_brief_handlers(cx)),
             shown_head_sha: None,
+            checks,
             review: ReviewPane {
                 destination: layout.comment_destination,
                 ..ReviewPane::default()
@@ -662,6 +667,7 @@ impl PullRequestDetail {
             self.stack_task = None;
             self.is_stack_loading = false;
             self.rebuild_rows(ScrollAnchor::Top);
+            self.follow_checks(cx);
             cx.notify();
             return;
         };
@@ -682,6 +688,7 @@ impl PullRequestDetail {
             if gained_stack {
                 self.load_stack(cx);
             }
+            self.follow_checks(cx);
             cx.notify();
             return;
         }
@@ -718,6 +725,47 @@ impl PullRequestDetail {
         cx.emit(DetailEvent::TargetChanged);
         self.load_changed_files(cx);
         self.load_stack(cx);
+        self.follow_checks(cx);
+    }
+
+    /// Points the Checks tab at the shown pull request (in a stack, the
+    /// shown layer, with the open layers below it once the stack is
+    /// known), or at nothing.
+    fn follow_checks(&mut self, cx: &mut Context<Self>) {
+        let layers_below: Vec<u64> = match (self.stack.as_ref(), self.current_layer_index()) {
+            (Some(stack), Some(current)) => stack.layers[..current]
+                .iter()
+                .filter(|layer| layer.is_open)
+                .map(|layer| layer.number)
+                .collect(),
+            _ => Vec::new(),
+        };
+        let target = self.pull_request.as_ref().map(|pull_request| ChecksTarget {
+            repo: pull_request.repo.clone(),
+            number: pull_request.number,
+            updated_at: pull_request.updated_at.clone(),
+            layers_below,
+        });
+        self.checks
+            .update(cx, |checks, cx| checks.show_pull_request(target, cx));
+    }
+
+    /// The side panel's Checks tab.
+    pub(super) fn checks(&self) -> &Entity<ChecksPanel> {
+        &self.checks
+    }
+
+    /// Tells the Checks tab whether it is on screen (the side panel shows,
+    /// on that tab): it reads and refreshes its checks only then.
+    pub(super) fn sync_checks_visibility(&mut self, cx: &mut Context<Self>) {
+        let is_on_screen = self.is_side_panel_shown() && self.review.tab == SidePanelTab::Checks;
+        self.checks.update(cx, |checks, cx| {
+            if is_on_screen {
+                checks.show(cx);
+            } else {
+                checks.hide();
+            }
+        });
     }
 
     /// The target for the shown pull request, mode, stack and range start.
@@ -821,6 +869,8 @@ impl PullRequestDetail {
         }
         self.stack = Some(stack);
         self.retarget(cx);
+        // The layers below tell the Checks tab where a conflict may hold its workflows up.
+        self.follow_checks(cx);
         cx.notify();
     }
 
@@ -1133,10 +1183,12 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Shows or hides the file tree panel (cmd-b), and saves it.
+    /// Shows or hides the side panel (cmd-b), and saves it; the Checks tab
+    /// stops or resumes reading with it.
     pub fn toggle_file_tree(&mut self, cx: &mut Context<Self>) {
         self.file_tree.toggle_visibility();
         UiStateRecorder::record_review_layout(cx, self.review_layout());
+        self.sync_checks_visibility(cx);
         cx.notify();
     }
 

@@ -11,7 +11,8 @@ use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
 impl PullRequestDetail {
-    /// The tabs atop the side panel: Files, Review (with its comment count) and Actions.
+    /// The tabs atop the side panel: Files, Review (with its comment count),
+    /// Actions and Checks.
     pub(super) fn render_side_panel_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let tab = self.review().tab;
         let count = self
@@ -49,6 +50,11 @@ impl PullRequestDetail {
                     "Actions",
                     tab == SidePanelTab::Actions,
                     show(SidePanelTab::Actions),
+                )
+                .option(
+                    "Checks",
+                    tab == SidePanelTab::Checks,
+                    show(SidePanelTab::Checks),
                 ),
         )
     }

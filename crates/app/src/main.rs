@@ -40,6 +40,7 @@
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
 //! - `review_queue/`: the main view, the queue of pull requests awaiting review.
 //! - `pull_request_detail/`: `PullRequestDetail`, the selected pull request as a virtualized list.
+//! - `checks_panel/`: `ChecksPanel`, the side panel's Checks tab: the shown pull request's CI checks.
 //! - `ui_state/`: saves and restores what the UI showed across relaunches.
 
 mod app_commands;
@@ -53,6 +54,7 @@ mod bundled_fonts;
 mod bundled_icons;
 mod button;
 mod checkbox;
+mod checks_panel;
 mod diff_view;
 mod display_date;
 mod display_size;

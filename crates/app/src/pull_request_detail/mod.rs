@@ -39,7 +39,7 @@
 //! - `comment_placement.rs`: `CommentPlacement`, which line each card and the composer go under.
 //! - `comment_editor.rs`: `CommentEditor`, the comment being written and what it is for.
 //! - `review_status.rs`: `ReviewStatus`, how the last review action went.
-//! - `side_panel_tab.rs`: `SidePanelTab`, files or review.
+//! - `side_panel_tab.rs`: `SidePanelTab`, files, review, actions or checks.
 //! - `review_actions.rs`: writing, editing, deleting and submitting comments; loading GitHub's.
 //! - `local_review_export.rs`: the local notes as Markdown for an agent.
 //! - `comment_card_rendering.rs`: the comment cards and the composer in the diff.

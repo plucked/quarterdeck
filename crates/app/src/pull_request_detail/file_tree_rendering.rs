@@ -62,10 +62,11 @@ impl CountColumns {
 }
 
 impl PullRequestDetail {
-    /// The panel beside the diff: the Files, Review and Actions tabs; Files
+    /// The panel beside the diff: the Files, Review, Actions and Checks tabs; Files
     /// holds progress, filter chips, and the files as a folder tree in diff
     /// order (a quiet line while they load, so the panel stays in place when
-    /// another pull request is picked); Actions merges or closes.
+    /// another pull request is picked); Actions merges or closes; Checks
+    /// shows the CI checks (`ChecksPanel`).
     pub(super) fn render_file_tree_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let has_files = !self.loaded_files().is_empty();
         div()
@@ -84,6 +85,7 @@ impl PullRequestDetail {
                 SidePanelTab::Files => panel.child(self.render_files_pending()),
                 SidePanelTab::Review => panel.child(self.render_review_panel(cx)),
                 SidePanelTab::Actions => panel.child(self.render_actions_tab(cx)),
+                SidePanelTab::Checks => panel.child(self.checks().clone()),
             })
     }
 

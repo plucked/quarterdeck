@@ -590,6 +590,7 @@ impl PullRequestDetail {
     /// single pull request gets its summary editor.
     pub(super) fn show_side_panel_tab(&mut self, tab: SidePanelTab, cx: &mut Context<Self>) {
         self.review_mut().tab = tab;
+        self.sync_checks_visibility(cx);
         if tab == SidePanelTab::Review && self.review().summary_editor.is_none() {
             let summary = self.review().comments.summary.body.clone();
             let area = cx.new(|cx| {
