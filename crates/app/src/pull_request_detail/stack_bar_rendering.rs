@@ -19,10 +19,11 @@ impl PullRequestDetail {
         let layers = self.stack().map(|stack| &stack.layers);
 
         // The neighbours, once the layers are known.
+        let number_of = |index: usize| Some(layers?.get(index)?.number);
         let below = current
             .and_then(|index| index.checked_sub(1))
-            .and_then(|index| Some((index, layers?.get(index)?.number)));
-        let above = current.and_then(|index| Some((index + 1, layers?.get(index + 1)?.number)));
+            .and_then(number_of);
+        let above = current.and_then(|index| number_of(index + 1));
         let position = current.map_or(membership.position, |index| {
             u64::try_from(index + 1).unwrap_or(u64::MAX)
         });
@@ -60,13 +61,13 @@ impl PullRequestDetail {
                 )
                 .child(render_neighbour_button(
                     "layer-below",
-                    below.map(|(_, number)| format!("‹ #{number}").into()),
+                    below.map(|number| format!("‹ #{number}").into()),
                     "‹ bottom",
                     cx.listener(|detail, _, _, cx| detail.open_previous_layer(cx)),
                 ))
                 .child(render_neighbour_button(
                     "layer-above",
-                    above.map(|(_, number)| format!("#{number} ›").into()),
+                    above.map(|number| format!("#{number} ›").into()),
                     "top ›",
                     cx.listener(|detail, _, _, cx| detail.open_next_layer(cx)),
                 ))

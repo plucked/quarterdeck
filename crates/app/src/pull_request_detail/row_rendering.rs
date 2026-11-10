@@ -13,6 +13,7 @@ use super::detail_mode::DetailMode;
 use super::detail_row::DetailRow;
 use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
+use super::selection_granularity::DOUBLE_CLICK;
 use crate::app_commands::Copy;
 use crate::diff_view::{
     DiffRowStyle, DiffSide, DiffSummary, DiffSummaryBar, FileClickHandler, GapClickHandler,
@@ -24,8 +25,6 @@ use crate::theme;
 
 /// Size of the `+` that comments on a line.
 const COMMENT_BUTTON_WIDTH: f32 = 14.;
-/// Clicks on a line that open a comment on it.
-const DOUBLE_CLICK: usize = 2;
 
 impl Render for PullRequestDetail {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

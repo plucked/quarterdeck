@@ -41,6 +41,7 @@ use super::review_pane::ReviewPane;
 use super::review_target::ReviewTarget;
 use super::row_height_estimate::estimate_row_tops;
 use super::selected_diff_text::{row_code_text, selected_diff_text};
+use super::selection_granularity::SelectionGranularity;
 use super::side_panel_tab::SidePanelTab;
 
 use crate::app_services::AppServices;
@@ -63,9 +64,6 @@ const LIST_OVERDRAW: f32 = 600.;
 const DEFAULT_HIGHLIGHT_BATCHES: usize = 4;
 /// Code width that stays visible when a file is scrolled sideways to its end.
 const MIN_VISIBLE_CODE_WIDTH: f32 = 240.;
-/// How a press selects, by click count.
-const SINGLE_CLICK: usize = 1;
-const DOUBLE_CLICK: usize = 2;
 /// Dragging past the pane's edge scrolls by this share of the overshoot per mouse move.
 const AUTOSCROLL_SHARE: f32 = 0.5;
 
@@ -370,15 +368,16 @@ impl PullRequestDetail {
         window.focus(&self.focus);
 
         // One click starts a drag; more select a word or the line at once.
+        let granularity = SelectionGranularity::of(click_count);
         let text = self
             .rows
             .get(position.row)
             .and_then(|row| row_code_text(row, side, self.loaded_files()))
             .unwrap_or_default();
-        let range = match click_count {
-            0 | SINGLE_CLICK => position.byte..position.byte,
-            DOUBLE_CLICK => word_range_at(text, position.byte),
-            _ => 0..text.len(),
+        let range = match granularity {
+            SelectionGranularity::Drag => position.byte..position.byte,
+            SelectionGranularity::Word => word_range_at(text, position.byte),
+            SelectionGranularity::Line => 0..text.len(),
         };
         let at = |byte| DiffPosition {
             row: position.row,
@@ -389,7 +388,7 @@ impl PullRequestDetail {
             anchor: at(range.start),
             head: at(range.end),
         });
-        self.is_selecting = click_count <= SINGLE_CLICK;
+        self.is_selecting = granularity == SelectionGranularity::Drag;
         cx.notify();
     }
 

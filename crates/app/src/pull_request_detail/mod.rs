@@ -22,6 +22,7 @@
 //! - `layer_request.rs`: `LayerRequest`, a stack layer to show, with its place in the stack.
 //! - `diff_selection.rs`: `DiffSelection`, a text selection in one code column of the diff.
 //! - `selected_diff_text.rs`: the code a selection covers, as copied.
+//! - `selection_granularity.rs`: `SelectionGranularity`, what a press selects by its click count.
 //! - `parsed_description.rs`: `ParsedDescription`, the description of one version, parsed once.
 //! - `changed_rows.rs`: `ChangedRows`, the part of a file's rows a rebuild changed.
 //! - `changed_files.rs`: `ChangedFiles`, the load state of the files.
@@ -118,6 +119,7 @@ mod row_height_estimate;
 mod row_rendering;
 mod run_cancel;
 mod selected_diff_text;
+mod selection_granularity;
 mod side_panel_tab;
 mod stack_bar_rendering;
 mod sticky_header_rendering;
