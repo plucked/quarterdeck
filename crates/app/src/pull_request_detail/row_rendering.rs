@@ -242,7 +242,7 @@ impl PullRequestDetail {
             Some(ChangedFiles::Failed(message)) => message.clone(),
             Some(ChangedFiles::Loading(_) | ChangedFiles::Loaded(_)) | None => "".into(),
         };
-        render_status_line(message, theme::error())
+        render_status_line(message, theme::danger())
     }
 
     /// The totals above the files, with collapse and expand all.

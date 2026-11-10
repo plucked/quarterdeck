@@ -65,7 +65,7 @@ impl PullRequestDetail {
         let body = match (&panel.options, &panel.options_error) {
             (_, Some(error)) => render_line(
                 format!("GitHub's merge options could not be read: {error}"),
-                theme::error(),
+                theme::danger(),
             ),
             (None, None) => render_line("Reading the merge options from GitHub…", theme::muted()),
             (Some(options), None) => match options.state {
@@ -139,7 +139,7 @@ impl PullRequestDetail {
         body = match options.allowed_methods.as_slice() {
             [] => body.child(render_line(
                 "The repository allows no merge method.",
-                theme::error(),
+                theme::danger(),
             )),
             [only] => body.child(render_line(
                 format!("Method: {}", only.label()),
@@ -274,7 +274,7 @@ impl PullRequestDetail {
                 theme::muted(),
             ))
             .when(!options.permissions.can_close, |body| {
-                body.child(render_line("You may not close it.", theme::error()))
+                body.child(render_line("You may not close it.", theme::danger()))
             })
             .child(self.render_branch_choice(panel, options, cx))
             .child(row)
@@ -485,7 +485,7 @@ fn render_progress(progress: &ActionProgress) -> Option<AnyElement> {
         ActionProgress::Idle => return None,
         ActionProgress::Working(text) => (text.clone(), theme::accent()),
         ActionProgress::Done(text) => (text.clone(), theme::success()),
-        ActionProgress::Failed(text) => (text.clone(), theme::error()),
+        ActionProgress::Failed(text) => (text.clone(), theme::danger()),
     };
     Some(render_line(text, color))
 }

@@ -130,7 +130,7 @@ impl PullRequestDetail {
             ReviewStatus::Idle => return None,
             ReviewStatus::Working(text) => (text.clone(), theme::accent()),
             ReviewStatus::Done(text) => (text.clone(), theme::success()),
-            ReviewStatus::Failed(text) => (text.clone(), theme::error()),
+            ReviewStatus::Failed(text) => (text.clone(), theme::danger()),
         };
         Some(
             div()
@@ -151,7 +151,7 @@ impl PullRequestDetail {
         if let Some(error) = &comments.github_error {
             return div()
                 .text_xs()
-                .text_color(theme::error())
+                .text_color(theme::danger())
                 .child(format!("GitHub's conversations could not be read: {error}"))
                 .into_any_element();
         }

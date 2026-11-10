@@ -55,7 +55,8 @@ color_tokens! {
     code_background,
     /// Something that worked or is ready: an open pull request, a done review.
     success,
-    /// Destructive actions and blockers: delete, close, unmet requirements.
+    /// Destructive actions, blockers and errors: delete, close, unmet
+    /// requirements, a failure message.
     danger,
     /// Added lines: counts, the added badge, the `+` mark (blue).
     added,
@@ -75,8 +76,6 @@ color_tokens! {
     hunk_background,
     /// File status badge for a renamed file; local notes.
     renamed,
-    /// Error messages.
-    error,
 }
 
 /// The color of a syntax token of `kind`.

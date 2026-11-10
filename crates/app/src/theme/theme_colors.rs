@@ -51,7 +51,6 @@ pub struct ThemeColors {
     pub diff_filler: Rgba,
     pub hunk_background: Rgba,
     pub renamed: Rgba,
-    pub error: Rgba,
     /// Syntax colors in `SyntaxKind::ALL` order.
     syntax: [Rgba; 7],
     /// Whether the theme is dark: pictures drawn in near-white (some file
@@ -97,7 +96,6 @@ impl ThemeColors {
             diff_filler: rgb(mix(palette.background, palette.panel, 0.6)),
             hunk_background: rgb(mix(palette.panel, palette.added, 0.06)),
             renamed: rgb(palette.keyword),
-            error: rgb(palette.error),
             syntax: [
                 palette.comment,
                 palette.keyword,

@@ -54,7 +54,7 @@ impl Render for ChecksPanel {
             let note = match (self.error(), self.is_loading()) {
                 (Some(error), _) => render_note(
                     format!("The checks could not be read: {error}"),
-                    theme::error(),
+                    theme::danger(),
                 ),
                 (None, true) => div()
                     .p_3()
@@ -132,7 +132,7 @@ impl ChecksPanel {
                     .child(footnote(shown, summary.required.as_ref())),
             )
             .children(self.error().map(|error| {
-                render_inline_note(format!("Refresh failed: {error}"), theme::error())
+                render_inline_note(format!("Refresh failed: {error}"), theme::danger())
             }))
             .children(conflict_note(shown).map(|note| render_inline_note(note, theme::danger())))
             .children(access_note(shown).map(|note| render_inline_note(note, theme::muted())))

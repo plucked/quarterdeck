@@ -76,7 +76,7 @@ impl BriefGallery {
                 .child(SectionLabel::new(heading))
                 .into_any_element(),
             (Err(message), GalleryRow::Broken) => div()
-                .text_color(theme::error())
+                .text_color(theme::danger())
                 .child(message.clone())
                 .into_any_element(),
             (Ok(sample), row) => self.render_sample_row(sample, row),

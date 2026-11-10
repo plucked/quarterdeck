@@ -319,7 +319,7 @@ impl PullRequestState {
 fn render_error_status(text: SharedString) -> AnyElement {
     div()
         .text_xs()
-        .text_color(theme::error())
+        .text_color(theme::danger())
         .child(text)
         .into_any_element()
 }

@@ -78,7 +78,7 @@ fn report_form(
         .children(failure.map(|failure| {
             div()
                 .text_xs()
-                .text_color(theme::error())
+                .text_color(theme::danger())
                 .child(failure)
         }))
         .child(

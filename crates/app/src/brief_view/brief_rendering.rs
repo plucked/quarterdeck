@@ -133,7 +133,7 @@ pub fn render_brief_status(
             .child(
                 div()
                     .text_sm()
-                    .text_color(theme::error())
+                    .text_color(theme::danger())
                     .child(message.clone()),
             )
             .child(render_familiarity_picker("brief-reader", reader, handlers))
