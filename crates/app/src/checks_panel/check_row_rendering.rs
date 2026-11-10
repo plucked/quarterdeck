@@ -24,8 +24,8 @@ const TREE_PADDING: f32 = 6.;
 /// How far a flagged row's mark and its right column sit down, to line up
 /// with the check's name.
 const FLAGGED_ROW_DROP: f32 = 2.;
-/// Size of a section heading's text.
-const HEADING_TEXT_SIZE: f32 = 10.;
+/// Size of the text in a `Required` pill.
+const REQUIRED_PILL_TEXT_SIZE: f32 = 10.;
 
 /// The parts of a workflow or group row.
 pub(super) struct NodeRow {
@@ -256,7 +256,7 @@ fn render_required_pill(label: String, state: RequiredState) -> impl IntoElement
         .rounded_full()
         .border_1()
         .border_color(border)
-        .text_size(px(HEADING_TEXT_SIZE))
+        .text_size(px(REQUIRED_PILL_TEXT_SIZE))
         .text_color(text)
         .child(label)
 }

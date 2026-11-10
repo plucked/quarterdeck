@@ -189,10 +189,15 @@ impl ChecksPanel {
         match row {
             CheckRow::Heading(section) => self.render_heading(section, tree, cx),
             CheckRow::Flagged(check) => render_flagged_row(tree, check, cx),
-            CheckRow::Workflow(workflow) => self.render_workflow_row(index, tree, workflow, cx),
-            CheckRow::Group { workflow, entry } => {
-                self.render_group_row(index, tree, workflow, entry, cx)
-            }
+            CheckRow::Workflow(workflow) => match FoldableNode::workflow(tree, workflow) {
+                Some(node) => self.render_foldable_row(index, node, cx),
+                None => div().into_any_element(),
+            },
+            CheckRow::Group { workflow, entry } => match FoldableNode::group(tree, workflow, entry)
+            {
+                Some(node) => self.render_foldable_row(index, node, cx),
+                None => div().into_any_element(),
+            },
             CheckRow::Job { check, depth } => render_job_row(tree, check, depth, cx),
         }
     }
@@ -242,62 +247,98 @@ impl ChecksPanel {
             .into_any_element()
     }
 
-    /// A workflow: chevron, its outcome as one, name, and its progress.
-    fn render_workflow_row(
+    /// A workflow or a group in one: chevron, its outcome as one, name, a
+    /// pill for the required checks inside, and its progress; a group is
+    /// indented and lighter. A click folds or unfolds it.
+    fn render_foldable_row(
         &self,
         row_index: usize,
-        tree: &CheckTree,
-        workflow_index: usize,
+        node: FoldableNode,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(workflow) = tree.workflows().get(workflow_index) else {
-            return div().into_any_element();
-        };
-        let name = workflow.name.clone();
-        let is_unfolded = self.unfolded().contains(&name, None);
+        let workflow = node.workflow.to_owned();
+        let group = node.group.map(str::to_owned);
+        let is_unfolded = self.unfolded().contains(&workflow, group.as_deref());
         render_node_row(NodeRow {
-            id: ("check-workflow", row_index).into(),
-            indent: 0.,
-            name: workflow.name.clone().into(),
-            tally: workflow.tally,
-            required: workflow.required,
+            id: (node.id_prefix(), row_index).into(),
+            indent: node.indent(),
+            name: node.name().to_owned().into(),
+            tally: node.tally,
+            required: node.required,
             fold: FoldState::of(!is_unfolded),
-            weight: FontWeight::MEDIUM,
-        })
-        .on_click(cx.listener(move |panel, _, _, cx| panel.toggle_fold(&name, None, cx)))
-        .into_any_element()
-    }
-
-    /// A group of a workflow: indented, chevron, outcome, name, progress.
-    fn render_group_row(
-        &self,
-        row_index: usize,
-        tree: &CheckTree,
-        workflow_index: usize,
-        entry_index: usize,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let Some(workflow) = tree.workflows().get(workflow_index) else {
-            return div().into_any_element();
-        };
-        let Some(TreeEntry::Group(group)) = workflow.entries.get(entry_index) else {
-            return div().into_any_element();
-        };
-        let (workflow_name, group_name) = (workflow.name.clone(), group.name.clone());
-        let is_unfolded = self.unfolded().contains(&workflow_name, Some(&group_name));
-        render_node_row(NodeRow {
-            id: ("check-group", row_index).into(),
-            indent: TREE_INDENT,
-            name: group.name.clone().into(),
-            tally: group.tally,
-            required: group.required,
-            fold: FoldState::of(!is_unfolded),
-            weight: FontWeight::NORMAL,
+            weight: node.weight(),
         })
         .on_click(cx.listener(move |panel, _, _, cx| {
-            panel.toggle_fold(&workflow_name, Some(&group_name), cx);
+            panel.toggle_fold(&workflow, group.as_deref(), cx);
         }))
         .into_any_element()
+    }
+}
+
+/// A workflow, or a group in one: what its foldable row shows and folds.
+#[derive(Clone, Copy)]
+struct FoldableNode<'a> {
+    workflow: &'a str,
+    /// The group's name; `None` for the workflow itself.
+    group: Option<&'a str>,
+    tally: CheckTally,
+    /// The required checks inside, which the row's pill counts.
+    required: CheckTally,
+}
+
+impl<'a> FoldableNode<'a> {
+    /// Workflow `workflow_index` of `tree`.
+    fn workflow(tree: &'a CheckTree, workflow_index: usize) -> Option<Self> {
+        let workflow = tree.workflows().get(workflow_index)?;
+        Some(Self {
+            workflow: &workflow.name,
+            group: None,
+            tally: workflow.tally,
+            required: workflow.required,
+        })
+    }
+
+    /// Entry `entry_index` of workflow `workflow_index`, when it is a group.
+    fn group(tree: &'a CheckTree, workflow_index: usize, entry_index: usize) -> Option<Self> {
+        let workflow = tree.workflows().get(workflow_index)?;
+        let Some(TreeEntry::Group(group)) = workflow.entries.get(entry_index) else {
+            return None;
+        };
+        Some(Self {
+            workflow: &workflow.name,
+            group: Some(&group.name),
+            tally: group.tally,
+            required: group.required,
+        })
+    }
+
+    /// The name the row shows: the group's, else the workflow's.
+    fn name(&self) -> &'a str {
+        self.group.unwrap_or(self.workflow)
+    }
+
+    /// The first part of the row's element id.
+    fn id_prefix(&self) -> &'static str {
+        match self.group {
+            None => "check-workflow",
+            Some(_) => "check-group",
+        }
+    }
+
+    /// How far the row is indented: a group sits one level in.
+    fn indent(&self) -> f32 {
+        match self.group {
+            None => 0.,
+            Some(_) => TREE_INDENT,
+        }
+    }
+
+    /// The name's weight: workflows stand out from their groups.
+    fn weight(&self) -> FontWeight {
+        match self.group {
+            None => FontWeight::MEDIUM,
+            Some(_) => FontWeight::NORMAL,
+        }
     }
 }
 
