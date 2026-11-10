@@ -4,6 +4,7 @@ use qd_cache::{NoteAnchor, ReviewNote};
 use qd_diff::DiffLineKind;
 use qd_github::LineSide;
 
+use super::lines_label::note_lines_label;
 use super::loaded_file::LoadedFile;
 use crate::diff_line_sides::line_number_on;
 
@@ -67,7 +68,7 @@ pub fn local_review_markdown(
             current_path = Some(&note.path);
         }
         let _ = writeln!(markdown);
-        let _ = writeln!(markdown, "### {}", lines_title(&note.anchor));
+        let _ = writeln!(markdown, "### {}", note_lines_label(&note.anchor));
         if let (
             Some(loaded),
             NoteAnchor::Line {
@@ -98,26 +99,6 @@ fn note_line(note: &ReviewNote) -> u32 {
             line, start_line, ..
         } => start_line.unwrap_or(*line),
         NoteAnchor::Reply { .. } => 0,
-    }
-}
-
-/// `Line 42`, `Lines 40–42`, with ` (old)` for the old side.
-fn lines_title(anchor: &NoteAnchor) -> String {
-    let NoteAnchor::Line {
-        side,
-        line,
-        start_line,
-    } = anchor
-    else {
-        return "Reply".to_owned();
-    };
-    let side = match side {
-        LineSide::New => "",
-        LineSide::Old => " (old)",
-    };
-    match start_line {
-        Some(start) if start != line => format!("Lines {start}–{line}{side}"),
-        Some(_) | None => format!("Line {line}{side}"),
     }
 }
 

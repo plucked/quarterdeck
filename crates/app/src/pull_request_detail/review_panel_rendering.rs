@@ -1,8 +1,9 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*};
-use qd_cache::{NoteAnchor, NoteDestination, ReviewNote};
+use qd_cache::{NoteDestination, ReviewNote};
 use qd_github::ReviewEvent;
 
-use super::comment_card_rendering::{element_id, lines_label};
+use super::comment_card_rendering::element_id;
+use super::lines_label::note_lines_label;
 use super::pull_request_detail::PullRequestDetail;
 use super::review_status::ReviewStatus;
 use super::side_panel_tab::SidePanelTab;
@@ -296,14 +297,7 @@ impl PullRequestDetail {
                 current_path = Some(&note.path);
             }
             let id = note.id;
-            let lines = match &note.anchor {
-                NoteAnchor::Line {
-                    side,
-                    line,
-                    start_line,
-                } => lines_label(*side, *line, *start_line),
-                NoteAnchor::Reply { .. } => "Reply".to_owned(),
-            };
+            let lines = note_lines_label(&note.anchor);
             let first_line = note.body.lines().next().unwrap_or_default().to_owned();
             let key = SharedString::from(format!("{id:?}"));
             list = list.child(

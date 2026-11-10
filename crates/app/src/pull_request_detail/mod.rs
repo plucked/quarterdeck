@@ -42,6 +42,7 @@
 //! - `review_status.rs`: `ReviewStatus`, how the last review action went.
 //! - `side_panel_tab.rs`: `SidePanelTab`, files, review, actions or checks.
 //! - `review_actions.rs`: writing, editing, deleting and submitting comments; loading GitHub's.
+//! - `lines_label.rs`: `lines_label`, the lines a comment is about (`Line 42`, `Lines 40–42`).
 //! - `local_review_export.rs`: the local notes as Markdown for an agent.
 //! - `comment_card_rendering.rs`: the comment cards and the composer in the diff.
 //! - `review_panel_rendering.rs`: the side panel's review tab.
@@ -97,6 +98,7 @@ mod folder_summary;
 mod folder_viewed_state;
 mod layer_request;
 mod line_counts;
+mod lines_label;
 mod load_progress;
 mod loaded_file;
 mod local_review_export;

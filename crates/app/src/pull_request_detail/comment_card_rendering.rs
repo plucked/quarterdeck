@@ -1,8 +1,9 @@
 use gpui::{AnyElement, Context, Div, FontWeight, IntoElement, SharedString, div, prelude::*, px};
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote};
-use qd_github::{LineSide, ReviewThread, ThreadComment};
+use qd_github::{ReviewThread, ThreadComment};
 
 use super::comment_editor::EditorTarget;
+use super::lines_label::lines_label;
 use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::{CommentCard, note_key};
 use crate::avatar_images::Avatar;
@@ -445,16 +446,4 @@ fn render_badge(text: impl Into<SharedString>, color: gpui::Rgba) -> impl IntoEl
         .font_weight(FontWeight::MEDIUM)
         .text_color(color)
         .child(text.into())
-}
-
-/// `Line 42`, `Lines 40–42`, with ` (old)` on the old side.
-pub(super) fn lines_label(side: LineSide, line: u32, start_line: Option<u32>) -> String {
-    let side = match side {
-        LineSide::New => "",
-        LineSide::Old => " (old)",
-    };
-    match start_line {
-        Some(start) if start != line => format!("Lines {start}–{line}{side}"),
-        Some(_) | None => format!("Line {line}{side}"),
-    }
 }
