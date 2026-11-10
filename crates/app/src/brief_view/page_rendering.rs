@@ -7,6 +7,8 @@ use crate::theme;
 
 /// Height of the underline marking the shown page's tab.
 const TAB_UNDERLINE: f32 = 2.;
+/// Room under a tab's label, its underline included.
+const TAB_BOTTOM_SPACE: f32 = 6.;
 
 /// The brief's pages as a row of numbered tabs, the shown one underlined;
 /// a click shows that page. Wraps onto a second line when narrow.
@@ -31,7 +33,7 @@ pub fn render_page_tabs(
                 .gap_1p5()
                 .px_2()
                 .pt_1p5()
-                .pb(px(6. - TAB_UNDERLINE))
+                .pb(px(TAB_BOTTOM_SPACE - TAB_UNDERLINE))
                 .border_b(px(TAB_UNDERLINE))
                 .border_color(if is_shown {
                     theme::accent()

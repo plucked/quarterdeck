@@ -33,6 +33,13 @@ const TREE_INDENT: f32 = 12.;
 const TREE_PADDING: f32 = 6.;
 /// Height of the outcome bar under the verdict.
 const OUTCOME_BAR_HEIGHT: f32 = 4.;
+/// Gap between the outcome bar's segments.
+const OUTCOME_BAR_GAP: f32 = 1.;
+/// How far the verdict's mark sits down, to center it on the verdict's first line.
+const VERDICT_MARK_DROP: f32 = 1.;
+/// How far a flagged row's mark and its right column sit down, to line up
+/// with the check's name.
+const FLAGGED_ROW_DROP: f32 = 2.;
 /// Size of a section heading's text.
 const HEADING_TEXT_SIZE: f32 = 10.;
 /// Height of a section heading's line, so headings with and without the
@@ -97,7 +104,7 @@ impl ChecksPanel {
                     .flex()
                     .items_start()
                     .gap_2()
-                    .child(div().pt(px(1.)).child(CheckOutcomeMark::new(
+                    .child(div().pt(px(VERDICT_MARK_DROP)).child(CheckOutcomeMark::new(
                         "checks-verdict",
                         summary.outcome.unwrap_or(CheckOutcome::Neutral),
                         VERDICT_MARK_SIZE,
@@ -501,11 +508,11 @@ fn render_flagged_row(tree: &CheckTree, index: usize, cx: &mut Context<ChecksPan
         .py_1()
         .text_sm()
         .hover(|style| style.bg(theme::hover()))
-        .child(
-            div()
-                .pt(px(2.))
-                .child(CheckOutcomeMark::new("mark", check.outcome, ROW_MARK_SIZE)),
-        )
+        .child(div().pt(px(FLAGGED_ROW_DROP)).child(CheckOutcomeMark::new(
+            "mark",
+            check.outcome,
+            ROW_MARK_SIZE,
+        )))
         .child(
             div()
                 .flex_1()
@@ -532,7 +539,7 @@ fn render_flagged_row(tree: &CheckTree, index: usize, cx: &mut Context<ChecksPan
                 .flex()
                 .items_center()
                 .gap_1p5()
-                .pt(px(2.))
+                .pt(px(FLAGGED_ROW_DROP))
                 .children(render_required_tag(check))
                 .child(
                     div()
@@ -631,7 +638,7 @@ fn render_outcome_bar(tally: CheckTally) -> impl IntoElement {
     let ran = tally.ran();
     div()
         .flex()
-        .gap(px(1.))
+        .gap(px(OUTCOME_BAR_GAP))
         .h(px(OUTCOME_BAR_HEIGHT))
         .rounded_md()
         .overflow_hidden()
