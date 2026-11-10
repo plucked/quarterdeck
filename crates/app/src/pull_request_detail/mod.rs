@@ -66,6 +66,7 @@
 //! - `context_loads.rs`: `ContextLoads`, the file texts being fetched and their tasks.
 //! - `detail_mode.rs`: `DetailMode`, the diff or the brief in the main column.
 //! - `brief_pane.rs`: `BriefPane`, the briefs written this session, the run in flight, the brief's rows.
+//! - `brief_key.rs`: `BriefKey`, which brief: a pull request and review target.
 //! - `brief_row.rs`: `BriefRow`, one row of the brief's list.
 //! - `run_cancel.rs`: `RunCancel`, kills the agent process when the run is dropped.
 //! - `brief_job.rs`: `BriefJob`, one brief's background run: checkout, agent, checks, storing.
@@ -81,6 +82,7 @@ mod batch_progress;
 mod brief_actions;
 mod brief_code;
 mod brief_job;
+mod brief_key;
 mod brief_pane;
 mod brief_pane_rendering;
 mod brief_row;

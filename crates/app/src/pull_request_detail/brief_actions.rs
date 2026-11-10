@@ -14,6 +14,7 @@ use qd_studio::{
 use qd_update::AppVersion;
 
 use super::brief_job::BriefJob;
+use super::brief_key::BriefKey;
 use super::brief_pane::ShownBrief;
 use super::brief_row::BriefRow;
 use super::detail_event::DetailEvent;
@@ -37,10 +38,18 @@ const REPORT_PLACEHOLDER: &str = "What is wrong or weird: a part that misleads, 
 const CLAUDE_MISSING: &str = "Claude Code was not found. Install it (claude.ai/code) so `claude` is on PATH, in ~/.local/bin or in Homebrew's folder, and log in once in a terminal.";
 
 impl PullRequestDetail {
+    /// Which brief the shown pull request and target have; `None` without
+    /// a pull request.
+    pub(super) fn shown_brief_key(&self) -> Option<BriefKey> {
+        Some(BriefKey {
+            pull_request_id: self.pull_request()?.id,
+            target: self.target().clone(),
+        })
+    }
+
     /// The shown pull request's brief at the shown target, if one was started.
     pub(super) fn current_brief(&self) -> Option<&BriefState> {
-        let pull_request = self.pull_request()?;
-        self.brief().state_of(pull_request.id, self.target())
+        self.brief().state_of(&self.shown_brief_key()?)
     }
 
     /// Shows the diff or the brief in the main column.
@@ -52,25 +61,20 @@ impl PullRequestDetail {
 
     /// The page shown of the shown brief.
     pub(super) fn current_brief_page(&self) -> usize {
-        self.pull_request().map_or(0, |pull_request| {
-            self.brief().page_of(pull_request.id, self.target())
-        })
+        self.shown_brief_key()
+            .map_or(0, |key| self.brief().page_of(&key))
     }
 
     /// Shows `brief`, read from storage, as the shown pull request's brief
     /// at the shown target, unless this session already has one there (a
     /// run in flight, or one written since).
     pub(super) fn show_stored_brief(&mut self, brief: PreparedBrief) {
-        let Some(pull_request_id) = self.pull_request().map(|pull_request| pull_request.id) else {
+        let Some(key) = self.shown_brief_key() else {
             return;
         };
-        let target = self.target().clone();
-        if self.brief().state_of(pull_request_id, &target).is_none() {
-            self.brief_mut().set_state(
-                pull_request_id,
-                &target,
-                BriefState::Written(Box::new(brief)),
-            );
+        if self.brief().state_of(&key).is_none() {
+            self.brief_mut()
+                .set_state(&key, BriefState::Written(Box::new(brief)));
         }
     }
 
@@ -84,10 +88,9 @@ impl PullRequestDetail {
     /// Lays out the brief's rows for the shown pull request and target:
     /// the status row until a brief is written, then the shown page.
     pub(super) fn refresh_brief_rows(&mut self) {
-        let shown = self.pull_request().map(|pull_request| ShownBrief {
-            pull_request_id: pull_request.id,
-            target: self.target().clone(),
-            page: self.current_brief_page(),
+        let shown = self.shown_brief_key().map(|key| ShownBrief {
+            page: self.brief().page_of(&key),
+            key,
         });
         let rows = match self.current_brief() {
             Some(BriefState::Written(brief)) => {
@@ -144,11 +147,10 @@ impl PullRequestDetail {
 
     /// Shows page `page` of the shown brief, from its top.
     pub(super) fn show_brief_page(&mut self, page: usize, cx: &mut Context<Self>) {
-        let Some(pull_request_id) = self.pull_request().map(|pull_request| pull_request.id) else {
+        let Some(key) = self.shown_brief_key() else {
             return;
         };
-        let target = self.target().clone();
-        self.brief_mut().set_page(pull_request_id, &target, page);
+        self.brief_mut().set_page(&key, page);
         self.refresh_brief_rows();
         cx.notify();
     }
@@ -164,12 +166,14 @@ impl PullRequestDetail {
         if self.loaded_files().is_empty() {
             return;
         }
-        let pull_request_id = pull_request.id;
-        let target = self.target().clone();
+        let key = BriefKey {
+            pull_request_id: pull_request.id,
+            target: self.target().clone(),
+        };
         let reader = self.current_familiarity();
         let request = studio_request(
             &pull_request,
-            &target,
+            &key.target,
             self.stack(),
             self.loaded_files(),
             reader,
@@ -177,17 +181,13 @@ impl PullRequestDetail {
 
         // Without the CLI there is nothing to run; say how to get it.
         let Some(program) = find_claude() else {
-            self.brief_mut().set_state(
-                pull_request_id,
-                &target,
-                BriefState::Failed(CLAUDE_MISSING.into()),
-            );
+            self.brief_mut()
+                .set_state(&key, BriefState::Failed(CLAUDE_MISSING.into()));
             self.refresh_brief_rows();
             cx.notify();
             return;
         };
-        self.brief_mut()
-            .set_state(pull_request_id, &target, BriefState::Writing(None));
+        self.brief_mut().set_state(&key, BriefState::Writing(None));
         self.refresh_brief_rows();
         cx.notify();
 
@@ -195,14 +195,14 @@ impl PullRequestDetail {
         let job = BriefJob {
             services: self.services().clone(),
             pull_request,
-            target: target.clone(),
+            target: key.target.clone(),
             head_sha: self.shown_head_sha().map(str::to_owned),
             program,
             request,
             files: self.loaded_files().to_vec(),
             store: cx.global::<UiStateRecorder>().shared_store(),
         };
-        let run_target = target.clone();
+        let run_key = key.clone();
         let task = cx.spawn(async move |detail, cx| {
             // Write it on the background executor, reporting progress through
             // a channel that ends with the run.
@@ -217,11 +217,7 @@ impl PullRequestDetail {
             // Show each step; a closed view ends the wait.
             while let Some(step) = progress.next().await {
                 let shown = detail.update(cx, |detail, cx| {
-                    detail.set_brief_state(
-                        pull_request_id,
-                        &target,
-                        BriefState::Writing(Some(step)),
-                    );
+                    detail.set_brief_state(&key, BriefState::Writing(Some(step)));
                     cx.notify();
                 });
                 if shown.is_err() {
@@ -240,29 +236,27 @@ impl PullRequestDetail {
                         }
                         Err(message) => BriefState::Failed(message.into()),
                     };
-                    detail.set_brief_state(pull_request_id, &target, state);
+                    detail.set_brief_state(&key, state);
                     cx.notify();
                 })
                 .ok();
         });
-        self.brief_mut()
-            .start_run(pull_request_id, &run_target, task, cancel);
+        self.brief_mut().start_run(&run_key, task, cancel);
     }
 
     /// Stops the shown brief's run (killing the agent); the brief it was
     /// replacing shows again, if there was one.
     pub(super) fn cancel_brief(&mut self, cx: &mut Context<Self>) {
-        if let Some(pull_request_id) = self.pull_request().map(|pull_request| pull_request.id) {
-            let target = self.target().clone();
-            self.brief_mut().cancel_run(pull_request_id, &target);
+        if let Some(key) = self.shown_brief_key() {
+            self.brief_mut().cancel_run(&key);
         }
         self.refresh_brief_rows();
         cx.notify();
     }
 
     /// Records a brief's new state, laying out the rows again when it is the shown one.
-    fn set_brief_state(&mut self, pull_request_id: u64, target: &ReviewTarget, state: BriefState) {
-        self.brief_mut().set_state(pull_request_id, target, state);
+    fn set_brief_state(&mut self, key: &BriefKey, state: BriefState) {
+        self.brief_mut().set_state(key, state);
         self.refresh_brief_rows();
     }
 

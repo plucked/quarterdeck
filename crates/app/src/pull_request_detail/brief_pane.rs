@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use gpui::{ListAlignment, ListState, Task, px};
 use qd_studio::ReaderFamiliarity;
 
+use super::brief_key::BriefKey;
 use super::brief_row::BriefRow;
 use super::detail_mode::DetailMode;
-use super::review_target::ReviewTarget;
 use super::run_cancel::RunCancel;
 use crate::brief_view::{
     BriefHandlers, BriefPageRow, BriefReport, BriefState, DEFAULT_DIAGRAM_WIDTH, PreparedBrief,
@@ -17,8 +17,7 @@ const BRIEF_OVERDRAW: f32 = 400.;
 
 /// The brief of one pull request and review target, kept for the session.
 struct BriefEntry {
-    pull_request_id: u64,
-    target: ReviewTarget,
+    key: BriefKey,
     state: BriefState,
     /// The page shown of a written brief.
     page: usize,
@@ -42,8 +41,7 @@ struct BriefRun {
 /// same.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShownBrief {
-    pub pull_request_id: u64,
-    pub target: ReviewTarget,
+    pub key: BriefKey,
     pub page: usize,
 }
 
@@ -106,7 +104,7 @@ impl BriefPane {
             return;
         };
         let width = self.column_width;
-        let changed = match self.entry_mut(shown.pull_request_id, &shown.target) {
+        let changed = match self.entry_mut(&shown.key) {
             Some(BriefEntry {
                 state: BriefState::Written(brief),
                 ..
@@ -162,21 +160,19 @@ impl BriefPane {
         self.rows.get(index).copied()
     }
 
-    /// The brief of `pull_request_id` at `target`, if one was started.
-    pub fn state_of(&self, pull_request_id: u64, target: &ReviewTarget) -> Option<&BriefState> {
-        self.entry(pull_request_id, target)
-            .map(|entry| &entry.state)
+    /// The brief `key` names, if one was started.
+    pub fn state_of(&self, key: &BriefKey) -> Option<&BriefState> {
+        self.entry(key).map(|entry| &entry.state)
     }
 
-    /// Records the brief of `pull_request_id` at `target`, replacing the
-    /// state before (its run goes on); it opens on its first page, its
-    /// diagrams fitted to the column when it shows. A written brief that a run
-    /// starts to replace is kept, to show again when the run is cancelled.
-    pub fn set_state(&mut self, pull_request_id: u64, target: &ReviewTarget, state: BriefState) {
-        let Some(entry) = self.entry_mut(pull_request_id, target) else {
+    /// Records the brief `key` names, replacing the state before (its run
+    /// goes on); it opens on its first page, its diagrams fitted to the
+    /// column when it shows. A written brief that a run starts to replace is
+    /// kept, to show again when the run is cancelled.
+    pub fn set_state(&mut self, key: &BriefKey, state: BriefState) {
+        let Some(entry) = self.entry_mut(key) else {
             self.entries.push(BriefEntry {
-                pull_request_id,
-                target: target.clone(),
+                key: key.clone(),
                 state,
                 page: 0,
                 run: None,
@@ -195,46 +191,31 @@ impl BriefPane {
         entry.page = 0;
     }
 
-    /// The page shown of the brief of `pull_request_id` at `target`.
-    pub fn page_of(&self, pull_request_id: u64, target: &ReviewTarget) -> usize {
-        self.entry(pull_request_id, target)
-            .map_or(0, |entry| entry.page)
+    /// The page shown of the brief `key` names.
+    pub fn page_of(&self, key: &BriefKey) -> usize {
+        self.entry(key).map_or(0, |entry| entry.page)
     }
 
-    /// Shows `page` of the brief of `pull_request_id` at `target`.
-    pub fn set_page(&mut self, pull_request_id: u64, target: &ReviewTarget, page: usize) {
-        if let Some(entry) = self.entry_mut(pull_request_id, target) {
+    /// Shows `page` of the brief `key` names.
+    pub fn set_page(&mut self, key: &BriefKey, page: usize) {
+        if let Some(entry) = self.entry_mut(key) {
             entry.page = page;
         }
     }
 
-    fn entry(&self, pull_request_id: u64, target: &ReviewTarget) -> Option<&BriefEntry> {
-        self.entries
-            .iter()
-            .find(|entry| entry.pull_request_id == pull_request_id && entry.target == *target)
+    fn entry(&self, key: &BriefKey) -> Option<&BriefEntry> {
+        self.entries.iter().find(|entry| entry.key == *key)
     }
 
-    fn entry_mut(
-        &mut self,
-        pull_request_id: u64,
-        target: &ReviewTarget,
-    ) -> Option<&mut BriefEntry> {
-        self.entries
-            .iter_mut()
-            .find(|entry| entry.pull_request_id == pull_request_id && entry.target == *target)
+    fn entry_mut(&mut self, key: &BriefKey) -> Option<&mut BriefEntry> {
+        self.entries.iter_mut().find(|entry| entry.key == *key)
     }
 
-    /// Keeps `task` as the run writing the brief of `pull_request_id` at
-    /// `target` (recorded as writing before), cancelling an earlier run of
-    /// that brief; runs of other briefs go on.
-    pub fn start_run(
-        &mut self,
-        pull_request_id: u64,
-        target: &ReviewTarget,
-        task: Task<()>,
-        cancel: RunCancel,
-    ) {
-        if let Some(entry) = self.entry_mut(pull_request_id, target) {
+    /// Keeps `task` as the run writing the brief `key` names (recorded as
+    /// writing before), cancelling an earlier run of that brief; runs of
+    /// other briefs go on.
+    pub fn start_run(&mut self, key: &BriefKey, task: Task<()>, cancel: RunCancel) {
+        if let Some(entry) = self.entry_mut(key) {
             entry.run = Some(BriefRun {
                 _task: task,
                 _cancel: cancel,
@@ -242,23 +223,20 @@ impl BriefPane {
         }
     }
 
-    /// Stops the run writing the brief of `pull_request_id` at `target`
-    /// (killing its agent) and shows the brief it was replacing again, or
-    /// forgets the brief when there was none.
-    pub fn cancel_run(&mut self, pull_request_id: u64, target: &ReviewTarget) {
-        let replaced = self
-            .entry_mut(pull_request_id, target)
-            .and_then(|entry| entry.replaced.take());
-        self.remove(pull_request_id, target);
+    /// Stops the run writing the brief `key` names (killing its agent) and
+    /// shows the brief it was replacing again, or forgets the brief when
+    /// there was none.
+    pub fn cancel_run(&mut self, key: &BriefKey) {
+        let replaced = self.entry_mut(key).and_then(|entry| entry.replaced.take());
+        self.remove(key);
         if let Some(brief) = replaced {
-            self.set_state(pull_request_id, target, BriefState::Written(brief));
+            self.set_state(key, BriefState::Written(brief));
         }
     }
 
-    /// Forgets the brief of `pull_request_id` at `target`, killing its run.
-    fn remove(&mut self, pull_request_id: u64, target: &ReviewTarget) {
-        self.entries
-            .retain(|entry| entry.pull_request_id != pull_request_id || entry.target != *target);
+    /// Forgets the brief `key` names, killing its run.
+    fn remove(&mut self, key: &BriefKey) {
+        self.entries.retain(|entry| entry.key != *key);
     }
 
     /// Shows `rows` of the brief and page `shown`; the list is reset (to its

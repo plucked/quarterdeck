@@ -21,6 +21,7 @@ use qd_syntax::DiffSyntax;
 use super::action_panel::ActionPanel;
 use super::batch_progress::BatchProgress;
 use super::brief_actions::detail_brief_handlers;
+use super::brief_key::BriefKey;
 use super::brief_pane::BriefPane;
 use super::changed_files::ChangedFiles;
 use super::changed_rows::ChangedRows;
@@ -1531,7 +1532,11 @@ impl PullRequestDetail {
         let target = self.target.clone();
         let scope = target.viewed_scope(&pull_request);
         // A brief this session already holds there wins; the stored one is not read.
-        let wants_stored_brief = self.brief().state_of(pull_request.id, &target).is_none();
+        let brief_key = BriefKey {
+            pull_request_id: pull_request.id,
+            target: target.clone(),
+        };
+        let wants_stored_brief = self.brief().state_of(&brief_key).is_none();
         let cache = self.services.cache.clone();
         let client = self.services.github.clone();
         let ui_state = cx.global::<UiStateRecorder>().shared_store();
