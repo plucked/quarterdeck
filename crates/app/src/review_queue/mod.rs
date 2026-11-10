@@ -7,7 +7,9 @@
 //!
 //! Files:
 //! - `review_queue.rs`: `ReviewQueue`, the queue, selection, refresh and restore, and `Render`.
-//! - `sidebar_rendering.rs`: renders the queue list, its tabs and its status line.
+//! - `sidebar_rendering.rs`: renders the queue list, its tabs, its status line and repository headers.
+//! - `pull_request_row_rendering.rs`: renders a standalone pull request's sidebar row.
+//! - `stack_row_rendering.rs`: renders a stack's header and its layer rows in the sidebar.
 //! - `top_bar_rendering.rs`: the bar across the window's top (panel toggles, refresh, title).
 //! - `refresh_status.rs`: `RefreshStatus`, the state of the queue's refresh.
 //! - `refresh_schedule.rs`: `RefreshSchedule`, when the queue refreshes on its own.
@@ -45,6 +47,7 @@ mod others_group;
 mod others_repository;
 mod others_tab;
 mod others_tab_actions;
+mod pull_request_row_rendering;
 mod queue_lists;
 mod queue_row;
 mod refresh_schedule;
@@ -58,6 +61,7 @@ mod selection_restore;
 mod sidebar_rendering;
 mod stack_group;
 mod stack_key;
+mod stack_row_rendering;
 mod top_bar_rendering;
 
 pub use review_queue::ReviewQueue;
