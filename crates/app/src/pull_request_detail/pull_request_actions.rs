@@ -3,8 +3,9 @@ use std::time::{Duration, Instant};
 use gpui::Context;
 use qd_github::{MergeMethod, MergeOptions, MergeOutcome};
 
-use super::action_panel::{ActionPanel, ActionProgress, ArmedAction, PanelAction};
+use super::action_panel::{ActionPanel, ArmedAction, PanelAction};
 use super::detail_event::DetailEvent;
+use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
 
 /// Time between looks at an asynchronous merge GitHub is still running.
@@ -194,7 +195,7 @@ impl PullRequestDetail {
             detail
                 .update(cx, |detail, cx| {
                     let progress = action_result(armed, &outcome, branch_error.as_deref());
-                    let is_done = matches!(progress, ActionProgress::Done(_));
+                    let is_done = matches!(progress, OperationStatus::Done(_));
                     if let Some(panel) = detail.action_panel_mut() {
                         panel.progress = progress;
                         panel.armed = None;
@@ -207,7 +208,7 @@ impl PullRequestDetail {
                 .ok();
         });
         if let Some(panel) = self.action_panel_mut() {
-            panel.progress = ActionProgress::Working(working.into());
+            panel.progress = OperationStatus::Working(working.into());
             panel.task = Some(task);
         }
         cx.notify();
@@ -219,32 +220,36 @@ fn action_result(
     armed: ArmedAction,
     outcome: &Result<MergeOutcome, qd_github::GitHubError>,
     branch_error: Option<&str>,
-) -> ActionProgress {
+) -> OperationStatus {
     let branch_note = branch_error
         .map(|error| format!(" The branch could not be deleted: {error}"))
         .unwrap_or_default();
     match (armed, outcome) {
         (ArmedAction::DeleteBranch, Ok(_)) => match branch_error {
             Some(error) => {
-                ActionProgress::Failed(format!("The branch could not be deleted: {error}").into())
+                OperationStatus::Failed(format!("The branch could not be deleted: {error}").into())
             }
-            None => ActionProgress::Done("Branch deleted.".into()),
+            None => OperationStatus::Done("Branch deleted.".into()),
         },
-        (ArmedAction::Close, Ok(_)) => ActionProgress::Done(format!("Closed.{branch_note}").into()),
+        (ArmedAction::Close, Ok(_)) => {
+            OperationStatus::Done(format!("Closed.{branch_note}").into())
+        }
         (ArmedAction::Merge | ArmedAction::AdminMerge, Ok(MergeOutcome::Merged)) => {
-            ActionProgress::Done(format!("Merged.{branch_note}").into())
+            OperationStatus::Done(format!("Merged.{branch_note}").into())
         }
         (ArmedAction::Merge | ArmedAction::AdminMerge, Ok(MergeOutcome::Enqueued)) => {
-            ActionProgress::Done(
+            OperationStatus::Done(
                 "Added to the merge queue; it merges when the queue reaches it.".into(),
             )
         }
         (ArmedAction::Merge | ArmedAction::AdminMerge, Ok(MergeOutcome::Pending { .. })) => {
-            ActionProgress::Done("GitHub is still merging; refresh later to see the result.".into())
+            OperationStatus::Done(
+                "GitHub is still merging; refresh later to see the result.".into(),
+            )
         }
         (ArmedAction::Merge | ArmedAction::AdminMerge, Ok(MergeOutcome::Failed(message))) => {
-            ActionProgress::Failed(format!("GitHub did not merge it: {message}").into())
+            OperationStatus::Failed(format!("GitHub did not merge it: {message}").into())
         }
-        (_, Err(error)) => ActionProgress::Failed(format!("{error:#}").into()),
+        (_, Err(error)) => OperationStatus::Failed(format!("{error:#}").into()),
     }
 }

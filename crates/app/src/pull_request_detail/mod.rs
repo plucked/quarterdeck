@@ -43,7 +43,7 @@
 //! - `review_comments.rs`: `ReviewComments`, GitHub's conversations and the user's notes, as cards.
 //! - `comment_placement.rs`: `CommentPlacement`, which line each card and the composer go under.
 //! - `comment_editor.rs`: `CommentEditor`, the comment being written and what it is for.
-//! - `review_status.rs`: `ReviewStatus`, how the last review action went.
+//! - `operation_status.rs`: `OperationStatus`, how the last review or pull request action went, and its line.
 //! - `side_panel_tab.rs`: `SidePanelTab`, files, review, actions or checks.
 //! - `review_actions.rs`: writing, editing, deleting and submitting comments; loading GitHub's.
 //! - `lines_label.rs`: `lines_label`, the lines a comment is about (`Line 42`, `Lines 40–42`).
@@ -106,6 +106,7 @@ mod lines_label;
 mod load_progress;
 mod loaded_file;
 mod local_review_export;
+mod operation_status;
 mod parsed_description;
 mod pull_request_actions;
 mod pull_request_detail;
@@ -113,7 +114,7 @@ mod review_actions;
 mod review_comments;
 mod review_pane;
 mod review_panel_rendering;
-mod review_status;
+
 mod review_target;
 mod row_height_estimate;
 mod row_rendering;

@@ -10,9 +10,9 @@ use super::comment_editor::{CommentEditor, EditorTarget};
 use super::comment_placement::CommentPlacement;
 use super::detail_row::DetailRow;
 use super::local_review_export::{ReviewExportHeader, local_review_markdown};
+use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::{CommentCard, ReviewComments};
-use super::review_status::ReviewStatus;
 use super::review_target::ReviewTarget;
 use super::side_panel_tab::SidePanelTab;
 use crate::avatar_images::AvatarImages;
@@ -71,7 +71,7 @@ impl PullRequestDetail {
         review.editor = None;
         review.load_task = None;
         review.action_task = None;
-        review.status = ReviewStatus::Idle;
+        review.status = OperationStatus::Idle;
         review.drop_summary_editor();
     }
 
@@ -561,11 +561,11 @@ impl PullRequestDetail {
         + 'static,
     ) {
         let Ok(client) = self.services().github.clone() else {
-            self.review_mut().status = ReviewStatus::Failed("GitHub is not connected.".into());
+            self.review_mut().status = OperationStatus::Failed("GitHub is not connected.".into());
             cx.notify();
             return;
         };
-        self.review_mut().status = ReviewStatus::Working(message.into());
+        self.review_mut().status = OperationStatus::Working(message.into());
         cx.notify();
         let task = cx.spawn(async move |detail, cx| {
             let done = cx
@@ -575,8 +575,8 @@ impl PullRequestDetail {
             detail
                 .update(cx, |detail, cx| {
                     detail.review_mut().status = match done {
-                        Ok(()) => ReviewStatus::Idle,
-                        Err(error) => ReviewStatus::Failed(format!("{error:#}").into()),
+                        Ok(()) => OperationStatus::Idle,
+                        Err(error) => OperationStatus::Failed(format!("{error:#}").into()),
                     };
                     detail.load_github_review(cx);
                     cx.notify();
@@ -654,7 +654,7 @@ impl PullRequestDetail {
             submission.event = ReviewEvent::Comment;
         }
 
-        self.review_mut().status = ReviewStatus::Working("Submitting the review…".into());
+        self.review_mut().status = OperationStatus::Working("Submitting the review…".into());
         cx.notify();
         let task = cx.spawn(async move |detail, cx| {
             // Submit off the main thread, hearing which drafts GitHub took.
@@ -708,9 +708,9 @@ impl PullRequestDetail {
                             if let Some(area) = detail.review().summary_editor.clone() {
                                 area.update(cx, |area, cx| area.set_text("", cx));
                             }
-                            ReviewStatus::Done("Review submitted.".into())
+                            OperationStatus::Done("Review submitted.".into())
                         }
-                        Err(error) => ReviewStatus::Failed(format!("{error:#}").into()),
+                        Err(error) => OperationStatus::Failed(format!("{error:#}").into()),
                     };
                     detail.load_github_review(cx);
                     detail.rebuild_rows_in_place();
@@ -817,7 +817,7 @@ impl PullRequestDetail {
         cx.write_to_clipboard(ClipboardItem::new_string(markdown));
         let plural = if count == 1 { "" } else { "s" };
         self.review_mut().status =
-            ReviewStatus::Done(format!("Copied {count} note{plural} for your agent.").into());
+            OperationStatus::Done(format!("Copied {count} note{plural} for your agent.").into());
         cx.notify();
     }
 

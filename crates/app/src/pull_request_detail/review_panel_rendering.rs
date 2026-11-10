@@ -5,7 +5,7 @@ use qd_github::ReviewEvent;
 use super::comment_card_rendering::element_id;
 use super::lines_label::note_lines_label;
 use super::pull_request_detail::PullRequestDetail;
-use super::review_status::ReviewStatus;
+
 use super::side_panel_tab::SidePanelTab;
 use crate::button::Button;
 use crate::section_label::SectionLabel;
@@ -75,7 +75,7 @@ impl PullRequestDetail {
             .pt_2()
             .pb_4()
             .child(self.render_destination_switch(cx))
-            .children(self.render_review_status())
+            .children(self.review().status.render())
             .child(body)
     }
 
@@ -123,23 +123,6 @@ impl PullRequestDetail {
                     ),
             )
             .into_any_element()
-    }
-
-    /// The last review action's outcome, while there is one.
-    fn render_review_status(&self) -> Option<AnyElement> {
-        let (text, color) = match &self.review().status {
-            ReviewStatus::Idle => return None,
-            ReviewStatus::Working(text) => (text.clone(), theme::accent()),
-            ReviewStatus::Done(text) => (text.clone(), theme::success()),
-            ReviewStatus::Failed(text) => (text.clone(), theme::danger()),
-        };
-        Some(
-            div()
-                .text_xs()
-                .text_color(color)
-                .child(text)
-                .into_any_element(),
-        )
     }
 
     /// The GitHub review: drafts, a pending review begun in the browser,

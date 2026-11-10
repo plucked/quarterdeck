@@ -3,8 +3,8 @@ use qd_cache::NoteDestination;
 
 use super::comment_editor::CommentEditor;
 use super::comment_placement::CommentPlacement;
+use super::operation_status::OperationStatus;
 use super::review_comments::{PlacedCard, ReviewComments};
-use super::review_status::ReviewStatus;
 use super::side_panel_tab::SidePanelTab;
 use crate::text_area::TextArea;
 
@@ -19,7 +19,7 @@ pub struct ReviewPane {
     /// Where new comments go on a single pull request (combined reviews are always local).
     pub destination: NoteDestination,
     pub editor: Option<CommentEditor>,
-    pub status: ReviewStatus,
+    pub status: OperationStatus,
     pub tab: SidePanelTab,
     /// The GitHub review's summary, while the review tab shows it.
     pub summary_editor: Option<Entity<TextArea>>,
@@ -52,7 +52,7 @@ impl Default for ReviewPane {
             placement: CommentPlacement::default(),
             destination: NoteDestination::GitHub,
             editor: None,
-            status: ReviewStatus::Idle,
+            status: OperationStatus::Idle,
             tab: SidePanelTab::Files,
             summary_editor: None,
             summary_subscription: None,

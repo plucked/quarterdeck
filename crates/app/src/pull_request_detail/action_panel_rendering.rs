@@ -1,7 +1,8 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, Rgba, SharedString, div, prelude::*, px};
 use qd_github::{MergeMethod, MergeOptions, MergeQueueState, PullRequestState};
 
-use super::action_panel::{ActionPanel, ActionProgress, ArmedAction, PanelAction};
+use super::action_panel::{ActionPanel, ArmedAction, PanelAction};
+use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
 use crate::button::Button;
 use crate::checkbox::{CheckState, Checkbox};
@@ -91,7 +92,7 @@ impl PullRequestDetail {
                 .bg(theme::surface())
                 .text_sm()
                 .child(body)
-                .children(render_progress(&panel.progress))
+                .children(panel.progress.render())
                 .into_any_element(),
         )
     }
@@ -298,7 +299,7 @@ impl PullRequestDetail {
             .flex_col()
             .gap_2()
             .child(render_line(state, theme::muted()));
-        let is_deleted = matches!(&panel.progress, ActionProgress::Done(_));
+        let is_deleted = matches!(&panel.progress, OperationStatus::Done(_));
         if !self.can_delete_head_branch(Some(options)) || is_deleted {
             return body.into_any_element();
         }
@@ -477,15 +478,4 @@ fn render_confirmation(
                 ),
         )
         .into_any_element()
-}
-
-/// How the action is going, while it runs or after.
-fn render_progress(progress: &ActionProgress) -> Option<AnyElement> {
-    let (text, color) = match progress {
-        ActionProgress::Idle => return None,
-        ActionProgress::Working(text) => (text.clone(), theme::accent()),
-        ActionProgress::Done(text) => (text.clone(), theme::success()),
-        ActionProgress::Failed(text) => (text.clone(), theme::danger()),
-    };
-    Some(render_line(text, color))
 }

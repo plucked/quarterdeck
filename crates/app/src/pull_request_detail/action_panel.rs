@@ -1,6 +1,8 @@
 use gpui::{SharedString, Task};
 use qd_github::{MergeMethod, MergeOptions};
 
+use super::operation_status::OperationStatus;
+
 /// Which action the Actions tab's panel prepares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelAction {
@@ -19,16 +21,6 @@ pub enum ArmedAction {
     DeleteBranch,
 }
 
-/// How the action is going.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub enum ActionProgress {
-    #[default]
-    Idle,
-    Working(SharedString),
-    Done(SharedString),
-    Failed(SharedString),
-}
-
 /// The merge or close panel in the side panel's Actions tab: GitHub's options for the
 /// pull request (read when the panel opens), the user's choices, the
 /// action waiting for confirmation, and how it is going.
@@ -40,7 +32,8 @@ pub struct ActionPanel {
     pub method: Option<MergeMethod>,
     pub delete_branch: bool,
     pub armed: Option<ArmedAction>,
-    pub progress: ActionProgress,
+    /// How the action is going.
+    pub progress: OperationStatus,
     /// Reading the options, or running the action; dropping it cancels.
     pub task: Option<Task<()>>,
 }
@@ -54,13 +47,13 @@ impl ActionPanel {
             method: None,
             delete_branch: false,
             armed: None,
-            progress: ActionProgress::Idle,
+            progress: OperationStatus::Idle,
             task: None,
         }
     }
 
     /// Whether an action is running (the buttons wait).
     pub fn is_working(&self) -> bool {
-        matches!(self.progress, ActionProgress::Working(_))
+        matches!(self.progress, OperationStatus::Working(_))
     }
 }
