@@ -6,7 +6,7 @@ use super::github_link::GitHubLink;
 use super::pull_request_detail::PullRequestDetail;
 use crate::avatar_images::Avatar;
 use crate::controls::{
-    FOLD_CHEVRON_SIZE, FoldChevron, FoldState, Pill, PillStyle, SegmentedControl, view_option,
+    FOLD_CHEVRON_SIZE, FoldChevron, FoldState, Pill, SegmentedControl, view_option,
 };
 use crate::display_text::short_date;
 use crate::markdown_view::MarkdownView;
@@ -127,9 +127,7 @@ impl PullRequestDetail {
             .gap_2()
             .text_xs()
             .text_color(theme::muted())
-            .when(pull_request.draft, |meta| {
-                meta.child(Pill::new("Draft", PillStyle::Filled))
-            })
+            .when(pull_request.draft, |meta| meta.child(Pill::draft()))
             .child(div().min_w_0().truncate().child(format!(
                 "{} #{}  ·",
                 pull_request.repo.full_name(),

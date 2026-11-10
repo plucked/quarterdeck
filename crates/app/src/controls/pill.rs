@@ -65,7 +65,8 @@ impl Pill {
         }
     }
 
-    /// The compact outlined pill marking a draft pull request in the sidebar.
+    /// The compact outlined pill marking a draft pull request, the same in
+    /// the sidebar and the detail's header.
     pub fn draft() -> Self {
         Self::new("Draft", PillStyle::Outlined).compact()
     }
