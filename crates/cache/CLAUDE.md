@@ -13,7 +13,7 @@
 | `window_placement` / `window_mode` / `display_uuid` | `WindowPlacement` (bounds relative to its display), `WindowMode` (SQL text mapping), `DisplayUuid` |
 | `file_set_storage` / `cached_file_set` / `file_set_revision` | changed files with the commits + PR ETag they were fetched for; `file_set` (marks used), `put_files`, `confirm_files` |
 | `file_text_storage` | `file_texts`: whole file contents by full blob SHA; `file_text(sha)` takes a full or abbreviated (≥ 7 hex) SHA as a key range `sha..sha+'g'` (an index seek; `LIKE` would scan), and an abbreviation two blobs share finds none; `put_file_text` |
-| `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` (then `VACUUM` and a WAL checkpoint, so the file shrinks) |
+| `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` (the deletes in one transaction, then `VACUUM` and a WAL checkpoint after it commits, so the file shrinks) |
 | `cache_usage` / `cache_usage_storage` | `CacheUsage` (+ `CachedData`: entries, files, bytes) per kind (pull requests, PR files, comparisons), size on disk (pages + WAL) and free pages; `GitHubCache::usage` sums text bytes with `LENGTH(CAST(… AS BLOB))` |
 | `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
 | `color_theme` / `appearance_settings_storage` | `ColorTheme` (Ledger, Vellum, Overcast, Signal, Graphite (default), Tide, Lantern, Beacon), stored by name in `appearance_settings` (one row) |
