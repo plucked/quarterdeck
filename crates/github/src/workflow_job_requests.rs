@@ -26,22 +26,12 @@ impl GitHubClient {
         // The runs on the commit; a workflow run again (another event) counts once, by its newest run.
         let runs_url = format!("{base}/actions/runs");
         let mut runs: Vec<WorkflowRun> = Vec::new();
-        for page in 1..=MAX_PAGES {
-            let page_text = page.to_string();
-            let answer: WorkflowRunsPage = self.get_json(
-                &runs_url,
-                &[
-                    ("head_sha", head_sha),
-                    ("per_page", PAGE_SIZE),
-                    ("page", &page_text),
-                ],
-            )?;
-            let is_last = answer.workflow_runs.is_empty();
-            runs.extend(answer.workflow_runs);
-            if is_last || runs.len() >= answer.total_count {
-                break;
-            }
-        }
+        self.numbered_pages(
+            &runs_url,
+            &[("head_sha", head_sha)],
+            MAX_PAGES,
+            &mut |page: WorkflowRunsPage| runs.extend(page.workflow_runs),
+        )?;
         let mut newest: HashMap<u64, WorkflowRun> = HashMap::new();
         for run in runs {
             match newest.get(&run.workflow_id) {
@@ -57,24 +47,14 @@ impl GitHubClient {
         for run in newest.into_values() {
             let workflow = run.name.unwrap_or_else(|| "Workflow".to_owned());
             let jobs_url = format!("{base}/actions/runs/{}/jobs", run.id);
-            let mut read = 0;
-            for page in 1..=MAX_PAGES {
-                let page_text = page.to_string();
-                let answer: WorkflowJobsPage = self.get_json(
-                    &jobs_url,
-                    &[
-                        ("filter", "latest"),
-                        ("per_page", PAGE_SIZE),
-                        ("page", &page_text),
-                    ],
-                )?;
-                let is_last = answer.jobs.is_empty();
-                read += answer.jobs.len();
-                checks.extend(answer.jobs.into_iter().map(|job| job.into_check(&workflow)));
-                if is_last || read >= answer.total_count {
-                    break;
-                }
-            }
+            self.numbered_pages(
+                &jobs_url,
+                &[("filter", "latest")],
+                MAX_PAGES,
+                &mut |page: WorkflowJobsPage| {
+                    checks.extend(page.jobs.into_iter().map(|job| job.into_check(&workflow)));
+                },
+            )?;
         }
 
         // Commit statuses from other systems, latest per context.

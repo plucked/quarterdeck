@@ -37,6 +37,7 @@
 | `aliased_pull_requests_query` | `AliasedPullRequestsQuery` (operation, alias prefix, selection → text with one `pullRequest(number:)` field per number) and `AliasedPullRequestsData<T>` (the repository's aliases, `null`s skipped), shared by `pull_request_lookup_query` and `layer_conflicts_query` (crate-private) |
 | `etag` / `conditional_response` | `ETag`, `ConditionalResponse` (NotModified / Modified) |
 | `next_page_url` | `Link` header pagination |
+| `paged_requests` | `linked_pages` (follows `rel="next"` up to a page cap, says whether the pages ran out; `pull_request_files`, the issues sync) and `numbered_pages` (`page=1…` until an empty page or the answer's `total_count`, via `NumberedPage`; the Actions runs and jobs) (crate-private) |
 | `rate_limit` / `api_usage` | `RateLimit`, `RateLimitResource`, `ApiUsage` counts and budgets |
 
 - `PullRequestFile::sha`: the blob after the change, full from the files API, abbreviated from a whole diff's `index OLD..NEW` line (none for a deleted file).

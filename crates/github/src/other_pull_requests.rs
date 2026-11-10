@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::de::IgnoredAny;
 
-use crate::github_client::{JSON_MEDIA_TYPE, PAGE_SIZE};
+use crate::github_client::PAGE_SIZE;
 use crate::pull_request_lookup_query::{PullRequestLookupData, pull_request_lookup_query};
 use crate::search_issue::SearchIssue;
 use crate::{GitHubClient, GitHubError, OtherPullRequestsUpdate, PullRequest, RepoRef};
@@ -169,7 +169,7 @@ impl GitHubClient {
         repo: &RepoRef,
         mode: &SyncMode,
     ) -> Result<RepositoryIssues, GitHubError> {
-        let first_page = format!("{}/issues", repo.api_url());
+        // The query: newest first, open ones or every change since a time.
         let mut parameters = vec![
             ("sort", "updated"),
             ("direction", "desc"),
@@ -184,38 +184,32 @@ impl GitHubClient {
         }
         let mut items = Vec::new();
         let mut seen_ids: HashSet<u64> = HashSet::new();
-        let mut next = Some((first_page, parameters));
-        for _ in 0..MAX_ISSUE_PAGES {
-            let Some((url, parameters)) = next.take() else {
-                break;
-            };
-            let response = self.get(&url, &parameters, None, JSON_MEDIA_TYPE, &mut |_| {})?;
-            let page = serde_json::from_str::<Vec<RepositoryIssue>>(&response.body)?;
+        let is_complete = self.linked_pages(
+            &format!("{}/issues", repo.api_url()),
+            &parameters,
+            MAX_ISSUE_PAGES,
+            &mut |page: Vec<RepositoryIssue>| {
+                // GitHub answers a renamed repository under its new name; say so instead of listing it apart.
+                if let Some(moved_to) = page
+                    .iter()
+                    .filter_map(|item| RepoRef::from_api_url(&item.issue.repository_url))
+                    .find(|actual| actual != repo)
+                {
+                    return Err(GitHubError::Moved {
+                        from: repo.full_name(),
+                        to: moved_to.full_name(),
+                    });
+                }
 
-            // GitHub answers a renamed repository under its new name; say so instead of listing it apart.
-            if let Some(moved_to) = page
-                .iter()
-                .filter_map(|item| RepoRef::from_api_url(&item.issue.repository_url))
-                .find(|actual| actual != repo)
-            {
-                return Err(GitHubError::Moved {
-                    from: repo.full_name(),
-                    to: moved_to.full_name(),
-                });
-            }
-
-            // An item updated while paging moves up, so the next page can repeat one: keep it once.
-            items.extend(
-                page.into_iter()
-                    .filter(|item| seen_ids.insert(item.issue.id)),
-            );
-            // The next page's URL already carries its query.
-            next = response.next_page.map(|url| (url, Vec::new()));
-        }
-        Ok(RepositoryIssues {
-            items,
-            is_complete: next.is_none(),
-        })
+                // An item updated while paging moves up, so the next page can repeat one: keep it once.
+                items.extend(
+                    page.into_iter()
+                        .filter(|item| seen_ids.insert(item.issue.id)),
+                );
+                Ok(())
+            },
+        )?;
+        Ok(RepositoryIssues { items, is_complete })
     }
 }
 

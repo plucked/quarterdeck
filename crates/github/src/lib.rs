@@ -30,6 +30,7 @@
 //! - `etag.rs`: `ETag`, the tag a conditional request sends back.
 //! - `conditional_response.rs`: `ConditionalResponse`, not modified or a new value.
 //! - `next_page_url.rs`: reads the next page from a `Link` header.
+//! - `paged_requests.rs`: reading a list page by page, by `Link` header (`linked_pages`) or by page number and total (`numbered_pages`, `NumberedPage`).
 //! - `rate_limit.rs`: `RateLimit` and `RateLimitResource`, a budget GitHub reported.
 //! - `api_usage.rs`: `ApiUsage`, requests sent and budgets left, shared by clones.
 //! - `revision_check.rs`: `RevisionCheck`, a pull request's commits and file count.
@@ -103,6 +104,7 @@ mod merge_queries;
 mod next_page_url;
 mod other_pull_requests;
 mod other_pull_requests_update;
+mod paged_requests;
 mod pull_request;
 mod pull_request_branches;
 mod pull_request_checks;

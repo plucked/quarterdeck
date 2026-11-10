@@ -3,6 +3,7 @@
 
 use serde::Deserialize;
 
+use crate::paged_requests::NumberedPage;
 use crate::{CheckOutcome, CheckSource, StatusCheck};
 
 /// A page of `GET /repos/{o}/{r}/actions/runs?head_sha=…`.
@@ -10,6 +11,16 @@ use crate::{CheckOutcome, CheckSource, StatusCheck};
 pub(crate) struct WorkflowRunsPage {
     pub total_count: usize,
     pub workflow_runs: Vec<WorkflowRun>,
+}
+
+impl NumberedPage for WorkflowRunsPage {
+    fn item_count(&self) -> usize {
+        self.workflow_runs.len()
+    }
+
+    fn total_count(&self) -> usize {
+        self.total_count
+    }
 }
 
 /// One workflow run on the commit.
@@ -26,6 +37,16 @@ pub(crate) struct WorkflowRun {
 pub(crate) struct WorkflowJobsPage {
     pub total_count: usize,
     pub jobs: Vec<WorkflowJob>,
+}
+
+impl NumberedPage for WorkflowJobsPage {
+    fn item_count(&self) -> usize {
+        self.jobs.len()
+    }
+
+    fn total_count(&self) -> usize {
+        self.total_count
+    }
 }
 
 /// One job of a run: what a check run of GitHub Actions stands for.

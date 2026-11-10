@@ -1,4 +1,4 @@
-use crate::github_client::{JSON_MEDIA_TYPE, PAGE_SIZE};
+use crate::github_client::PAGE_SIZE;
 use crate::unified_diff::files_of_unified_diff;
 use crate::{DownloadProgress, GitHubClient, GitHubError, PullRequestFile, RepoRef};
 
@@ -21,21 +21,18 @@ impl GitHubClient {
         number: u64,
         on_page: &mut dyn FnMut(usize),
     ) -> Result<Vec<PullRequestFile>, GitHubError> {
-        let first_page = format!("{}/pulls/{number}/files", repo.api_url());
+        // GitHub stops listing at its cap, so a capped read is all there is.
         let mut files = Vec::new();
-        let mut next = Some((first_page, vec![("per_page", PAGE_SIZE)]));
-        for _ in 0..MAX_FILE_PAGES {
-            let Some((url, query)) = next.take() else {
-                break;
-            };
-            let response = self.get(&url, &query, None, JSON_MEDIA_TYPE, &mut |_| {})?;
-            files.extend(serde_json::from_str::<Vec<PullRequestFile>>(
-                &response.body,
-            )?);
-            on_page(files.len());
-            // The next page's URL already carries its query.
-            next = response.next_page.map(|url| (url, Vec::new()));
-        }
+        self.linked_pages(
+            &format!("{}/pulls/{number}/files", repo.api_url()),
+            &[("per_page", PAGE_SIZE)],
+            MAX_FILE_PAGES,
+            &mut |page: Vec<PullRequestFile>| {
+                files.extend(page);
+                on_page(files.len());
+                Ok(())
+            },
+        )?;
         Ok(files)
     }
 
