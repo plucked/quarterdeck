@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use gpui::{AnyElement, IntoElement, div, prelude::*, px, rgb};
 use qd_github::PullRequest;
 
-use super::others_filtering::OthersFacet;
+use super::others_facet::OthersFacet;
 use crate::avatar_images::Avatar;
 
 /// An author's avatar in a chip.

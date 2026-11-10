@@ -4,13 +4,18 @@ use qd_cache::OthersFilter;
 use qd_file_tree::FacetCount;
 use qd_github::PullRequest;
 
+use super::others_facet::OthersFacet;
 use crate::display_date::unix_seconds;
 
-/// A chip row of the Others filter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum OthersFacet {
-    Labels,
-    Authors,
+/// Seconds in a day, to say the Updated within limit in days.
+const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
+
+/// How many pull requests have a chip's value, and how many of those the
+/// rest of the filter lets through.
+#[derive(Debug, Clone, Copy, Default)]
+struct ChipTally {
+    total: usize,
+    matching: usize,
 }
 
 /// What an Others filter decides from besides the filter itself: which
@@ -40,13 +45,10 @@ pub fn chip_counts(
     pull_requests: &[&PullRequest],
     context: &FilterContext,
 ) -> Vec<FacetCount<String>> {
-    let chips = match facet {
-        OthersFacet::Labels => &filter.labels,
-        OthersFacet::Authors => &filter.authors,
-    };
+    let chips = facet.chips_of(filter);
 
     // Count each value, and the pull requests with it that the other rows admit.
-    let mut counts: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    let mut counts: BTreeMap<&str, ChipTally> = BTreeMap::new();
     for pull_request in pull_requests.iter().copied() {
         let passes_rest = passes_switches(filter, pull_request, context)
             && match facet {
@@ -62,9 +64,9 @@ pub fn chip_counts(
             OthersFacet::Authors => vec![pull_request.author.login.as_str()],
         };
         for value in values {
-            let entry = counts.entry(value).or_default();
-            entry.0 += 1;
-            entry.1 += usize::from(passes_rest);
+            let tally = counts.entry(value).or_default();
+            tally.total += 1;
+            tally.matching += usize::from(passes_rest);
         }
     }
 
@@ -76,11 +78,11 @@ pub fn chip_counts(
     // Most matching first, so the collapsed row shows the useful ones.
     let mut counts: Vec<FacetCount<String>> = counts
         .into_iter()
-        .filter(|(value, (_, matching))| *matching > 0 || chips.is_set(*value))
-        .map(|(value, (total, matching))| FacetCount {
+        .filter(|(value, tally)| tally.matching > 0 || chips.is_set(*value))
+        .map(|(value, tally)| FacetCount {
             value: value.to_owned(),
-            total,
-            matching,
+            total: tally.total,
+            matching: tally.matching,
         })
         .collect();
     counts.sort_by(|left, right| {
@@ -120,7 +122,7 @@ pub fn describe(filter: &OthersFilter) -> Vec<String> {
         parts.push("no review requests".to_owned());
     }
     if let Some(seconds) = filter.updated_within.seconds() {
-        parts.push(format!("updated in {} days", seconds / (24 * 60 * 60)));
+        parts.push(format!("updated in {} days", seconds / SECONDS_PER_DAY));
     }
     parts
 }

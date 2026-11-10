@@ -3,7 +3,7 @@ use qd_cache::OthersFilter;
 use qd_github::RepoRef;
 
 use super::ReviewQueue;
-use super::others_filtering::OthersFacet;
+use super::others_facet::OthersFacet;
 use crate::app_settings::AppSettings;
 use crate::avatar_images::AvatarImages;
 use crate::ui_state::UiStateRecorder;

@@ -6,7 +6,8 @@ use qd_github::{PullRequest, RepoRef};
 
 use super::chip_marks::ChipMarks;
 use super::open_filter_chips::OpenFilterChips;
-use super::others_filtering::{FilterContext, OthersFacet, chip_counts, passes};
+use super::others_facet::OthersFacet;
+use super::others_filtering::{FilterContext, chip_counts, passes};
 use super::queue_lists::QueueLists;
 use super::queue_row::{OthersGroup, OthersRepository};
 

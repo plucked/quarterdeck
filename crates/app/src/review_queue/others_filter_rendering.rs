@@ -1,11 +1,12 @@
-use gpui::{AnyElement, ClickEvent, Context, Div, IntoElement, div, prelude::*, px};
+use gpui::{AnyElement, ClickEvent, Context, Div, IntoElement, Stateful, div, prelude::*, px};
 use qd_cache::{OthersFilter, UpdatedWithin};
 use qd_file_tree::FacetCount;
 use qd_github::RepoRef;
 
 use super::ReviewQueue;
 use super::chip_marks::ChipMarks;
-use super::others_filtering::{OthersFacet, describe};
+use super::others_facet::OthersFacet;
+use super::others_filtering::describe;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::facet_chips::{
     COLLAPSED_CHIPS, ChipClick, CollapsedChipRow, render_chip, render_chip_row, render_more_chip,
@@ -177,10 +178,7 @@ impl ReviewQueue {
         chip_marks: &ChipMarks,
         cx: &mut Context<Self>,
     ) -> Div {
-        let chips_filter = match facet {
-            OthersFacet::Labels => &filter.labels,
-            OthersFacet::Authors => &filter.authors,
-        };
+        let chips_filter = facet.chips_of(filter);
         let is_expanded = self.others_tab().is_chip_row_expanded(repo, facet);
 
         // The first ones (most matching first), plus every chip that is set,
@@ -200,7 +198,7 @@ impl ReviewQueue {
                 let value = count.value.clone();
                 let repo = repo.clone();
                 render_chip(
-                    format!("others-{}-{value}", facet_id(facet)).into(),
+                    format!("others-{}-{value}", facet.id_part()).into(),
                     &count.value,
                     count,
                     chips_filter.choice_of(&count.value),
@@ -222,14 +220,14 @@ impl ReviewQueue {
         if let Some(label) = row.more_label {
             let repo = repo.clone();
             chips.push(
-                render_more_chip(("others-more", facet_index(facet)), label)
+                render_more_chip(("others-more", facet.index()), label)
                     .on_click(
                         cx.listener(move |queue, _, _, cx| queue.toggle_chip_row(&repo, facet, cx)),
                     )
                     .into_any_element(),
             );
         }
-        render_chip_row(facet_label(facet), chips)
+        render_chip_row(facet.label(), chips)
     }
 
     /// `Showing 4 of 12 · bug · no drafts   Reset` while the filter narrows
@@ -240,7 +238,6 @@ impl ReviewQueue {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let parts = describe(filter);
-        let reset_repo = repo.clone();
         div()
             .flex()
             .items_center()
@@ -254,21 +251,11 @@ impl ReviewQueue {
                     .text_color(theme::subtle())
                     .child(filter_summary_text(&parts)),
             )
-            .children(filter.is_active().then(|| {
-                div()
-                    .id("others-filter-reset")
-                    .flex_none()
-                    .text_color(theme::accent())
-                    .cursor_pointer()
-                    .on_click(cx.listener(move |queue, _, _, cx| {
-                        queue.change_others_filter(
-                            &reset_repo,
-                            |filter| *filter = OthersFilter::default(),
-                            cx,
-                        );
-                    }))
-                    .child("Reset")
-            }))
+            .children(
+                filter.is_active().then(|| {
+                    render_reset_link("others-filter-reset", "Reset", repo, cx).flex_none()
+                }),
+            )
     }
 
     /// The note under an Others repository that shows nothing: none open,
@@ -297,26 +284,17 @@ impl ReviewQueue {
                 .child("No open pull requests by others")
                 .into_any_element();
         }
-        let reset_repo = repo.clone();
         note.child(
             div()
                 .flex_1()
                 .child(format!("The filter hides all {total}")),
         )
-        .child(
-            div()
-                .id("others-nothing-reset")
-                .text_color(theme::accent())
-                .cursor_pointer()
-                .on_click(cx.listener(move |queue, _, _, cx| {
-                    queue.change_others_filter(
-                        &reset_repo,
-                        |filter| *filter = OthersFilter::default(),
-                        cx,
-                    );
-                }))
-                .child("Reset filter"),
-        )
+        .child(render_reset_link(
+            "others-nothing-reset",
+            "Reset filter",
+            repo,
+            cx,
+        ))
         .into_any_element()
     }
 }
@@ -393,6 +371,24 @@ pub(super) fn render_filter_button(
         }))
 }
 
+/// A link resetting `repo`'s filter to show everything.
+fn render_reset_link(
+    id: &'static str,
+    label: &'static str,
+    repo: &RepoRef,
+    cx: &mut Context<ReviewQueue>,
+) -> Stateful<Div> {
+    let repo = repo.clone();
+    div()
+        .id(id)
+        .text_color(theme::accent())
+        .cursor_pointer()
+        .on_click(cx.listener(move |queue, _, _, cx| {
+            queue.change_others_filter(&repo, |filter| *filter = OthersFilter::default(), cx);
+        }))
+        .child(label)
+}
+
 /// What narrows the list, or how the chips work while nothing does.
 fn filter_summary_text(parts: &[String]) -> String {
     if parts.is_empty() {
@@ -404,10 +400,7 @@ fn filter_summary_text(parts: &[String]) -> String {
 
 /// Applies a chip click to `filter`'s row of `facet`.
 fn click_chip(filter: &mut OthersFilter, facet: OthersFacet, value: &String, click: ChipClick) {
-    let chips = match facet {
-        OthersFacet::Labels => &mut filter.labels,
-        OthersFacet::Authors => &mut filter.authors,
-    };
+    let chips = facet.chips_of_mut(filter);
     match click {
         ChipClick::Pick => chips.toggle_only(value),
         ChipClick::Hide => chips.toggle_hidden(value),
@@ -419,27 +412,5 @@ fn updated_within_label(updated_within: UpdatedWithin) -> &'static str {
         UpdatedWithin::AnyTime => "Any time",
         UpdatedWithin::Week => "7 days",
         UpdatedWithin::Month => "30 days",
-    }
-}
-
-fn facet_label(facet: OthersFacet) -> &'static str {
-    match facet {
-        OthersFacet::Labels => "Labels",
-        OthersFacet::Authors => "Authors",
-    }
-}
-
-/// A short name of the facet, for element ids.
-fn facet_id(facet: OthersFacet) -> &'static str {
-    match facet {
-        OthersFacet::Labels => "label",
-        OthersFacet::Authors => "author",
-    }
-}
-
-fn facet_index(facet: OthersFacet) -> usize {
-    match facet {
-        OthersFacet::Labels => 0,
-        OthersFacet::Authors => 1,
     }
 }
