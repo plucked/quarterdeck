@@ -10,6 +10,7 @@
 //!
 //! Files:
 //! - `pull_request_detail.rs`: `PullRequestDetail`, the view's state, what it shows and its accessors.
+//! - `show_change.rs`: `ShowChange`, what showing a pull request changes after the one shown before.
 //! - `file_loading.rs`: loading the review target's files, marks, notes and stored brief in the background.
 //! - `syntax_highlighting.rs`: coloring the loaded diffs in batches, and applying changed diff settings.
 //! - `highlighted_diff.rs`: `HighlightedDiff`, the syntax colors worked out for one diff.
@@ -173,6 +174,7 @@ mod run_cancel;
 mod scroll_anchor;
 mod selected_diff_text;
 mod selection_granularity;
+mod show_change;
 mod side_panel_actions;
 mod side_panel_rendering;
 mod side_panel_tab;

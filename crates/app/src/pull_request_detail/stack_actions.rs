@@ -1,6 +1,6 @@
 use gpui::Context;
 use qd_cache::StackReviewMode;
-use qd_github::{PullRequest, PullRequestStack, RepoRef};
+use qd_github::{PullRequestStack, RepoRef};
 
 use super::detail_event::DetailEvent;
 use super::file_direction::FileDirection;
@@ -284,17 +284,5 @@ impl PullRequestDetail {
             },
         };
         self.open_layer(target, cx);
-    }
-}
-
-/// Whether `pull_request` belongs to `stack` (the stack shown so far); no
-/// stack and no membership count as the same.
-pub(super) fn is_same_stack(stack: Option<&PullRequestStack>, pull_request: &PullRequest) -> bool {
-    match (stack, &pull_request.stack) {
-        (Some(stack), Some(membership)) => {
-            stack.repo == pull_request.repo && stack.number == membership.number
-        }
-        (None, None) => true,
-        (Some(_), None) | (None, Some(_)) => false,
     }
 }

@@ -29,7 +29,7 @@ use super::parsed_description::ParsedDescription;
 use super::review_pane::ReviewPane;
 use super::review_target::ReviewTarget;
 use super::scroll_anchor::ScrollAnchor;
-use super::stack_actions::is_same_stack;
+use super::show_change::ShowChange;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::avatar_images::{AvatarImages, AvatarLoaded};
@@ -447,33 +447,58 @@ impl PullRequestDetail {
             cx.notify();
             return;
         };
-        let is_other_stack = !is_same_stack(self.stack.as_ref(), &pull_request);
         // The header shows the author's avatar.
         AvatarImages::load(cx, [pull_request.author.avatar_url.clone()]);
 
-        // Decide by what was shown before.
-        let shown = self.pull_request.as_ref();
-        let is_same_version = shown.is_some_and(|shown| {
-            shown.id == pull_request.id && shown.updated_at == pull_request.updated_at
-        });
-        let is_same_pull_request = shown.is_some_and(|shown| shown.id == pull_request.id);
-        if is_same_version {
-            // The stack membership can arrive later than the pull request.
-            let gained_stack = is_other_stack && pull_request.stack.is_some();
-            self.pull_request = Some(pull_request);
-            if gained_stack {
-                self.load_stack(cx);
+        // Decide by what was shown before, then carry it out.
+        let change = ShowChange::decide(
+            self.pull_request.as_ref(),
+            self.stack.as_ref(),
+            &pull_request,
+        );
+        match change {
+            ShowChange::SameVersion { loads_stack } => {
+                // The stack membership can arrive later than the pull request.
+                self.pull_request = Some(pull_request);
+                if loads_stack {
+                    self.load_stack(cx);
+                }
+                self.follow_checks(cx);
+                cx.notify();
             }
-            self.follow_checks(cx);
-            cx.notify();
-            return;
+            ShowChange::NewVersion { is_other_stack } => {
+                // A reload keeps the reader's place.
+                self.pending_scroll = restore.or_else(|| Some(self.scroll_position()));
+                if is_other_stack {
+                    self.drop_stack_layers();
+                }
+                self.show_new_version(pull_request, cx);
+            }
+            ShowChange::OtherPullRequest { is_other_stack } => {
+                // Another pull request starts with no panel open and its description folded.
+                self.pending_scroll = restore;
+                self.action_panel = None;
+                self.is_description_expanded = false;
+                self.description_scroll
+                    .set_offset(gpui::point(px(0.), px(0.)));
+                if is_other_stack {
+                    self.drop_stack_layers();
+                }
+                self.show_new_version(pull_request, cx);
+            }
         }
-        self.pending_scroll = if is_same_pull_request {
-            restore.or_else(|| Some(self.scroll_position()))
-        } else {
-            restore
-        };
+    }
 
+    /// Forgets the loaded stack's layers and the combined range's start:
+    /// another stack's do not apply (the same stack's stay while checked).
+    fn drop_stack_layers(&mut self) {
+        self.stack = None;
+        self.combined_start = None;
+    }
+
+    /// Shows a version of `pull_request` not shown before: the header and
+    /// description now, then its files and stack.
+    fn show_new_version(&mut self, pull_request: PullRequest, cx: &mut Context<Self>) {
         // Show the header and description now; the files follow.
         let is_described = self
             .description
@@ -482,20 +507,9 @@ impl PullRequestDetail {
         if !is_described {
             self.description = Some(ParsedDescription::parse(&pull_request));
         }
-        if !is_same_pull_request {
-            self.action_panel = None;
-            self.is_description_expanded = false;
-            self.description_scroll
-                .set_offset(gpui::point(px(0.), px(0.)));
-        }
         self.pull_request = Some(pull_request);
         self.horizontal_offsets.clear();
 
-        // Another stack's layers do not apply; the same stack's stay while they are checked.
-        if is_other_stack {
-            self.stack = None;
-            self.combined_start = None;
-        }
         // New commits can move the layers' heads, so the stack is checked again (free when unchanged).
         self.target = self.decide_target();
         cx.emit(DetailEvent::TargetChanged);

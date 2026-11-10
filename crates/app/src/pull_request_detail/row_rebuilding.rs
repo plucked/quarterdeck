@@ -1,3 +1,6 @@
+use std::cmp::Ordering;
+use std::ops::Range;
+
 use gpui::{ListOffset, px};
 
 use super::changed_rows::ChangedRows;
@@ -7,6 +10,30 @@ use super::pull_request_detail::PullRequestDetail;
 use super::row_height_estimate::estimate_row_tops;
 use super::scroll_anchor::ScrollAnchor;
 use crate::scrollbar::ListRowTops;
+
+/// Where a row of the list was relative to the rows a splice replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SplicePlace {
+    /// Above them: it keeps its index.
+    Before,
+    /// One of them: it is looked for among the new rows.
+    Inside,
+    /// Below them: it moves by the change in length.
+    After,
+}
+
+impl SplicePlace {
+    /// Where row `row` was relative to the replaced rows `spliced`.
+    fn of(row: usize, spliced: &Range<usize>) -> Self {
+        match (row.cmp(&spliced.start), row.cmp(&spliced.end)) {
+            (Ordering::Less, _) => Self::Before,
+            (Ordering::Equal | Ordering::Greater, Ordering::Less) => Self::Inside,
+            (Ordering::Equal | Ordering::Greater, Ordering::Equal | Ordering::Greater) => {
+                Self::After
+            }
+        }
+    }
+}
 
 impl PullRequestDetail {
     /// Rebuilds every row and resets the list (which forgets row heights),
@@ -107,14 +134,14 @@ impl PullRequestDetail {
                     .splice(start..start + change.old_len, change.new_len);
 
                 // Keep the row that was at the top there, wherever it moved.
-                let old_end = start + change.old_len;
-                let kept_top = match (top.item_ix < start, top.item_ix >= old_end) {
-                    (true, _) => Some(top),
-                    (false, true) => Some(ListOffset {
+                let spliced = start..start + change.old_len;
+                let kept_top = match SplicePlace::of(top.item_ix, &spliced) {
+                    SplicePlace::Before => Some(top),
+                    SplicePlace::After => Some(ListOffset {
                         item_ix: top.item_ix - change.old_len + change.new_len,
                         ..top
                     }),
-                    (false, false) => old_rows
+                    SplicePlace::Inside => old_rows
                         .get(top.item_ix - old_range.start)
                         .and_then(|row| {
                             new_rows[change.start..change.start + change.new_len]
@@ -160,5 +187,22 @@ impl PullRequestDetail {
             item_ix: row,
             offset_in_item: px(0.),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A row above the replaced rows is before them, one of them inside,
+    /// and the row right after them (or at an empty splice) after them.
+    #[test]
+    fn places_a_row_against_the_spliced_rows() {
+        assert_eq!(SplicePlace::of(2, &(3..6)), SplicePlace::Before);
+        assert_eq!(SplicePlace::of(3, &(3..6)), SplicePlace::Inside);
+        assert_eq!(SplicePlace::of(5, &(3..6)), SplicePlace::Inside);
+        assert_eq!(SplicePlace::of(6, &(3..6)), SplicePlace::After);
+        assert_eq!(SplicePlace::of(3, &(3..3)), SplicePlace::After);
+        assert_eq!(SplicePlace::of(2, &(3..3)), SplicePlace::Before);
     }
 }
