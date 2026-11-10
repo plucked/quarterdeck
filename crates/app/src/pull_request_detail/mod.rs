@@ -55,6 +55,8 @@
 //! - `local_review_export.rs`: the local notes as Markdown for an agent.
 //! - `comment_card_rendering.rs`: the comment cards and the composer in the diff.
 //! - `review_panel_rendering.rs`: the side panel's review tab.
+//! - `destination_switch_rendering.rs`: the GitHub / Local switch of where new comments go.
+//! - `thread_resolution.rs`: `ThreadResolution`, resolving or reopening a GitHub conversation.
 //! - `action_panel.rs`: `ActionPanel`, the merge or close panel's options, choices and progress.
 //! - `pull_request_actions.rs`: merging (also as admin), closing and deleting the branch on GitHub.
 //! - `action_panel_rendering.rs`: the side panel's Actions tab: Merge… and Close…, and the open panel.
@@ -92,6 +94,7 @@ mod comment_scope;
 mod composer_opening;
 mod context_expansion;
 mod context_loads;
+mod destination_switch_rendering;
 mod detail_content;
 mod detail_event;
 mod detail_mode;
@@ -134,6 +137,7 @@ mod selection_granularity;
 mod side_panel_tab;
 mod stack_bar_rendering;
 mod sticky_header_rendering;
+mod thread_resolution;
 mod viewed_toggle;
 
 pub use detail_event::DetailEvent;

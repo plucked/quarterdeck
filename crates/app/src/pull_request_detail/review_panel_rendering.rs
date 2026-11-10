@@ -90,15 +90,6 @@ impl PullRequestDetail {
                 )
                 .into_any_element();
         }
-        let destination = self.review().destination;
-        let detail = cx.entity().downgrade();
-        let pick = |destination| {
-            view_option(
-                &detail,
-                destination,
-                PullRequestDetail::set_comment_destination,
-            )
-        };
         div()
             .flex()
             .items_center()
@@ -109,19 +100,7 @@ impl PullRequestDetail {
                     .text_color(theme::subtle())
                     .child("Comments go to"),
             )
-            .child(
-                SegmentedControl::new("comment-destination")
-                    .option(
-                        "GitHub",
-                        destination == NoteDestination::GitHub,
-                        pick(NoteDestination::GitHub),
-                    )
-                    .option(
-                        "Local",
-                        destination == NoteDestination::Local,
-                        pick(NoteDestination::Local),
-                    ),
-            )
+            .child(self.render_destination_control("comment-destination", "GitHub", "Local", cx))
             .into_any_element()
     }
 

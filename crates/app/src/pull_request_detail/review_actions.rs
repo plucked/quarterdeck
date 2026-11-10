@@ -17,6 +17,7 @@ use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::{CommentCard, ReviewComments};
 use super::review_target::ReviewTarget;
 use super::side_panel_tab::SidePanelTab;
+use super::thread_resolution::ThreadResolution;
 use crate::avatar_images::AvatarImages;
 use crate::display_date::unix_now;
 use crate::short_sha::short_sha;
@@ -101,9 +102,10 @@ impl PullRequestDetail {
     /// Reads GitHub's conversations and the viewer's pending review for the
     /// shown pull request (one GraphQL request); combined reviews have none.
     pub(super) fn load_github_review(&mut self, cx: &mut Context<Self>) {
-        let (Some(pull_request), true) =
-            (self.pull_request().cloned(), self.can_review_on_github())
-        else {
+        if !self.can_review_on_github() {
+            return;
+        }
+        let Some(pull_request) = self.pull_request().cloned() else {
             return;
         };
         let Ok(client) = self.services().github.clone() else {
@@ -539,19 +541,15 @@ impl PullRequestDetail {
         });
     }
 
-    /// Resolves a GitHub conversation, or unresolves it (at once).
-    pub(super) fn set_thread_resolved(
+    /// Resolves a GitHub conversation, or reopens it (at once).
+    pub(super) fn set_thread_resolution(
         &mut self,
         thread_id: String,
-        is_resolved: bool,
+        resolution: ThreadResolution,
         cx: &mut Context<Self>,
     ) {
-        let message = if is_resolved {
-            "Resolving the conversation…"
-        } else {
-            "Reopening the conversation…"
-        };
-        self.run_github_action(message, cx, move |client| {
+        let is_resolved = resolution.is_resolved_after();
+        self.run_github_action(resolution.working_message(), cx, move |client| {
             client.set_thread_resolved(&thread_id, is_resolved)
         });
     }

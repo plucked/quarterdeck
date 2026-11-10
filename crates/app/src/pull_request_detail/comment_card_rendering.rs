@@ -2,18 +2,17 @@ use gpui::{AnyElement, Context, Div, FontWeight, IntoElement, SharedString, div,
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote};
 use qd_github::{ReviewThread, ThreadComment};
 
-use super::comment_editor::EditorTarget;
+use super::comment_editor::{CommentEditor, EditorTarget};
 use super::lines_label::lines_label;
 use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::{CommentCard, note_key};
+use super::thread_resolution::ThreadResolution;
 use crate::avatar_images::Avatar;
 use crate::button::Button;
 use crate::diff_view::frame_file_row;
 use crate::display_date::short_date;
 use crate::markdown_view::MarkdownView;
-use crate::segmented_control::SegmentedControl;
 use crate::theme;
-use crate::view_option::view_option;
 
 /// A comment author's avatar in the comment's header line.
 const COMMENT_AVATAR_SIZE: f32 = 18.;
@@ -100,26 +99,7 @@ impl PullRequestDetail {
                 .child("Local note")
                 .into_any_element();
         }
-        let destination = self.review().destination;
-        let detail = cx.entity().downgrade();
-        let pick = |destination| {
-            view_option(
-                &detail,
-                destination,
-                PullRequestDetail::set_comment_destination,
-            )
-        };
-        SegmentedControl::new("composer-destination")
-            .option(
-                "GitHub draft",
-                destination == NoteDestination::GitHub,
-                pick(NoteDestination::GitHub),
-            )
-            .option(
-                "Local note",
-                destination == NoteDestination::Local,
-                pick(NoteDestination::Local),
-            )
+        self.render_destination_control("composer-destination", "GitHub draft", "Local note", cx)
             .into_any_element()
     }
 
@@ -149,18 +129,13 @@ impl PullRequestDetail {
             header = header.child(render_badge(format!("Outdated{original}"), theme::muted()));
         }
         header = header.child(div().flex_1());
-        let resolve = match (thread.is_resolved, thread.permissions) {
-            (false, permissions) if permissions.can_resolve => Some(("Resolve", true)),
-            (true, permissions) if permissions.can_unresolve => Some(("Reopen", false)),
-            (true | false, _) => None,
-        };
-        if let Some((label, is_resolved)) = resolve {
+        if let Some(resolution) = ThreadResolution::offered_for(thread) {
             let resolving_id = thread_id.clone();
             header = header.child(
-                Button::new(element_id("resolve", &thread_id), label)
+                Button::new(element_id("resolve", &thread_id), resolution.label())
                     .ghost()
                     .on_click(cx.listener(move |detail, _, _, cx| {
-                        detail.set_thread_resolved(resolving_id.clone(), is_resolved, cx);
+                        detail.set_thread_resolution(resolving_id.clone(), resolution, cx);
                     })),
             );
         }
@@ -215,10 +190,13 @@ impl PullRequestDetail {
     /// One GitHub comment: author, date, pending mark, body, and edit and
     /// delete when the viewer may; the editor while it is being edited.
     fn render_thread_comment(&self, comment: &ThreadComment, cx: &mut Context<Self>) -> Div {
-        let is_editing = matches!(
-            self.review().editor.as_ref().map(|editor| &editor.target),
-            Some(EditorTarget::EditGitHubComment { comment_id }) if *comment_id == comment.id
-        );
+        let editing = self.review().editor.as_ref().filter(|editor| {
+            matches!(
+                &editor.target,
+                EditorTarget::EditGitHubComment { comment_id } if *comment_id == comment.id
+            )
+        });
+        let is_editing = editing.is_some();
         let mut header = div()
             .flex()
             .items_center()
@@ -271,20 +249,13 @@ impl PullRequestDetail {
                     })),
             );
         }
-        let body = match (is_editing, &self.review().editor) {
-            (true, Some(editor)) => div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .child(editor.text.clone())
-                .child(Self::render_editor_buttons(
-                    element_id("edit", &comment.id),
-                    "Save on GitHub",
-                    cx,
-                ))
-                .into_any_element(),
-            (true | false, _) => self.render_markdown(&comment.id),
-        };
+        let body = self.render_comment_body(
+            editing,
+            element_id("edit", &comment.id),
+            "Save on GitHub",
+            &comment.id,
+            cx,
+        );
         div()
             .flex()
             .flex_col()
@@ -314,10 +285,10 @@ impl PullRequestDetail {
         cx: &mut Context<Self>,
     ) -> Div {
         let id = note.id;
-        let is_editing = matches!(
-            self.review().editor.as_ref().map(|editor| &editor.target),
-            Some(EditorTarget::EditNote(edited)) if *edited == id
+        let editing = self.review().editor.as_ref().filter(
+            |editor| matches!(&editor.target, EditorTarget::EditNote(edited) if *edited == id),
         );
+        let is_editing = editing.is_some();
         let lines = match &note.anchor {
             NoteAnchor::Line {
                 side,
@@ -354,21 +325,37 @@ impl PullRequestDetail {
                 .ghost()
                 .on_click(cx.listener(move |detail, _, _, cx| detail.delete_note(id, cx))),
         );
-        let body = match (is_editing, &self.review().editor) {
-            (true, Some(editor)) => div()
+        let body = self.render_comment_body(
+            editing,
+            element_id("edit-note-save", &key),
+            "Save",
+            &key,
+            cx,
+        );
+        div().flex().flex_col().gap_1().child(header).child(body)
+    }
+
+    /// A comment's body: while `editing`, its editor with cancel and
+    /// `save_label` (buttons under `editor_id`); else the body with `key`
+    /// as Markdown.
+    fn render_comment_body(
+        &self,
+        editing: Option<&CommentEditor>,
+        editor_id: gpui::ElementId,
+        save_label: &'static str,
+        key: &str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        match editing {
+            Some(editor) => div()
                 .flex()
                 .flex_col()
                 .gap_1()
                 .child(editor.text.clone())
-                .child(Self::render_editor_buttons(
-                    element_id("edit-note-save", &key),
-                    "Save",
-                    cx,
-                ))
+                .child(Self::render_editor_buttons(editor_id, save_label, cx))
                 .into_any_element(),
-            (true | false, _) => self.render_markdown(&note_key(id)),
-        };
-        div().flex().flex_col().gap_1().child(header).child(body)
+            None => self.render_markdown(key),
+        }
     }
 
     /// A comment body as Markdown (selectable, links open).
