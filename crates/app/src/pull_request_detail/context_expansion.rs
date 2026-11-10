@@ -3,10 +3,11 @@ use std::sync::Arc;
 use gpui::Context;
 use qd_diff::{GapPlace, SourceLines};
 
-use super::fetch_file_text::{HeadCommit, fetch_file_text};
+use super::fetch_file_text::fetch_file_text;
+use super::head_commit::HeadCommit;
 use super::loaded_file::{FileContext, LoadedFile};
 use super::pull_request_detail::{HighlightedDiff, PullRequestDetail};
-use super::review_target::ReviewTarget;
+
 use crate::diff_view::{FileTextLoad, GapPart};
 
 impl PullRequestDetail {
@@ -45,12 +46,7 @@ impl PullRequestDetail {
         let Some(pull_request) = self.pull_request() else {
             return;
         };
-        let head = match self.target() {
-            ReviewTarget::Combined(range) => HeadCommit::Known(range.head_sha.clone()),
-            ReviewTarget::Layer | ReviewTarget::AwaitingStack => {
-                HeadCommit::OfPullRequest(pull_request.id)
-            }
-        };
+        let head = HeadCommit::of(self.target(), pull_request);
         let repo = pull_request.repo.clone();
         let changed_file = loaded.file.clone();
         let patch_diff = loaded.patch_diff().clone();

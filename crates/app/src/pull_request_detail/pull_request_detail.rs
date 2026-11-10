@@ -35,6 +35,7 @@ use super::fetch_combined_files::fetch_combined_files;
 use super::file_review_state::FileReviewState;
 use super::file_tree_state::FileTreeState;
 use super::folder_viewed_state::FolderViewedState;
+use super::head_commit::HeadCommit;
 use super::layer_request::LayerRequest;
 use super::load_progress::LoadProgress;
 use super::loaded_file::LoadedFile;
@@ -1594,7 +1595,10 @@ impl PullRequestDetail {
                 let brief = wants_stored_brief
                     .then(|| read_prepared_brief(&ui_state, &scope))
                     .flatten();
-                let head_sha = shown_head_sha(&cache, &pull_request, &target);
+                let head_sha = HeadCommit::of(&target, &pull_request)
+                    .resolve(&cache)
+                    .ok()
+                    .flatten();
                 anyhow::Ok(FetchedChanges {
                     files: ordered,
                     tree,
@@ -1773,22 +1777,4 @@ fn fetch_target_files(
 /// diagrams laid out); `None` without one. Blocks: background executor.
 fn read_prepared_brief(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Option<PreparedBrief> {
     read_brief(store, scope).map(|stored| PreparedBrief::prepare(stored.studio, stored.record))
-}
-
-/// The head commit of the files shown for `pull_request` at `target`: the
-/// combined range's, or the one the cached file set was fetched for.
-fn shown_head_sha(
-    cache: &SharedCache,
-    pull_request: &PullRequest,
-    target: &ReviewTarget,
-) -> Option<String> {
-    match target {
-        ReviewTarget::Combined(range) => Some(range.head_sha.clone()),
-        ReviewTarget::Layer | ReviewTarget::AwaitingStack => cache
-            .lock()
-            .file_set_commits(pull_request.id)
-            .ok()
-            .flatten()
-            .map(|commits| commits.head_sha),
-    }
 }

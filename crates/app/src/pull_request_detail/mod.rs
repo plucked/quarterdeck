@@ -63,6 +63,7 @@
 //! - `activity_rendering.rs`: the loading indicators: header pill, progress line, loading card.
 //! - `context_expansion.rs`: revealing unchanged lines around hunks: fetching the file's text, rebuilding its rows.
 //! - `fetch_file_text.rs`: gets a file's text after the change from the cache by blob SHA, else from GitHub.
+//! - `head_commit.rs`: `HeadCommit`, the head commit the shown files are of, read from the cache when needed.
 //! - `context_loads.rs`: `ContextLoads`, the file texts being fetched and their tasks.
 //! - `detail_mode.rs`: `DetailMode`, the diff or the brief in the main column.
 //! - `brief_pane.rs`: `BriefPane`, the briefs written this session, the run in flight, the brief's rows.
@@ -115,6 +116,7 @@ mod file_tree_state;
 mod filter_rendering;
 mod folder_summary;
 mod folder_viewed_state;
+mod head_commit;
 mod layer_request;
 mod line_counts;
 mod lines_label;

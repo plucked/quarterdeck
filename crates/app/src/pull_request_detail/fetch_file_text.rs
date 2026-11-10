@@ -2,24 +2,17 @@ use anyhow::{Context as _, Result};
 use qd_diff::SourceLines;
 use qd_github::{FileTextLocation, GitHubClient, PullRequestFile, RepoRef};
 
+use super::head_commit::HeadCommit;
 use crate::shared_cache::SharedCache;
 
 /// Hex digits of a full git SHA.
 const FULL_SHA_LENGTH: usize = 40;
 
-/// The commit a file's text is read from when its blob SHA is not known in
-/// full (files from a whole diff, or cached before SHAs were kept).
-pub enum HeadCommit {
-    /// The head commit the pull request's cached files were fetched for.
-    OfPullRequest(u64),
-    /// A known commit: a combined range's head.
-    Known(String),
-}
-
 /// The text of `file` after the change, asking GitHub at most once per
 /// blob: from the cache by the file's blob SHA (content addressed, so never
 /// stale), else fetched (one request: by full SHA, or at the file's path in
-/// `head`) and cached under the SHA GitHub reports. A cached text that
+/// `head`, read only then: files from a whole diff, or cached before SHAs
+/// were kept) and cached under the SHA GitHub reports. A cached text that
 /// `is_text_of_file` rejects (another blob sharing an abbreviated SHA) is
 /// fetched instead.
 ///
@@ -48,7 +41,9 @@ pub fn fetch_file_text(
             FileTextLocation::Blob(blob_sha.clone())
         }
         Some(_) | None => FileTextLocation::Path {
-            commit: head_commit(cache, head)?,
+            commit: head
+                .resolve(cache)?
+                .context("the pull request's head commit is not known")?,
             path: file.filename.clone(),
         },
     };
@@ -59,17 +54,4 @@ pub fn fetch_file_text(
         eprintln!("cannot cache the text of {}: {error:#}", file.filename);
     }
     Ok(SourceLines::parse(&fetched.text))
-}
-
-/// The commit `head` names.
-fn head_commit(cache: &SharedCache, head: &HeadCommit) -> Result<String> {
-    match head {
-        HeadCommit::Known(commit) => Ok(commit.clone()),
-        HeadCommit::OfPullRequest(pull_request_id) => {
-            let commits = cache.lock().file_set_commits(*pull_request_id)?;
-            commits
-                .map(|commits| commits.head_sha)
-                .context("the pull request's head commit is not known")
-        }
-    }
 }
