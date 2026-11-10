@@ -1,5 +1,5 @@
 use gpui::{
-    Context, Entity, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window, div,
+    Context, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window, div,
     prelude::*, px,
 };
 use qd_cache::{CacheUsage, ColorTheme};
@@ -14,7 +14,6 @@ use crate::app_commands::CloseWindow;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::app_update::AppUpdater;
-use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
 
 /// Width of the category list.
@@ -257,19 +256,4 @@ impl Render for SettingsWindow {
                     .child(page),
             )
     }
-}
-
-/// Whether `event` of the one-line field `input` submits it: return or
-/// cmd-enter. A newline typed into it is taken out and counts as the submit.
-pub(super) fn is_one_line_submit(
-    input: &Entity<TextArea>,
-    event: TextAreaEvent,
-    cx: &mut Context<SettingsWindow>,
-) -> bool {
-    let text = input.read(cx).text().to_owned();
-    let has_newline = text.contains('\n');
-    if has_newline {
-        input.update(cx, |input, cx| input.set_text(text.replace('\n', ""), cx));
-    }
-    event == TextAreaEvent::Submit || has_newline
 }

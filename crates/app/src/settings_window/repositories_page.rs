@@ -9,7 +9,7 @@ use super::empty_list_note::EmptyListNote;
 use super::field_error::FieldError;
 use super::removable_row::RemovableRow;
 use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
-use super::settings_window::{SettingsWindow, is_one_line_submit};
+use super::settings_window::SettingsWindow;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::controls::{Button, RepoMonogram, SectionLabel};
@@ -38,11 +38,11 @@ pub struct RepositoryAdder {
 }
 
 impl RepositoryAdder {
-    /// An empty field; it is one line, so return (or cmd-enter) adds the repository.
+    /// An empty one-line field; return (or cmd-enter) adds the repository.
     pub fn new(cx: &mut Context<SettingsWindow>) -> Self {
-        let input = cx.new(|cx| TextArea::new("owner/name or a GitHub link", cx));
-        let subscription = cx.subscribe(&input, |settings, input, event: &TextAreaEvent, cx| {
-            if is_one_line_submit(&input, *event, cx) {
+        let input = cx.new(|cx| TextArea::single_line("owner/name or a GitHub link", cx));
+        let subscription = cx.subscribe(&input, |settings, _, event: &TextAreaEvent, cx| {
+            if *event == TextAreaEvent::Submit {
                 settings.add_typed_repository(cx);
             }
         });

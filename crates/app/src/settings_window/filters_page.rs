@@ -8,7 +8,7 @@ use super::empty_list_note::EmptyListNote;
 use super::field_error::FieldError;
 use super::removable_row::RemovableRow;
 use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
-use super::settings_window::{SettingsWindow, is_one_line_submit};
+use super::settings_window::SettingsWindow;
 use crate::app_settings::AppSettings;
 use crate::controls::{Button, SectionLabel, SegmentedControl, view_option};
 use crate::text_area::{TextArea, TextAreaEvent};
@@ -28,11 +28,11 @@ pub struct BranchRuleForm {
 }
 
 impl BranchRuleForm {
-    /// An empty field; it is one line, so return (or cmd-enter) adds the pattern.
+    /// An empty one-line field; return (or cmd-enter) adds the pattern.
     pub fn new(cx: &mut Context<SettingsWindow>) -> Self {
-        let input = cx.new(|cx| TextArea::new("feat/something*", cx));
-        let subscription = cx.subscribe(&input, |settings, input, event: &TextAreaEvent, cx| {
-            if is_one_line_submit(&input, *event, cx) {
+        let input = cx.new(|cx| TextArea::single_line("feat/something*", cx));
+        let subscription = cx.subscribe(&input, |settings, _, event: &TextAreaEvent, cx| {
+            if *event == TextAreaEvent::Submit {
                 settings.add_typed_branch_rule(cx);
             }
         });

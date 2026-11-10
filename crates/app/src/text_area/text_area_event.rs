@@ -3,7 +3,7 @@
 pub enum TextAreaEvent {
     /// The text changed (typing, paste, cut, deletion).
     Changed,
-    /// cmd-enter: the owner takes the text.
+    /// cmd-enter, or Return in a single-line area: the owner takes the text.
     Submit,
     /// escape: the owner drops the edit.
     Cancel,

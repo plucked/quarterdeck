@@ -26,14 +26,15 @@ pub struct TokenSignIn {
     status: SignInStatus,
     /// The token check or sign-out in flight.
     task: Option<Task<()>>,
-    /// Keeps the field's submit (cmd-enter) observed.
+    /// Keeps the field's submit (return or cmd-enter) observed.
     _subscription: Subscription,
 }
 
 impl TokenSignIn {
-    /// An empty token field; cmd-enter in it signs in, like the button.
+    /// An empty one-line token field; return (or cmd-enter) in it signs
+    /// in, like the button.
     pub fn new(cx: &mut Context<SettingsWindow>) -> Self {
-        let input = cx.new(|cx| TextArea::new("ghp_…", cx));
+        let input = cx.new(|cx| TextArea::single_line("ghp_…", cx));
         let subscription = cx.subscribe(&input, |settings, _, event: &TextAreaEvent, cx| {
             if *event == TextAreaEvent::Submit {
                 settings.sign_in(cx);

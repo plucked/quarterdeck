@@ -6,6 +6,7 @@ use gpui::{
     div, prelude::*,
 };
 
+use super::line_mode::LineMode;
 use super::text_area_actions::{
     Backspace, Cancel, Cut, Delete, DeleteToLineStart, DeleteWordLeft, Down, Left, LineEnd,
     LineStart, Newline, Paste, Right, SelectAll, SelectDown, SelectLeft, SelectRight,
@@ -25,9 +26,10 @@ use crate::theme;
 /// Clicks that select a word.
 const DOUBLE_CLICK: usize = 2;
 
-/// A multiline plain-text editor. The owner creates it with
-/// `cx.new(|cx| TextArea::new(placeholder, cx))`, renders the entity, focuses
-/// it, subscribes to [`TextAreaEvent`]s and reads [`TextArea::text`].
+/// A plain-text editor, multiline or a field of one line. The owner creates
+/// it with `cx.new(|cx| TextArea::new(placeholder, cx))` (or
+/// [`TextArea::single_line`]), renders the entity, focuses it, subscribes to
+/// [`TextAreaEvent`]s and reads [`TextArea::text`].
 ///
 /// Offsets are UTF-8 byte offsets into the text, always on character
 /// boundaries; the system input methods speak UTF-16 (`text_area_input.rs`).
@@ -35,6 +37,9 @@ pub struct TextArea {
     focus: FocusHandle,
     text: String,
     placeholder: SharedString,
+    /// Whether Return inserts a newline or submits, and whether the text
+    /// may hold newlines at all.
+    line_mode: LineMode,
     /// The selection; empty for a caret.
     pub(super) selected_range: Range<usize>,
     /// Whether the caret is at the selection's start rather than its end.
@@ -57,12 +62,31 @@ impl Focusable for TextArea {
 }
 
 impl TextArea {
-    /// An empty text area showing `placeholder` until something is typed.
+    /// An empty multiline text area showing `placeholder` until something
+    /// is typed. Return inserts a newline; cmd-enter submits.
     pub fn new(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+        Self::with_line_mode(placeholder, LineMode::Multiline, cx)
+    }
+
+    /// An empty field of one line showing `placeholder` until something is
+    /// typed: Return (or Enter on the keypad) submits like cmd-enter, and
+    /// newlines in pasted or input-method text are dropped, so the text is
+    /// always one line.
+    pub fn single_line(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+        Self::with_line_mode(placeholder, LineMode::SingleLine, cx)
+    }
+
+    /// An empty text area of `line_mode` showing `placeholder`.
+    fn with_line_mode(
+        placeholder: impl Into<SharedString>,
+        line_mode: LineMode,
+        cx: &mut Context<Self>,
+    ) -> Self {
         Self {
             focus: cx.focus_handle(),
             text: String::new(),
             placeholder: placeholder.into(),
+            line_mode,
             selected_range: 0..0,
             selection_reversed: false,
             marked_range: None,
@@ -80,9 +104,11 @@ impl TextArea {
         &self.placeholder
     }
 
-    /// Replaces the whole text, with the caret at its end.
+    /// Replaces the whole text, with the caret at its end (in a
+    /// single-line area, without its newlines).
     pub fn set_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
-        self.text = text.into();
+        let text = text.into();
+        self.text = self.line_mode.inserted_text(&text).into_owned();
         self.selected_range = self.text.len()..self.text.len();
         self.selection_reversed = false;
         self.marked_range = None;
@@ -108,15 +134,24 @@ impl TextArea {
         }
     }
 
-    /// Replaces `range` with `new_text`, putting the caret after it.
-    pub(super) fn replace(&mut self, range: Range<usize>, new_text: &str, cx: &mut Context<Self>) {
-        self.text.replace_range(range.clone(), new_text);
+    /// Replaces `range` with `new_text` (in a single-line area, without its
+    /// newlines), putting the caret after it. Returns where the inserted
+    /// text now is.
+    pub(super) fn replace(
+        &mut self,
+        range: Range<usize>,
+        new_text: &str,
+        cx: &mut Context<Self>,
+    ) -> Range<usize> {
+        let new_text = self.line_mode.inserted_text(new_text);
+        self.text.replace_range(range.clone(), &new_text);
         let caret = range.start + new_text.len();
         self.selected_range = caret..caret;
         self.selection_reversed = false;
         self.marked_range = None;
         cx.emit(TextAreaEvent::Changed);
         cx.notify();
+        range.start..caret
     }
 
     /// Replaces the selection (or the composing text) with `new_text`.
@@ -126,6 +161,24 @@ impl TextArea {
             .clone()
             .unwrap_or_else(|| self.selected_range.clone());
         self.replace(range, new_text, cx);
+    }
+
+    /// Where Up moves the caret: one visual row up, or in a single-line
+    /// area the text's start, as in a macOS text field.
+    fn offset_above(&self) -> usize {
+        match self.line_mode {
+            LineMode::Multiline => self.vertical_offset(-1.),
+            LineMode::SingleLine => 0,
+        }
+    }
+
+    /// Where Down moves the caret: one visual row down, or in a single-line
+    /// area the text's end.
+    fn offset_below(&self) -> usize {
+        match self.line_mode {
+            LineMode::Multiline => self.vertical_offset(1.),
+            LineMode::SingleLine => self.text.len(),
+        }
     }
 
     /// Puts the caret at `offset`, dropping the selection.
@@ -236,11 +289,11 @@ impl TextArea {
     }
 
     fn on_up(&mut self, _: &Up, _: &mut Window, cx: &mut Context<Self>) {
-        self.move_to(self.vertical_offset(-1.), cx);
+        self.move_to(self.offset_above(), cx);
     }
 
     fn on_down(&mut self, _: &Down, _: &mut Window, cx: &mut Context<Self>) {
-        self.move_to(self.vertical_offset(1.), cx);
+        self.move_to(self.offset_below(), cx);
     }
 
     fn on_word_left(&mut self, _: &WordLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -276,11 +329,11 @@ impl TextArea {
     }
 
     fn on_select_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_to(self.vertical_offset(-1.), cx);
+        self.select_to(self.offset_above(), cx);
     }
 
     fn on_select_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_to(self.vertical_offset(1.), cx);
+        self.select_to(self.offset_below(), cx);
     }
 
     fn on_select_word_left(&mut self, _: &SelectWordLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -320,8 +373,13 @@ impl TextArea {
         cx.notify();
     }
 
+    /// Return: a newline in a multiline area; in a single-line one, the
+    /// owner takes the text, as with cmd-enter.
     fn on_newline(&mut self, _: &Newline, _: &mut Window, cx: &mut Context<Self>) {
-        self.replace_selection("\n", cx);
+        match self.line_mode {
+            LineMode::Multiline => self.replace_selection("\n", cx),
+            LineMode::SingleLine => cx.emit(TextAreaEvent::Submit),
+        }
     }
 
     fn on_paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {

@@ -107,14 +107,15 @@ impl EntityInputHandler for TextArea {
             .map(|range| self.range_from_utf16(range))
             .or_else(|| self.marked_range.clone())
             .unwrap_or_else(|| self.selected_range.clone());
-        self.replace(range.clone(), new_text, cx);
+        // A single-line area drops newlines, so what went in can be shorter than `new_text`.
+        let inserted = self.replace(range, new_text, cx);
 
         // The composing text stays marked, with the input method's own selection inside it.
-        self.marked_range =
-            (!new_text.is_empty()).then(|| range.start..range.start + new_text.len());
+        self.marked_range = (!inserted.is_empty()).then(|| inserted.clone());
         if let Some(selected) = new_selected_range_utf16 {
             let within = self.range_from_utf16(&selected);
-            self.selected_range = range.start + within.start..range.start + within.end;
+            self.selected_range = inserted.start + within.start.min(inserted.len())
+                ..inserted.start + within.end.min(inserted.len());
         }
     }
 
