@@ -5,7 +5,6 @@ use qd_github::ReviewEvent;
 use super::comment_card_rendering::element_id;
 use super::lines_label::note_lines_label;
 use super::pull_request_detail::PullRequestDetail;
-
 use super::side_panel_tab::SidePanelTab;
 use crate::button::Button;
 use crate::section_label::SectionLabel;

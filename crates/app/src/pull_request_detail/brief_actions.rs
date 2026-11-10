@@ -8,8 +8,8 @@ use gpui::Context;
 use qd_file_tree::FileKind;
 use qd_github::{PullRequest, PullRequestStack};
 use qd_studio::{
-    CodeAccess, CodeAnchor, CodeSide, FileListing, ReaderFamiliarity, RequestLayer, StudioRequest,
-    StudioRequestFile, find_claude,
+    CodeAccess, FileListing, ReaderFamiliarity, RequestLayer, StudioRequest, StudioRequestFile,
+    find_claude,
 };
 use qd_update::AppVersion;
 
@@ -19,8 +19,6 @@ use super::brief_pane::ShownBrief;
 use super::brief_row::BriefRow;
 use super::detail_event::DetailEvent;
 use super::detail_mode::DetailMode;
-use super::detail_row::DetailRow;
-use super::file_lookup::file_index_of;
 use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
 use super::review_target::ReviewTarget;
@@ -29,7 +27,6 @@ use crate::brief_view::{
     BriefHandlers, BriefPageRow, BriefReport, BriefState, PreparedBrief, ReportHost, view_action,
     view_handler,
 };
-use crate::diff_line_sides::{line_number_on, line_side_of};
 use crate::ui_state::UiStateRecorder;
 
 /// The report panel's text field while empty.
@@ -258,60 +255,6 @@ impl PullRequestDetail {
     fn set_brief_state(&mut self, key: &BriefKey, state: BriefState) {
         self.brief_mut().set_state(key, state);
         self.refresh_brief_rows();
-    }
-
-    /// Shows file `file`'s header in the diff (a file clicked in the file
-    /// tree), switching from the brief to the diff first.
-    pub(super) fn show_file_in_diff(&mut self, file: usize, cx: &mut Context<Self>) {
-        if self.brief().mode == DetailMode::Brief {
-            self.set_detail_mode(DetailMode::Diff, cx);
-        }
-        self.reveal_file(file, cx);
-    }
-
-    /// Switches to the diff with `anchor`'s first line at the top: the file
-    /// is expanded when collapsed; when the line has no row (a filter hides
-    /// the file) the diff shows the file's header, or stays where it was.
-    pub(super) fn show_anchor_in_diff(&mut self, anchor: &CodeAnchor, cx: &mut Context<Self>) {
-        self.set_detail_mode(DetailMode::Diff, cx);
-        let Some(file) = file_index_of(self.loaded_files(), &anchor.path) else {
-            return;
-        };
-        // Expand the file, so its lines have rows.
-        let loaded = &self.loaded_files()[file];
-        if self.file_review().state_of(loaded).is_collapsed {
-            self.toggle_file_collapsed(file, cx);
-        }
-        match self.row_of_line(file, anchor.side, anchor.first_line) {
-            Some(row) => {
-                self.scroll_to_row(row);
-                cx.notify();
-            }
-            None => self.reveal_file(file, cx),
-        }
-    }
-
-    /// The diff row showing line `number` on `side` of file `file`.
-    fn row_of_line(&self, file: usize, side: CodeSide, number: u32) -> Option<usize> {
-        let range = self.rows().file_range(file)?;
-        let diff = &self.loaded_files().get(file)?.diff;
-        let side = line_side_of(side);
-        let number_at = |hunk: usize, line: usize| {
-            line_number_on(diff.hunks().get(hunk)?.lines.get(line)?, side)
-        };
-        let start = range.start;
-        self.rows()
-            .rows_in(range)
-            .iter()
-            .position(|row| match *row {
-                DetailRow::UnifiedLine { hunk, line, .. } => number_at(hunk, line) == Some(number),
-                DetailRow::SplitLine { hunk, row, .. } => [row.old, row.new]
-                    .into_iter()
-                    .flatten()
-                    .any(|line| number_at(hunk, line) == Some(number)),
-                _ => false,
-            })
-            .map(|offset| start + offset)
     }
 }
 

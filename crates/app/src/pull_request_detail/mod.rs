@@ -9,7 +9,17 @@
 //! and the side panel's Files, Review, Actions (merge, close) and Checks tabs.
 //!
 //! Files:
-//! - `pull_request_detail.rs`: `PullRequestDetail`, the view's state, loading and actions.
+//! - `pull_request_detail.rs`: `PullRequestDetail`, the view's state, what it shows and its accessors.
+//! - `file_loading.rs`: loading the review target's files, marks, notes and stored brief in the background.
+//! - `syntax_highlighting.rs`: coloring the loaded diffs in batches, and applying changed diff settings.
+//! - `highlighted_diff.rs`: `HighlightedDiff`, the syntax colors worked out for one diff.
+//! - `row_rebuilding.rs`: building the rows again (all, or one file's) and keeping the scroll position.
+//! - `scroll_anchor.rs`: `ScrollAnchor`, where the list scrolls after a rebuild.
+//! - `stack_actions.rs`: the stack: loading its layers, the review mode, the combined range, moving between layers, the Checks tab's target.
+//! - `file_navigation.rs`: the current file, moving between files, collapsing and marking them viewed, sideways scrolling.
+//! - `file_direction.rs`: `FileDirection`, next or previous (file or stack layer).
+//! - `file_tree_actions.rs`: the side panel and its file tree: showing it, the filter, folders, showing a file in it.
+//! - `diff_selection_actions.rs`: selecting code in the diff with the mouse and copying it.
 //! - `row_rendering.rs`: renders the pane's layout and each diff row.
 //! - `row_height_estimate.rs`: where each row starts, estimated without layout, for the scrollbar.
 //! - `sticky_header_rendering.rs`: the header above the diff: title, metadata, description.
@@ -74,7 +84,7 @@
 //! - `run_cancel.rs`: `RunCancel`, kills the agent process when the run is dropped.
 //! - `brief_job.rs`: `BriefJob`, one brief's background run: checkout, agent, checks, storing.
 //! - `brief_code.rs`: `BriefCode`, the shallow checkout of the head commit a brief's agent reads (or why there is none).
-//! - `brief_actions.rs`: writing a brief with Claude Code, cancelling it, and opening an anchor in the diff.
+//! - `brief_actions.rs`: writing a brief with Claude Code and cancelling it, its pages and reader.
 //! - `file_lookup.rs`: `file_index_of`, the loaded file an anchor's path names; the loaded files as the brief's `BriefDiffs`.
 //! - `brief_pane_rendering.rs`: the brief's rows in the main column, drawn by `brief_view`.
 
@@ -108,18 +118,24 @@ mod detail_row;
 mod detail_row_list;
 mod diff_line_ref;
 mod diff_selection;
+mod diff_selection_actions;
 mod fetch_changed_files;
 mod fetch_combined_files;
 mod fetch_file_text;
+mod file_direction;
+mod file_loading;
 mod file_lookup;
+mod file_navigation;
 mod file_review_state;
 mod file_set_update;
+mod file_tree_actions;
 mod file_tree_rendering;
 mod file_tree_state;
 mod filter_rendering;
 mod folder_summary;
 mod folder_viewed_state;
 mod head_commit;
+mod highlighted_diff;
 mod layer_request;
 mod line_counts;
 mod lines_label;
@@ -138,13 +154,17 @@ mod review_panel_rendering;
 
 mod review_target;
 mod row_height_estimate;
+mod row_rebuilding;
 mod row_rendering;
 mod run_cancel;
+mod scroll_anchor;
 mod selected_diff_text;
 mod selection_granularity;
 mod side_panel_tab;
+mod stack_actions;
 mod stack_bar_rendering;
 mod sticky_header_rendering;
+mod syntax_highlighting;
 mod thread_resolution;
 mod viewed_toggle;
 

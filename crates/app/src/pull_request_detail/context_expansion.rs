@@ -5,9 +5,9 @@ use qd_diff::{GapPlace, SourceLines};
 
 use super::fetch_file_text::fetch_file_text;
 use super::head_commit::HeadCommit;
+use super::highlighted_diff::HighlightedDiff;
 use super::loaded_file::{FileContext, LoadedFile};
-use super::pull_request_detail::{HighlightedDiff, PullRequestDetail};
-
+use super::pull_request_detail::PullRequestDetail;
 use crate::diff_view::{FileTextLoad, GapPart};
 
 impl PullRequestDetail {
