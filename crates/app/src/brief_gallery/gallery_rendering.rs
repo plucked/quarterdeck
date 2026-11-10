@@ -1,7 +1,4 @@
-use gpui::{
-    AnyElement, Context, FontWeight, IntoElement, Render, SharedString, Window, div, list,
-    prelude::*,
-};
+use gpui::{AnyElement, Context, IntoElement, Render, SharedString, Window, div, list, prelude::*};
 
 use qd_studio::{CalloutTone, TableRole};
 
@@ -15,6 +12,7 @@ use crate::brief_view::{
     render_page_tabs, render_report_panel,
 };
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
+use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// What the intro row says.
@@ -75,10 +73,7 @@ impl BriefGallery {
                 .pb_1()
                 .border_b_1()
                 .border_color(theme::border())
-                .text_xs()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::subtle())
-                .child(heading.to_uppercase())
+                .child(SectionLabel::new(heading))
                 .into_any_element(),
             (Err(message), GalleryRow::Broken) => div()
                 .text_color(theme::error())

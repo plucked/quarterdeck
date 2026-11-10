@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*, px};
+use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*};
 use qd_cache::{NoteAnchor, NoteDestination, ReviewNote};
 use qd_github::ReviewEvent;
 
@@ -7,6 +7,7 @@ use super::pull_request_detail::PullRequestDetail;
 use super::review_status::ReviewStatus;
 use super::side_panel_tab::SidePanelTab;
 use crate::button::Button;
+use crate::section_label::SectionLabel;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
@@ -219,7 +220,7 @@ impl PullRequestDetail {
             .flex()
             .flex_col()
             .gap_3()
-            .child(section_title(&format!("Your drafts ({count})")))
+            .child(SectionLabel::new(format!("Your drafts ({count})")).compact())
             .child(Self::render_note_list(&drafts, "Click + beside a line in the diff to comment on it. Drafts are posted when you submit.", cx))
             .when(has_pending, |panel| {
                 panel.child(
@@ -235,7 +236,7 @@ impl PullRequestDetail {
                         )),
                 )
             })
-            .child(section_title("Verdict"))
+            .child(SectionLabel::new("Verdict").compact())
             .child(verdict)
             .children(self.review().summary_editor.clone())
             .child(
@@ -261,7 +262,7 @@ impl PullRequestDetail {
             .flex()
             .flex_col()
             .gap_3()
-            .child(section_title(&format!("Local notes ({count})")))
+            .child(SectionLabel::new(format!("Local notes ({count})")).compact())
             .child(Self::render_note_list(&notes, "Click + beside a line in the diff to note something. Notes stay on this Mac.", cx))
             .child(
                 div()
@@ -358,15 +359,6 @@ impl PullRequestDetail {
         }
         list.into_any_element()
     }
-}
-
-/// A small uppercase heading in the panel.
-fn section_title(text: &str) -> impl IntoElement {
-    div()
-        .text_size(px(10.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::subtle())
-        .child(text.to_uppercase())
 }
 
 /// A quiet explanatory line.

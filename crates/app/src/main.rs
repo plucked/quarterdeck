@@ -12,6 +12,7 @@
 //! - `app_settings.rs`: `AppSettings`, the user's preferences shared by every window.
 //! - `app_services.rs`: `AppServices`, the GitHub client and cache handed to views.
 //! - `scrollbar/`: `VerticalScrollbar`, a draggable scrollbar for any scroll container.
+//! - `section_label.rs`: `SectionLabel`, the small uppercase subtle label heading a section.
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
 //! - `fetch_stack.rs`: gets a stack's layers from the cache, and checks them with GitHub.
 //! - `word_range_at.rs`: the word around an offset, for double-click selection.
@@ -75,6 +76,7 @@ mod resize_handle;
 mod review_queue;
 mod review_verdict_badge;
 mod scrollbar;
+mod section_label;
 mod segmented_control;
 mod settings_window;
 mod shared_cache;

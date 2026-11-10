@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use gpui::{AnyElement, FontWeight, IntoElement, div, prelude::*, px};
+use gpui::{AnyElement, IntoElement, div, prelude::*, px};
 use qd_markdown::MarkdownDocument;
 
 use super::brief_rendering::markdown;
+use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// The narrowest a scope list gets before the lists stack.
@@ -43,13 +44,7 @@ pub fn render_scope(
                         .bg(theme::surface())
                         .border_1()
                         .border_color(theme::border())
-                        .child(
-                            div()
-                                .text_xs()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(theme::subtle())
-                                .child(label.to_uppercase()),
-                        )
+                        .child(SectionLabel::new(label))
                         .children(items.iter().enumerate().map(move |(index, item)| {
                             div()
                                 .flex()

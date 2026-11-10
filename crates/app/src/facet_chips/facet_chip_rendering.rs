@@ -1,14 +1,13 @@
 use gpui::{AnyElement, Div, FontWeight, SharedString, Stateful, div, prelude::*, px};
 use qd_file_tree::{FacetChoice, FacetCount};
 
+use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// Chips a collapsed row shows before "more"; picked or hidden ones always show.
 pub const COLLAPSED_CHIPS: usize = 8;
 /// Width of a chip row's label column, so the rows' chips line up.
 const ROW_LABEL_WIDTH: f32 = 50.;
-/// Size of a chip row's label.
-const ROW_LABEL_TEXT_SIZE: f32 = 10.;
 /// Nudges the label down to the chips' text line.
 const ROW_LABEL_TOP: f32 = 3.;
 
@@ -35,10 +34,11 @@ pub fn render_chip_row(label: &'static str, chips: Vec<AnyElement>) -> Div {
                 .flex_none()
                 .w(px(ROW_LABEL_WIDTH))
                 .pt(px(ROW_LABEL_TOP))
-                .text_size(px(ROW_LABEL_TEXT_SIZE))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(theme::subtle())
-                .child(label.to_uppercase()),
+                .child(
+                    SectionLabel::new(label)
+                        .compact()
+                        .weight(FontWeight::MEDIUM),
+                ),
         )
         // Lines start at the top and keep their own height, so a chip never stretches.
         .child(

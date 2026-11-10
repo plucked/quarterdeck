@@ -8,7 +8,7 @@ use qd_studio::{
 };
 
 use super::brief_handlers::BriefHandlers;
-use super::brief_rendering::{caption_line, section_label};
+use super::brief_rendering::caption_line;
 use super::diagram_geometry::{DiagramPoint, DiagramRect};
 use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse, paint_strokes};
 use super::graph_layout::{
@@ -18,6 +18,7 @@ use super::sequence_layout::{
     HEADER_PADDING, MessagePlace, SELF_LOOP_HEIGHT, SELF_LOOP_WIDTH, SequenceLayout,
 };
 use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
+use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// Width of the role stripe at a box's left edge (a lane header's top).
@@ -122,7 +123,7 @@ pub fn render_graph(
                                 .flex()
                                 .flex_col()
                                 .gap_1()
-                                .children(heading.map(picture_heading))
+                                .children(heading.map(SectionLabel::new))
                                 .child(render_graph_picture(
                                     widget, graph, layout, picture, handlers,
                                 ))
@@ -520,11 +521,6 @@ fn anchor_click(
     let target = anchor.clone();
     let show_anchor = handlers.show_anchor.clone();
     move |_, window, cx| show_anchor(&target, window, cx)
-}
-
-/// "Before" or "After" over a picture.
-fn picture_heading(heading: &'static str) -> Div {
-    section_label(heading)
 }
 
 /// The color standing for a role, as a second cue next to the label:

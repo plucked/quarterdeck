@@ -14,6 +14,7 @@ use crate::display_date::{age_since, unix_now, unix_seconds};
 use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::pulsing_status::PulsingStatus;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
+use crate::section_label::SectionLabel;
 use crate::short_sha::short_sha;
 use crate::theme;
 
@@ -241,15 +242,7 @@ impl ChecksPanel {
                     .justify_between()
                     .gap_3()
                     .h(px(HEADING_ROW_HEIGHT))
-                    .child(
-                        div()
-                            .min_w_0()
-                            .truncate()
-                            .text_size(px(HEADING_TEXT_SIZE))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(theme::subtle())
-                            .child(title.to_uppercase()),
-                    )
+                    .child(SectionLabel::new(title).compact().truncate())
                     .children(skipped_switch),
             )
             .into_any_element()

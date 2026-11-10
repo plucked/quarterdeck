@@ -2,6 +2,7 @@ use gpui::{AnyElement, FontWeight, IntoElement, SharedString, div, prelude::*, p
 
 use super::brief_handlers::BriefHandlers;
 use super::prepared_page::PreparedPage;
+use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// Height of the underline marking the shown page's tab.
@@ -65,13 +66,7 @@ pub fn render_page_intro(page: &PreparedPage, index: usize, count: usize) -> Any
         .flex()
         .flex_col()
         .gap_1()
-        .child(
-            div()
-                .text_xs()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::subtle())
-                .child(format!("PAGE {} OF {count}", index + 1)),
-        )
+        .child(SectionLabel::new(format!("Page {} of {count}", index + 1)))
         .child(
             div()
                 .text_xl()

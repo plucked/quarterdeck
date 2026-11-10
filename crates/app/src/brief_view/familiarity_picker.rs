@@ -1,7 +1,8 @@
-use gpui::{AnyElement, FontWeight, IntoElement, div, prelude::*};
+use gpui::{AnyElement, IntoElement, div, prelude::*};
 use qd_studio::ReaderFamiliarity;
 
 use super::brief_handlers::BriefHandlers;
+use crate::section_label::SectionLabel;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
@@ -28,13 +29,7 @@ pub fn render_familiarity_picker(
         .flex()
         .flex_col()
         .gap_1p5()
-        .child(
-            div()
-                .text_xs()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::subtle())
-                .child("HOW WELL DO YOU KNOW THIS AREA?"),
-        )
+        .child(SectionLabel::new("How well do you know this area?"))
         .child(div().flex().child(control))
         .child(
             div()

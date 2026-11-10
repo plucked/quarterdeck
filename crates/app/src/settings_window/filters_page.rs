@@ -5,6 +5,7 @@ use super::setting_row::SettingRow;
 use super::settings_window::SettingsWindow;
 use crate::app_settings::AppSettings;
 use crate::button::Button;
+use crate::section_label::SectionLabel;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
@@ -61,10 +62,7 @@ impl SettingsWindow {
                 div()
                     .pt_4()
                     .pb_1()
-                    .text_xs()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(theme::subtle())
-                    .child(format!("HIDDEN BRANCHES · {}", rules.len())),
+                    .child(SectionLabel::new(format!("Hidden branches · {}", rules.len())).weight(FontWeight::MEDIUM)),
             )
             .child(render_rule_list(&rules, cx))
             .into_any_element()

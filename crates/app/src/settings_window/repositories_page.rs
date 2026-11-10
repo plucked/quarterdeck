@@ -9,6 +9,7 @@ use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::button::Button;
 use crate::repo_monogram::RepoMonogram;
+use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// Width of the field a repository is typed into.
@@ -94,10 +95,7 @@ impl SettingsWindow {
                 div()
                     .pt_4()
                     .pb_1()
-                    .text_xs()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(theme::subtle())
-                    .child(format!("WATCHED · {}", watched.len())),
+                    .child(SectionLabel::new(format!("Watched · {}", watched.len())).weight(FontWeight::MEDIUM)),
             )
             .child(render_watched_list(&watched, cx))
             .into_any_element()

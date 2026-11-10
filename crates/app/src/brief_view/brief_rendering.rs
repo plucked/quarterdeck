@@ -23,6 +23,7 @@ use super::tour_rendering::render_tour;
 use crate::button::Button;
 use crate::diff_view::DIFF_ROW_HEIGHT;
 use crate::markdown_view::MarkdownView;
+use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// Space left and right of the brief's column, inside the pane.
@@ -91,7 +92,7 @@ pub fn render_brief_status(
         .border_color(theme::border_strong());
     match state {
         None => card
-            .child(section_label("Brief"))
+            .child(SectionLabel::new("Brief"))
             .child(div().text_sm().text_color(theme::muted()).child(
                 "Claude Code reads this change's diffs and a shallow checkout of its head \
                  commit, and walks you through it: why it exists, the context you \
@@ -111,7 +112,7 @@ pub fn render_brief_status(
             )
             .into_any_element(),
         Some(BriefState::Writing(progress)) => card
-            .child(section_label("Writing the brief"))
+            .child(SectionLabel::new("Writing the brief"))
             .child(
                 div()
                     .text_sm()
@@ -127,7 +128,7 @@ pub fn render_brief_status(
             )
             .into_any_element(),
         Some(BriefState::Failed(message)) => card
-            .child(section_label("No brief"))
+            .child(SectionLabel::new("No brief"))
             .child(
                 div()
                     .text_sm()
@@ -373,15 +374,6 @@ pub(super) fn markdown(id: String, document: &Arc<MarkdownDocument>) -> AnyEleme
         .text_sm()
         .child(MarkdownView::new(SharedString::from(id), document.clone()))
         .into_any_element()
-}
-
-/// A small uppercase label heading a card.
-pub(super) fn section_label(label: &'static str) -> Div {
-    div()
-        .text_xs()
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::subtle())
-        .child(label.to_uppercase())
 }
 
 /// The caption above code, saying what to see in it.

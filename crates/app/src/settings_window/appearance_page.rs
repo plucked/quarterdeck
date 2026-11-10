@@ -5,6 +5,7 @@ use qd_syntax::SyntaxKind;
 use super::settings_window::SettingsWindow;
 use super::theme_preview::render_theme_preview;
 use crate::app_settings::AppSettings;
+use crate::section_label::SectionLabel;
 use crate::theme::{self, colors_of, palette_of};
 
 /// Height of a theme card's color strip.
@@ -40,14 +41,10 @@ impl SettingsWindow {
             .child(Self::render_theme_group("Light", &light, active, cx))
             .child(Self::render_theme_group("Dark", &dark, active, cx))
             .child(
-                div()
-                    .pt_2()
-                    .text_xs()
-                    .text_color(theme::subtle())
-                    .child(format!(
-                        "PREVIEW · {}",
-                        palette_of(previewed).name.to_uppercase()
-                    )),
+                div().pt_2().child(
+                    SectionLabel::new(format!("Preview · {}", palette_of(previewed).name))
+                        .weight(FontWeight::NORMAL),
+                ),
             )
             .child(render_theme_preview(previewed))
     }
@@ -67,12 +64,7 @@ impl SettingsWindow {
             .flex()
             .flex_col()
             .gap_1()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(theme::subtle())
-                    .child(label.to_uppercase()),
-            )
+            .child(SectionLabel::new(label).weight(FontWeight::NORMAL))
             .child(div().flex().gap_2().children(cards))
     }
 

@@ -1,8 +1,9 @@
-use gpui::{AnyElement, Entity, FontWeight, IntoElement, div, prelude::*};
+use gpui::{AnyElement, Entity, IntoElement, div, prelude::*};
 
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::report_state::ReportState;
 use crate::button::Button;
+use crate::section_label::SectionLabel;
 use crate::text_area::TextArea;
 use crate::theme;
 
@@ -25,7 +26,7 @@ pub fn render_report_panel(state: &ReportState, handlers: &BriefHandlers) -> Opt
             )
             .into_any_element(),
         ReportState::Saved(path) => panel()
-            .child(label("REPORT SAVED"))
+            .child(SectionLabel::new("Report saved"))
             .child(
                 div()
                     .text_sm()
@@ -66,7 +67,7 @@ fn report_form(
     handlers: &BriefHandlers,
 ) -> AnyElement {
     panel()
-        .child(label("WHAT IS WRONG OR WEIRD IN THIS BRIEF?"))
+        .child(SectionLabel::new("What is wrong or weird in this brief?"))
         .child(
             div()
                 .text_xs()
@@ -109,13 +110,4 @@ fn panel() -> gpui::Div {
         .bg(theme::surface())
         .border_1()
         .border_color(theme::border_strong())
-}
-
-/// A small uppercase label heading the panel.
-fn label(text: &'static str) -> gpui::Div {
-    div()
-        .text_xs()
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme::subtle())
-        .child(text)
 }
