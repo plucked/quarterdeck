@@ -8,6 +8,7 @@ use crate::button::Button;
 use crate::section_label::SectionLabel;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
+use crate::view_option::view_option;
 
 /// Width of the field a branch pattern is typed into.
 const PATTERN_FIELD_WIDTH: f32 = 280.;
@@ -19,18 +20,18 @@ impl SettingsWindow {
     pub(super) fn render_filters_page(&self, cx: &mut Context<Self>) -> AnyElement {
         let rules = AppSettings::hidden_branch_rules(cx).to_vec();
         let picked_side = self.branch_rule_side;
+        let settings = cx.entity().downgrade();
         let side_picker = BranchSide::ALL.iter().fold(
             SegmentedControl::new("branch-rule-side").fill_width(),
             |control, &side| {
-                let settings = cx.entity().downgrade();
-                control.option(side_label(side), side == picked_side, move |_, cx| {
-                    settings
-                        .update(cx, |settings, cx| {
-                            settings.branch_rule_side = side;
-                            cx.notify();
-                        })
-                        .ok();
-                })
+                control.option(
+                    side_label(side),
+                    side == picked_side,
+                    view_option(&settings, side, |settings, side, cx| {
+                        settings.branch_rule_side = side;
+                        cx.notify();
+                    }),
+                )
             },
         );
 

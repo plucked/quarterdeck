@@ -61,7 +61,7 @@ mod tour_rendering;
 mod version_rendering;
 
 pub use brief_diffs::BriefDiffs;
-pub use brief_handlers::{BriefHandlers, view_action};
+pub use brief_handlers::{BriefHandlers, view_action, view_handler};
 pub use brief_page_rendering::render_brief_page_row;
 pub use brief_page_row::BriefPageRow;
 pub use brief_rendering::{render_brief_bar, render_brief_column, render_brief_status};

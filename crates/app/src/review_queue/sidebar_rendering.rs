@@ -16,6 +16,7 @@ use crate::review_verdict_badge::ReviewVerdictBadge;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
+use crate::view_option::view_option;
 
 /// How narrow and how wide the sidebar can be dragged.
 const MIN_SIDEBAR_WIDTH: f32 = 240.;
@@ -119,12 +120,7 @@ impl ReviewQueue {
         let review_requested = self.review_tab().len();
         let others = self.others_tab().shown().len();
         let queue = cx.entity().downgrade();
-        let show_tab = move |tab: QueueTab| {
-            let queue = queue.clone();
-            move |_: &mut gpui::Window, cx: &mut gpui::App| {
-                queue.update(cx, |queue, cx| queue.show_tab(tab, cx)).ok();
-            }
-        };
+        let show_tab = |tab| view_option(&queue, tab, ReviewQueue::show_tab);
         SegmentedControl::new("queue-tabs")
             .fill_width()
             .option(

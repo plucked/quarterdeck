@@ -47,6 +47,7 @@
 //! - `pull_request_detail/`: `PullRequestDetail`, the selected pull request as a virtualized list.
 //! - `checks_panel/`: `ChecksPanel`, the side panel's Checks tab: the shown pull request's CI checks.
 //! - `ui_state/`: saves and restores what the UI showed across relaunches.
+//! - `view_option.rs`: `view_option`, an option's select handler passing its value to the view.
 
 mod app_commands;
 mod app_services;
@@ -93,6 +94,7 @@ mod text_tooltip;
 mod theme;
 mod tree_locate_button;
 mod ui_state;
+mod view_option;
 mod word_range_at;
 
 fn main() {

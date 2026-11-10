@@ -10,6 +10,7 @@ use crate::button::Button;
 use crate::section_label::SectionLabel;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
+use crate::view_option::view_option;
 
 impl PullRequestDetail {
     /// The tabs atop the side panel: Files, Review (with its comment count),
@@ -27,14 +28,7 @@ impl PullRequestDetail {
             format!("Review  {count}")
         };
         let detail = cx.entity().downgrade();
-        let show = move |tab: SidePanelTab| {
-            let detail = detail.clone();
-            move |_: &mut gpui::Window, cx: &mut gpui::App| {
-                detail
-                    .update(cx, |detail, cx| detail.show_side_panel_tab(tab, cx))
-                    .ok();
-            }
-        };
+        let show = |tab| view_option(&detail, tab, PullRequestDetail::show_side_panel_tab);
         div().flex_none().px_3().pt_3().pb_1().child(
             SegmentedControl::new("side-panel-tabs")
                 .option(
@@ -97,15 +91,12 @@ impl PullRequestDetail {
         }
         let destination = self.review().destination;
         let detail = cx.entity().downgrade();
-        let pick = move |destination: NoteDestination| {
-            let detail = detail.clone();
-            move |_: &mut gpui::Window, cx: &mut gpui::App| {
-                detail
-                    .update(cx, |detail, cx| {
-                        detail.set_comment_destination(destination, cx);
-                    })
-                    .ok();
-            }
+        let pick = |destination| {
+            view_option(
+                &detail,
+                destination,
+                PullRequestDetail::set_comment_destination,
+            )
         };
         div()
             .flex()
@@ -180,14 +171,7 @@ impl PullRequestDetail {
             muted_line("Your own pull request: your review can only comment.")
         } else {
             let detail = cx.entity().downgrade();
-            let pick = move |event: ReviewEvent| {
-                let detail = detail.clone();
-                move |_: &mut gpui::Window, cx: &mut gpui::App| {
-                    detail
-                        .update(cx, |detail, cx| detail.set_review_event(event, cx))
-                        .ok();
-                }
-            };
+            let pick = |event| view_option(&detail, event, PullRequestDetail::set_review_event);
             SegmentedControl::new("review-event")
                 .option(
                     "Comment",

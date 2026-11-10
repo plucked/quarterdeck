@@ -6,6 +6,7 @@ use super::review_target::ReviewTarget;
 use crate::button::Button;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
+use crate::view_option::view_option;
 
 impl PullRequestDetail {
     /// The header's stack line for a stacked pull request: which layer this
@@ -30,6 +31,8 @@ impl PullRequestDetail {
         });
 
         let mode = self.review_mode();
+        let detail = cx.entity().downgrade();
+        let pick = |mode| view_option(&detail, mode, PullRequestDetail::set_review_mode);
         let range_text = self.render_range_text();
         Some(
             div()
@@ -69,26 +72,16 @@ impl PullRequestDetail {
                 ))
                 .child(
                     SegmentedControl::new("stack-review-mode")
-                        .option("Layer", mode == StackReviewMode::Layer, {
-                            let detail = cx.entity().downgrade();
-                            move |_, cx| {
-                                detail
-                                    .update(cx, |detail, cx| {
-                                        detail.set_review_mode(StackReviewMode::Layer, cx);
-                                    })
-                                    .ok();
-                            }
-                        })
-                        .option("Combined", mode == StackReviewMode::Combined, {
-                            let detail = cx.entity().downgrade();
-                            move |_, cx| {
-                                detail
-                                    .update(cx, |detail, cx| {
-                                        detail.set_review_mode(StackReviewMode::Combined, cx);
-                                    })
-                                    .ok();
-                            }
-                        }),
+                        .option(
+                            "Layer",
+                            mode == StackReviewMode::Layer,
+                            pick(StackReviewMode::Layer),
+                        )
+                        .option(
+                            "Combined",
+                            mode == StackReviewMode::Combined,
+                            pick(StackReviewMode::Combined),
+                        ),
                 )
                 .children(range_text)
                 .into_any_element(),

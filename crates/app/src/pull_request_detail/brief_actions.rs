@@ -26,6 +26,7 @@ use super::review_target::ReviewTarget;
 use super::run_cancel::RunCancel;
 use crate::brief_view::{
     BriefHandlers, BriefPageRow, BriefReport, BriefState, PreparedBrief, ReportHost, view_action,
+    view_handler,
 };
 use crate::diff_line_sides::{line_number_on, line_side_of};
 use crate::ui_state::UiStateRecorder;
@@ -336,21 +337,11 @@ pub(super) fn detail_brief_handlers(cx: &mut Context<PullRequestDetail>) -> Brie
         }),
         write: view_action(&detail, |detail, _, cx| detail.write_brief(cx)),
         cancel: view_action(&detail, |detail, _, cx| detail.cancel_brief(cx)),
-        show_page: Rc::new({
-            let detail = detail.clone();
-            move |page, _, cx| {
-                detail
-                    .update(cx, |detail, cx| detail.show_brief_page(page, cx))
-                    .ok();
-            }
+        show_page: view_handler(&detail, |detail, page, _, cx| {
+            detail.show_brief_page(page, cx);
         }),
-        choose_reader: Rc::new({
-            let detail = detail.clone();
-            move |familiarity, _, cx| {
-                detail
-                    .update(cx, |detail, cx| detail.choose_familiarity(familiarity, cx))
-                    .ok();
-            }
+        choose_reader: view_handler(&detail, |detail, familiarity, _, cx| {
+            detail.choose_familiarity(familiarity, cx);
         }),
         open_report: view_action(&detail, |detail, window, cx| {
             detail.open_report(REPORT_PLACEHOLDER, window, cx);

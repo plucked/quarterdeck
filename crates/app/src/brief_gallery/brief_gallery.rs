@@ -10,6 +10,7 @@ use qd_update::AppVersion;
 use crate::app_settings::AppSettings;
 use crate::brief_view::{
     BriefHandlers, BriefPageRow, BriefReport, DEFAULT_DIAGRAM_WIDTH, ReportHost, view_action,
+    view_handler,
 };
 
 /// The report panel's text field while empty.
@@ -58,21 +59,9 @@ impl BriefGallery {
             show_anchor: Rc::new(|_, _, _| {}),
             write: Rc::new(|_, _| {}),
             cancel: Rc::new(|_, _| {}),
-            show_page: Rc::new({
-                let gallery = gallery.clone();
-                move |page, _, cx| {
-                    gallery
-                        .update(cx, |gallery, cx| gallery.show_page(page, cx))
-                        .ok();
-                }
-            }),
-            choose_reader: Rc::new({
-                let gallery = gallery.clone();
-                move |familiarity, _, cx| {
-                    gallery
-                        .update(cx, |gallery, cx| gallery.choose_reader(familiarity, cx))
-                        .ok();
-                }
+            show_page: view_handler(&gallery, |gallery, page, _, cx| gallery.show_page(page, cx)),
+            choose_reader: view_handler(&gallery, |gallery, familiarity, _, cx| {
+                gallery.choose_reader(familiarity, cx);
             }),
             open_report: view_action(&gallery, |gallery, window, cx| {
                 gallery.open_report(REPORT_PLACEHOLDER, window, cx);

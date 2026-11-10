@@ -11,6 +11,7 @@ use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
+use crate::view_option::view_option;
 
 /// The tallest the expanded description gets before it scrolls on its own,
 /// so the diff always keeps most of the pane.
@@ -108,14 +109,7 @@ impl PullRequestDetail {
     fn render_mode_switch(&self, cx: &mut Context<Self>) -> AnyElement {
         let mode = self.brief().mode;
         let detail = cx.entity().downgrade();
-        let pick = move |mode: DetailMode| {
-            let detail = detail.clone();
-            move |_: &mut gpui::Window, cx: &mut gpui::App| {
-                detail
-                    .update(cx, |detail, cx| detail.set_detail_mode(mode, cx))
-                    .ok();
-            }
-        };
+        let pick = |mode| view_option(&detail, mode, PullRequestDetail::set_detail_mode);
         SegmentedControl::new("detail-mode")
             .large()
             .option("Diff", mode == DetailMode::Diff, pick(DetailMode::Diff))

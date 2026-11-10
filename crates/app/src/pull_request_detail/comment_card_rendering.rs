@@ -12,6 +12,7 @@ use crate::display_date::short_date;
 use crate::markdown_view::MarkdownView;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
+use crate::view_option::view_option;
 
 /// A comment author's avatar in the comment's header line.
 const COMMENT_AVATAR_SIZE: f32 = 18.;
@@ -100,15 +101,12 @@ impl PullRequestDetail {
         }
         let destination = self.review().destination;
         let detail = cx.entity().downgrade();
-        let pick = move |destination: NoteDestination| {
-            let detail = detail.clone();
-            move |_: &mut gpui::Window, cx: &mut gpui::App| {
-                detail
-                    .update(cx, |detail, cx| {
-                        detail.set_comment_destination(destination, cx);
-                    })
-                    .ok();
-            }
+        let pick = |destination| {
+            view_option(
+                &detail,
+                destination,
+                PullRequestDetail::set_comment_destination,
+            )
         };
         SegmentedControl::new("composer-destination")
             .option(

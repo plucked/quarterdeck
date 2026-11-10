@@ -5,10 +5,12 @@ use qd_studio::{CodeAnchor, ReaderFamiliarity};
 
 /// Runs when a quoted anchor is clicked.
 pub type AnchorHandler = Rc<dyn Fn(&CodeAnchor, &mut Window, &mut App)>;
+/// Runs with a value when it is picked or clicked.
+pub type ValueHandler<Value> = Rc<dyn Fn(Value, &mut Window, &mut App)>;
 /// Runs when something about page `index` is clicked.
-pub type WidgetHandler = Rc<dyn Fn(usize, &mut Window, &mut App)>;
+pub type WidgetHandler = ValueHandler<usize>;
 /// Runs when a reader familiarity is picked.
-pub type ReaderHandler = Rc<dyn Fn(ReaderFamiliarity, &mut Window, &mut App)>;
+pub type ReaderHandler = ValueHandler<ReaderFamiliarity>;
 /// Runs when a button is clicked.
 pub type ActionHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -46,6 +48,19 @@ pub fn view_action<V: 'static>(
     let view = view.clone();
     Rc::new(move |window, cx| {
         view.update(cx, |view, cx| run(view, window, cx)).ok();
+    })
+}
+
+/// A handler taking a value (a page index, a reader familiarity) that runs
+/// `run` with it on the view behind `view`; ignored once the view is closed.
+pub fn view_handler<V: 'static, Value: 'static>(
+    view: &WeakEntity<V>,
+    run: impl Fn(&mut V, Value, &mut Window, &mut Context<V>) + 'static,
+) -> ValueHandler<Value> {
+    let view = view.clone();
+    Rc::new(move |value, window, cx| {
+        view.update(cx, |view, cx| run(view, value, window, cx))
+            .ok();
     })
 }
 
