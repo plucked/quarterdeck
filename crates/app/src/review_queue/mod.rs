@@ -25,6 +25,10 @@
 //! - `open_filter_chips.rs`: `OpenFilterChips`, the open Others filter's chip rows, counted ahead of drawing.
 //! - `chip_marks.rs`: `ChipMarks`, what an Others chip shows before its name (an avatar, a label color).
 //! - `queue_row.rs`: `QueueRow`, a sidebar row (repository header, pull request, stack header, stack layer), and grouping.
+//! - `repo_group.rs`: `RepoGroup`, what a repository's header shows.
+//! - `stack_group.rs`: `StackGroup`, what a stack's header shows.
+//! - `others_group.rs`: `OthersGroup`, an Others repository's count before its filter, and the filter's state.
+//! - `others_repository.rs`: `OthersRepository`, a repository the Others tab shows, with its `OthersGroup`.
 //! - `collapsed_groups.rs`: `CollapsedGroups`, the repositories and stacks folded in the sidebar.
 //! - `stack_key.rs`: `StackKey`, a stack's repository and number.
 //! - `selection_origin.rs`: `SelectionOrigin`, picked from a list or opened from a stack.
@@ -37,18 +41,22 @@ mod open_filter_chips;
 mod others_facet;
 mod others_filter_rendering;
 mod others_filtering;
+mod others_group;
+mod others_repository;
 mod others_tab;
 mod others_tab_actions;
 mod queue_lists;
 mod queue_row;
 mod refresh_schedule;
 mod refresh_status;
+mod repo_group;
 mod restore_phase;
 mod review_queue;
 mod selection_after_refresh;
 mod selection_origin;
 mod selection_restore;
 mod sidebar_rendering;
+mod stack_group;
 mod stack_key;
 mod top_bar_rendering;
 

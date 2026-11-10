@@ -8,8 +8,9 @@ use super::chip_marks::ChipMarks;
 use super::open_filter_chips::OpenFilterChips;
 use super::others_facet::OthersFacet;
 use super::others_filtering::{FilterContext, chip_counts, passes};
+use super::others_group::OthersGroup;
+use super::others_repository::OthersRepository;
 use super::queue_lists::QueueLists;
-use super::queue_row::{OthersGroup, OthersRepository};
 
 /// The Others tab's state: the watched repositories, each one's filter,
 /// which pull requests pass, and what the sidebar has open.

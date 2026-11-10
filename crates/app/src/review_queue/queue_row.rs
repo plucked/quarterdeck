@@ -3,6 +3,9 @@ use std::collections::{HashMap, HashSet};
 use qd_github::{PullRequest, PullRequestStack, RepoRef};
 
 use super::collapsed_groups::CollapsedGroups;
+use super::others_repository::OthersRepository;
+use super::repo_group::RepoGroup;
+use super::stack_group::StackGroup;
 use super::stack_key::StackKey;
 
 /// One row of the queue's sidebar list.
@@ -25,45 +28,6 @@ pub enum QueueRow {
     /// Under a repository of the Others tab that shows no pull request: it
     /// has none open, or its filter hides them all.
     NothingShown(RepoRef),
-}
-
-/// What a repository's header shows.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RepoGroup {
-    pub repo: RepoRef,
-    /// Pull requests of it in the shown list.
-    pub pull_requests: usize,
-    pub is_collapsed: bool,
-    /// Its filter, in the Others tab; `None` in the other tabs.
-    pub others: Option<OthersGroup>,
-}
-
-/// A repository of the Others tab: how many of its open pull requests
-/// there are before the filter, and the filter's state.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OthersGroup {
-    pub total: usize,
-    pub is_filter_active: bool,
-    pub is_filter_open: bool,
-}
-
-/// A repository the Others tab shows, in order, with its [`OthersGroup`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OthersRepository {
-    pub repo: RepoRef,
-    pub group: OthersGroup,
-}
-
-/// What a stack's header shows.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StackGroup {
-    pub key: StackKey,
-    /// Layers in the whole stack.
-    pub size: u64,
-    pub base_ref: String,
-    /// Layers of it in the shown list.
-    pub listed: usize,
-    pub is_collapsed: bool,
 }
 
 impl QueueRow {
@@ -272,6 +236,7 @@ mod tests {
     use qd_github::{RepoRef, StackLayer, StackMembership, User};
 
     use super::*;
+    use crate::review_queue::others_group::OthersGroup;
 
     fn pull_request(number: u64, stack: Option<(u64, u64)>) -> PullRequest {
         in_repo("b", number, stack)

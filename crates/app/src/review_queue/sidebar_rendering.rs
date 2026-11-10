@@ -4,8 +4,10 @@ use qd_github::{PullRequest, PullRequestBranches, StackLayer, ViewerReview};
 
 use super::ReviewQueue;
 use super::others_filter_rendering::{render_filter_button, render_others_empty_state};
-use super::queue_row::{QueueRow, RepoGroup, StackGroup};
+use super::queue_row::QueueRow;
 use super::refresh_status::RefreshStatus;
+use super::repo_group::RepoGroup;
+use super::stack_group::StackGroup;
 use crate::avatar_images::Avatar;
 use crate::display_date::{relative_age, unix_now};
 use crate::fold_chevron::{FoldChevron, FoldState};
