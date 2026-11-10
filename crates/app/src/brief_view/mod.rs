@@ -20,7 +20,10 @@
 //! - `brief_widget_context.rs`: `BriefWidgetContext`, what drawing widgets needs from the view.
 //! - `diagram_geometry.rs`: `DiagramPoint`, `DiagramRect`, `CubicCurve`: where diagram parts go; the default width and margin of every diagram.
 //! - `text_estimate.rs`: `TextMetrics`, text sizes estimated for laying diagrams out before drawing.
-//! - `graph_layout.rs`: `GraphLayout` and `lay_out_graph`: columns along the arrows, a band per boundary, routed arrows, labels kept apart.
+//! - `graph_layout.rs`: `GraphLayout` and `lay_out_graph`: boxes placed in layers along the arrows and a band per boundary, borders around them.
+//! - `graph_direction.rs`: `GraphDirection`, which way a graph's arrows run, and positions along and across them.
+//! - `graph_ranking.rs`: each box's layer (cycle-closing arrows left out), band, and order within its cell.
+//! - `edge_routing.rs`: `EdgeRoute` and `route_edges`: each arrow's path by its course, labels kept apart.
 //! - `sequence_layout.rs`: `SequenceLayout` and `lay_out_sequence`: lanes, and messages top to bottom.
 //! - `dash_pattern.rs`: `DashPattern`, the dash and gap of a dashed or dotted diagram line.
 //! - `diagram_stroke.rs`: `DiagramStroke` and `paint_strokes`: lines, dashes and arrowheads painted on a canvas.
@@ -60,8 +63,11 @@ mod diagram_geometry;
 mod diagram_legend;
 mod diagram_rendering;
 mod diagram_stroke;
+mod edge_routing;
 mod familiarity_picker;
+mod graph_direction;
 mod graph_layout;
+mod graph_ranking;
 mod graph_rendering;
 mod page_rendering;
 mod prepared_brief;

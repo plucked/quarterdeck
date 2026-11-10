@@ -8,9 +8,8 @@ use super::diagram_geometry::DiagramRect;
 use super::diagram_legend::{change_swatch, legend_item, line_sample, render_legend, role_legend};
 use super::diagram_rendering::{ROLE_STRIPE, placed, role_color, stroke_canvas};
 use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse};
-use super::graph_layout::{
-    EDGE_LABEL_PADDING, GROUP_LABEL_HEIGHT, GraphLayout, NODE_PADDING_X, NODE_PADDING_Y,
-};
+use super::edge_routing::EDGE_LABEL_PADDING;
+use super::graph_layout::{GROUP_LABEL_HEIGHT, GraphLayout, NODE_PADDING_X, NODE_PADDING_Y};
 use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
 use crate::section_label::SectionLabel;
 use crate::theme;
