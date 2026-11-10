@@ -5,7 +5,6 @@ use qd_github::ReviewEvent;
 use super::comment_card_rendering::element_id;
 use super::lines_label::note_lines_label;
 use super::pull_request_detail::PullRequestDetail;
-use super::side_panel_tab::SidePanelTab;
 use crate::button::Button;
 use crate::section_label::SectionLabel;
 use crate::segmented_control::SegmentedControl;
@@ -13,47 +12,6 @@ use crate::theme;
 use crate::view_option::view_option;
 
 impl PullRequestDetail {
-    /// The tabs atop the side panel: Files, Review (with its comment count),
-    /// Actions and Checks.
-    pub(super) fn render_side_panel_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let tab = self.review().tab;
-        let count = self
-            .review()
-            .comments
-            .notes_to(self.active_destination())
-            .count();
-        let review_label = if count == 0 {
-            "Review".to_owned()
-        } else {
-            format!("Review  {count}")
-        };
-        let detail = cx.entity().downgrade();
-        let show = |tab| view_option(&detail, tab, PullRequestDetail::show_side_panel_tab);
-        div().flex_none().px_3().pt_3().pb_1().child(
-            SegmentedControl::new("side-panel-tabs")
-                .option(
-                    "Files",
-                    tab == SidePanelTab::Files,
-                    show(SidePanelTab::Files),
-                )
-                .option(
-                    review_label,
-                    tab == SidePanelTab::Review,
-                    show(SidePanelTab::Review),
-                )
-                .option(
-                    "Actions",
-                    tab == SidePanelTab::Actions,
-                    show(SidePanelTab::Actions),
-                )
-                .option(
-                    "Checks",
-                    tab == SidePanelTab::Checks,
-                    show(SidePanelTab::Checks),
-                ),
-        )
-    }
-
     /// The review tab: where comments go, what the user wrote, and
     /// submitting it to GitHub or copying it for an agent.
     pub(super) fn render_review_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {

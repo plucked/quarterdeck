@@ -9,18 +9,13 @@ use qd_file_tree::{FileIcon, TreeNodeKind, TreeRow};
 use super::folder_viewed_state::FolderViewedState;
 use super::line_counts::LineCounts;
 use super::pull_request_detail::PullRequestDetail;
-use super::side_panel_tab::SidePanelTab;
 use crate::checkbox::{CheckState, Checkbox};
 use crate::diff_view::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
 use crate::file_icon_svgs::file_icon_path;
 use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
-use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
 
-/// How narrow and how wide the side panel can be dragged.
-const MIN_PANEL_WIDTH: f32 = 220.;
-const MAX_PANEL_WIDTH: f32 = 640.;
 /// Height of one tree row; the tree is a uniform list.
 const TREE_ROW_HEIGHT: f32 = 24.;
 /// Indent per tree level.
@@ -62,69 +57,8 @@ impl CountColumns {
 }
 
 impl PullRequestDetail {
-    /// The panel beside the diff: the Files, Review, Actions and Checks tabs; Files
-    /// holds progress, filter chips, and the files as a folder tree in diff
-    /// order (a quiet line while they load, so the panel stays in place when
-    /// another pull request is picked); Actions merges or closes; Checks
-    /// shows the CI checks (`ChecksPanel`).
-    pub(super) fn render_file_tree_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let has_files = !self.loaded_files().is_empty();
-        div()
-            .flex_none()
-            .w(px(self.side_panel_width()))
-            .h_full()
-            .flex()
-            .flex_col()
-            .bg(theme::panel())
-            .text_sm()
-            .child(self.render_side_panel_tabs(cx))
-            .map(|panel| match self.review().tab {
-                SidePanelTab::Files if has_files => panel
-                    .child(self.render_tree_header(cx))
-                    .child(self.render_tree_body(cx)),
-                SidePanelTab::Files => panel.child(self.render_files_pending()),
-                SidePanelTab::Review => panel.child(self.render_review_panel(cx)),
-                SidePanelTab::Actions => panel.child(self.render_actions_tab(cx)),
-                SidePanelTab::Checks => panel.child(self.checks().clone()),
-            })
-    }
-
-    /// The Files tab before there are files: loading, failed (the diff
-    /// column says why), or a pull request without changed files.
-    fn render_files_pending(&self) -> AnyElement {
-        let text = match self.load_progress() {
-            Some(_) => "Loading files…",
-            None if self.load_failure().is_some() => "The files could not be loaded.",
-            None => "No changed files.",
-        };
-        div()
-            .flex_1()
-            .p_3()
-            .text_xs()
-            .text_color(theme::muted())
-            .child(text)
-            .into_any_element()
-    }
-
-    /// The divider left of the side panel; dragging it resizes the panel.
-    pub(super) fn render_side_panel_handle(&self, cx: &mut Context<Self>) -> ResizeHandle {
-        let detail = cx.entity().downgrade();
-        ResizeHandle::new(
-            "side-panel-resize",
-            ResizeEdge::Left,
-            self.side_panel_width(),
-            MIN_PANEL_WIDTH,
-            MAX_PANEL_WIDTH,
-            move |width, _, cx| {
-                detail
-                    .update(cx, |detail, cx| detail.set_side_panel_width(width, cx))
-                    .ok();
-            },
-        )
-    }
-
     /// Title, viewed progress and the filter controls.
-    fn render_tree_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn render_tree_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let files = self.loaded_files();
         let viewed = self.file_review().viewed_count();
         div()
@@ -159,7 +93,7 @@ impl PullRequestDetail {
 
     /// The tree rows as a uniform list with its scrollbar, or a note when
     /// the filters hide everything.
-    fn render_tree_body(&self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_tree_body(&self, cx: &mut Context<Self>) -> AnyElement {
         if self.file_tree().rows().is_empty() {
             return div()
                 .p_3()

@@ -5,7 +5,7 @@ use gpui::{
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Styled, WeakEntity, Window, canvas, div,
     list, prelude::*, px,
 };
-use qd_cache::{DiffLayout, LineWrapping, PanelVisibility};
+use qd_cache::{DiffLayout, LineWrapping};
 use qd_diff::{GapPlace, LineOrigin};
 use qd_github::LineSide;
 
@@ -67,8 +67,7 @@ impl Render for PullRequestDetail {
         // `min_h_0` let the pane shrink to the window.
         // The side panel holds the files, the review and the actions; it
         // stays while another pull request's files load, so it does not flicker.
-        let shows_tree = self.file_tree().visibility() == PanelVisibility::Shown
-            && self.pull_request().is_some();
+        let shows_side_panel = self.is_side_panel_shown() && self.pull_request().is_some();
         let main_column = div()
             .flex()
             .flex_col()
@@ -94,9 +93,9 @@ impl Render for PullRequestDetail {
             .track_focus(self.focus())
             .on_action(cx.listener(|detail, _: &Copy, _, cx| detail.copy_diff_selection(cx)))
             .child(main_column)
-            .when(shows_tree, |pane| {
+            .when(shows_side_panel, |pane| {
                 pane.child(self.render_side_panel_handle(cx))
-                    .child(self.render_file_tree_panel(cx))
+                    .child(self.render_side_panel(cx))
             })
     }
 }
