@@ -1,5 +1,5 @@
 use crate::file_text_query::{BlobNode, FILE_TEXT_QUERY, FileTextData};
-use crate::github_client::{API_BASE, RAW_MEDIA_TYPE};
+use crate::github_client::RAW_MEDIA_TYPE;
 use crate::{FileText, FileTextLocation, GitHubClient, GitHubError, RepoRef};
 
 /// Files larger than this are not shown whole: their text would cost more
@@ -58,10 +58,7 @@ impl GitHubClient {
 
     /// A blob's raw content by its full SHA. One REST request.
     fn blob_text(&self, repo: &RepoRef, blob_sha: &str) -> Result<FileText, GitHubError> {
-        let url = format!(
-            "{API_BASE}/repos/{}/{}/git/blobs/{blob_sha}",
-            repo.owner, repo.name
-        );
+        let url = format!("{}/git/blobs/{blob_sha}", repo.api_url());
         let response = self.get(&url, &[], None, RAW_MEDIA_TYPE, &mut |_| {})?;
         check_text_size(u64::try_from(response.body.len()).unwrap_or(u64::MAX))?;
         if is_binary(&response.body) {

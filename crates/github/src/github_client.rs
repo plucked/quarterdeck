@@ -226,13 +226,8 @@ impl GitHubClient {
         repo: &RepoRef,
         number: u64,
     ) -> Result<PullRequest, GitHubError> {
-        let issue: SearchIssue = self.get_json(
-            &format!(
-                "{API_BASE}/repos/{}/{}/issues/{number}",
-                repo.owner, repo.name
-            ),
-            &[],
-        )?;
+        let issue: SearchIssue =
+            self.get_json(&format!("{}/issues/{number}", repo.api_url()), &[])?;
         issue.into_pull_request().ok_or_else(|| GitHubError::Api {
             status: StatusCode::OK.as_u16(),
             body: format!("issue {number} has no repository URL"),
@@ -247,10 +242,7 @@ impl GitHubClient {
         number: u64,
         etag: Option<&ETag>,
     ) -> Result<ConditionalResponse<RevisionCheck>, GitHubError> {
-        let url = format!(
-            "{API_BASE}/repos/{}/{}/pulls/{number}",
-            repo.owner, repo.name
-        );
+        let url = format!("{}/pulls/{number}", repo.api_url());
         let response = self.get(&url, &[], etag, JSON_MEDIA_TYPE, &mut |_| {})?;
         if response.status == StatusCode::NOT_MODIFIED {
             return Ok(ConditionalResponse::NotModified);
@@ -271,10 +263,7 @@ impl GitHubClient {
         number: u64,
         on_page: &mut dyn FnMut(usize),
     ) -> Result<Vec<PullRequestFile>, GitHubError> {
-        let first_page = format!(
-            "{API_BASE}/repos/{}/{}/pulls/{number}/files",
-            repo.owner, repo.name
-        );
+        let first_page = format!("{}/pulls/{number}/files", repo.api_url());
         let mut files = Vec::new();
         let mut next = Some((first_page, vec![("per_page", PAGE_SIZE)]));
         for _ in 0..MAX_FILE_PAGES {
@@ -300,10 +289,7 @@ impl GitHubClient {
         number: u64,
         etag: Option<&ETag>,
     ) -> Result<ConditionalResponse<PullRequestStack>, GitHubError> {
-        let url = format!(
-            "{API_BASE}/repos/{}/{}/stacks/{number}",
-            repo.owner, repo.name
-        );
+        let url = format!("{}/stacks/{number}", repo.api_url());
         let response = self.get(&url, &[], etag, JSON_MEDIA_TYPE, &mut |_| {})?;
         if response.status == StatusCode::NOT_MODIFIED {
             return Ok(ConditionalResponse::NotModified);
@@ -325,10 +311,7 @@ impl GitHubClient {
         head_sha: &str,
         on_progress: &mut dyn FnMut(DownloadProgress),
     ) -> Result<Vec<PullRequestFile>, GitHubError> {
-        let url = format!(
-            "{API_BASE}/repos/{}/{}/compare/{base_sha}...{head_sha}",
-            repo.owner, repo.name
-        );
+        let url = format!("{}/compare/{base_sha}...{head_sha}", repo.api_url());
         let response = self.get(&url, &[], None, DIFF_MEDIA_TYPE, on_progress)?;
         Ok(files_of_unified_diff(&response.body))
     }

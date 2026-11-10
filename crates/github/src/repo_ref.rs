@@ -1,3 +1,5 @@
+use crate::github_client::API_BASE;
+
 /// A repository identified by owner and name, e.g. `zed-industries/zed`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RepoRef {
@@ -36,6 +38,12 @@ impl RepoRef {
         })
     }
 
+    /// The repository's REST API URL, `https://api.github.com/repos/{owner}/{name}`,
+    /// which every repository request extends.
+    pub(crate) fn api_url(&self) -> String {
+        format!("{API_BASE}/repos/{}/{}", self.owner, self.name)
+    }
+
     /// Parses an API repository URL like `https://api.github.com/repos/{owner}/{name}`.
     pub(crate) fn from_api_url(url: &str) -> Option<Self> {
         let path = url.split("/repos/").nth(1)?;
@@ -50,6 +58,16 @@ impl RepoRef {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A repository's API URL is the base its requests extend.
+    #[test]
+    fn api_url_names_owner_and_name() {
+        let repo = RepoRef::parse_input("zed-industries/zed").unwrap();
+        assert_eq!(
+            repo.api_url(),
+            "https://api.github.com/repos/zed-industries/zed"
+        );
+    }
 
     /// An API repository URL yields its owner and name.
     #[test]

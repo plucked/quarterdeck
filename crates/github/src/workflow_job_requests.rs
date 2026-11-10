@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::github_client::{API_BASE, PAGE_SIZE};
+use crate::github_client::PAGE_SIZE;
 use crate::workflow_jobs_response::{
     CombinedStatus, WorkflowJobsPage, WorkflowRun, WorkflowRunsPage,
 };
@@ -21,7 +21,7 @@ impl GitHubClient {
         repo: &RepoRef,
         head_sha: &str,
     ) -> Result<Vec<StatusCheck>, GitHubError> {
-        let base = format!("{API_BASE}/repos/{}/{}", repo.owner, repo.name);
+        let base = repo.api_url();
 
         // The runs on the commit; a workflow run again (another event) counts once, by its newest run.
         let runs_url = format!("{base}/actions/runs");

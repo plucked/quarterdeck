@@ -7,7 +7,7 @@
 | `resolve_token` / `resolved_token` / `token_source` | token lookup → `ResolvedToken` with its `TokenSource`: `GITHUB_TOKEN`, then the Keychain, then `gh auth token` (`gh` on `PATH`, `/opt/homebrew/bin/gh`, `/usr/local/bin/gh`: a Finder launch has neither Homebrew folder on `PATH`) |
 | `keychain_token` | the token saved from the app's settings, a generic password in the login Keychain (service `de.plucked.quarterdeck`, account `github-token`, `security-framework`): `stored_token`, `store_token`, `delete_stored_token`; `GitHubError::Keychain` |
 | `viewer_request` | `GitHubClient::viewer()`: `GET /user`, which checks a pasted token; `viewer_login()` asks once and remembers (shared by clones) |
-| `repo_ref` | `RepoRef` (owner/name) |
+| `repo_ref` | `RepoRef` (owner/name; `api_url()`, the `…/repos/{o}/{r}` base of every repository request, crate-private) |
 | `user` | `User` |
 | `label` | `Label` (name, color), on `PullRequest::labels` from the search results |
 | `download_avatar` | `download_avatar(url, size)`: an avatar's PNG/JPEG bytes from `avatars.githubusercontent.com` only (`s=` size), without the token, at most 1 MB; one shared agent (connections reused; 10 s connect, 30 s per download) |

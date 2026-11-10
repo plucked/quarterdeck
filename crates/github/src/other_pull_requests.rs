@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use serde::de::IgnoredAny;
 
-use crate::github_client::{API_BASE, JSON_MEDIA_TYPE, PAGE_SIZE};
+use crate::github_client::{JSON_MEDIA_TYPE, PAGE_SIZE};
 use crate::pull_request_lookup_query::{PullRequestLookupData, pull_request_lookup_query};
 use crate::search_issue::SearchIssue;
 use crate::{GitHubClient, GitHubError, OtherPullRequestsUpdate, PullRequest, RepoRef};
@@ -175,7 +175,7 @@ impl GitHubClient {
         repo: &RepoRef,
         mode: &SyncMode,
     ) -> Result<RepositoryIssues, GitHubError> {
-        let first_page = format!("{API_BASE}/repos/{}/{}/issues", repo.owner, repo.name);
+        let first_page = format!("{}/issues", repo.api_url());
         let mut parameters = vec![
             ("sort", "updated"),
             ("direction", "desc"),

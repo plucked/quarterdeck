@@ -1,6 +1,6 @@
 use ureq::http::StatusCode;
 
-use crate::github_client::{API_BASE, graphql_error};
+use crate::github_client::graphql_error;
 use crate::merge_queries::{MERGE_OPTIONS_QUERY, MergeAsyncResponse, MergeOptionsData};
 use crate::{GitHubClient, GitHubError, MergeMethod, MergeOptions, MergeOutcome, RepoRef};
 
@@ -30,10 +30,7 @@ impl GitHubClient {
         head_sha: &str,
         bypass_rules: bool,
     ) -> Result<MergeOutcome, GitHubError> {
-        let url = format!(
-            "{API_BASE}/repos/{}/{}/pulls/{number}/merge-async",
-            repo.owner, repo.name
-        );
+        let url = format!("{}/pulls/{number}/merge-async", repo.api_url());
         let body = serde_json::json!({
             "merge_method": method.as_rest(),
             "sha": head_sha,
@@ -58,10 +55,7 @@ impl GitHubClient {
         number: u64,
         uuid: &str,
     ) -> Result<MergeOutcome, GitHubError> {
-        let url = format!(
-            "{API_BASE}/repos/{}/{}/pulls/{number}/merge-async/{uuid}",
-            repo.owner, repo.name
-        );
+        let url = format!("{}/pulls/{number}/merge-async/{uuid}", repo.api_url());
         let answer = self.send_versioned_get(&url, ASYNC_MERGE_API_VERSION)?;
         let response: MergeAsyncResponse = serde_json::from_str(&answer)?;
         Ok(response.into_outcome())
@@ -69,10 +63,7 @@ impl GitHubClient {
 
     /// Closes pull request `number` without merging it.
     pub fn close_pull_request(&self, repo: &RepoRef, number: u64) -> Result<(), GitHubError> {
-        let url = format!(
-            "{API_BASE}/repos/{}/{}/pulls/{number}",
-            repo.owner, repo.name
-        );
+        let url = format!("{}/pulls/{number}", repo.api_url());
         self.send_json(
             self.agent().patch(&url),
             &serde_json::json!({ "state": "closed" }),
@@ -83,10 +74,7 @@ impl GitHubClient {
 
     /// Deletes branch `branch` of `repo`.
     pub fn delete_branch(&self, repo: &RepoRef, branch: &str) -> Result<(), GitHubError> {
-        let url = format!(
-            "{API_BASE}/repos/{}/{}/git/refs/heads/{branch}",
-            repo.owner, repo.name
-        );
+        let url = format!("{}/git/refs/heads/{branch}", repo.api_url());
         self.send_delete(&url)
     }
 }
