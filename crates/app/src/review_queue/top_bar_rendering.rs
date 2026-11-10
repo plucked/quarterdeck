@@ -10,7 +10,7 @@ use crate::theme;
 
 /// Height of the bar; the window's title bar is drawn by the app, so the
 /// macOS traffic lights sit inside it (`launch_app` places them).
-const TOP_BAR_HEIGHT: f32 = 40.;
+pub const TOP_BAR_HEIGHT: f32 = 40.;
 /// Room left of the bar's content for the traffic lights.
 const TRAFFIC_LIGHTS_WIDTH: f32 = 84.;
 /// The name in the middle of the bar.

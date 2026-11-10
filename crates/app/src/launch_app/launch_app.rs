@@ -14,6 +14,7 @@ use crate::brief_gallery::open_brief_gallery;
 use crate::bundled_fonts::load_bundled_fonts;
 use crate::bundled_icons::BundledIcons;
 use crate::main_window::MainWindow;
+use crate::review_queue::TOP_BAR_HEIGHT;
 use crate::startup_splash::StartupSplash;
 use crate::ui_state::UiStateRecorder;
 
@@ -23,9 +24,11 @@ const WINDOW_MIN_HEIGHT: f32 = 480.;
 /// Set (to anything) at launch, the brief gallery opens too; `bacon
 /// gallery` sets it, so the gallery comes back after every rebuild.
 const OPEN_BRIEF_GALLERY_VARIABLE: &str = "QUARTERDECK_BRIEF_GALLERY";
-/// Where the traffic lights sit: centered in the top bar's 40 px.
+/// Height of a macOS traffic light button.
+const TRAFFIC_LIGHT_HEIGHT: f32 = 14.;
+/// Where the traffic lights sit: inset from the left, centered in the queue's top bar.
 const TRAFFIC_LIGHTS_X: f32 = 14.;
-const TRAFFIC_LIGHTS_Y: f32 = 13.;
+const TRAFFIC_LIGHTS_Y: f32 = (TOP_BAR_HEIGHT - TRAFFIC_LIGHT_HEIGHT) / 2.;
 
 /// Initializes the services, starts gpui and opens the main window where it
 /// was last placed, on the display it was on, behind the startup splash when

@@ -16,7 +16,7 @@
 //! - `sidebar_rendering.rs`: renders the queue list, its tabs, its status line and repository headers.
 //! - `pull_request_row_rendering.rs`: renders a standalone pull request's sidebar row.
 //! - `stack_row_rendering.rs`: renders a stack's header and its layer rows in the sidebar.
-//! - `top_bar_rendering.rs`: the bar across the window's top (panel toggles, refresh, title).
+//! - `top_bar_rendering.rs`: the bar across the window's top (panel toggles, refresh, title) and its height, `TOP_BAR_HEIGHT`, which places the traffic lights.
 //! - `refresh_status.rs`: `RefreshStatus`, the state of the queue's refresh.
 //! - `refresh_schedule.rs`: `RefreshSchedule`, when the queue refreshes on its own.
 //! - `activation_refresh.rs`: `ActivationRefresh`, whether a window activation refreshes.
@@ -77,3 +77,4 @@ mod stack_row_rendering;
 mod top_bar_rendering;
 
 pub use review_queue::ReviewQueue;
+pub use top_bar_rendering::TOP_BAR_HEIGHT;
