@@ -16,7 +16,7 @@ const RELEASE_REQUIREMENT: &str = concat!(
 /// Checks that the bundle at `app` is an intact Quarterdeck release: every
 /// file matches its signature, the signer is the developer's Developer ID,
 /// and Gatekeeper accepts it (it is notarized).
-pub fn verify_release_signature(app: &Path) -> Result<(), UpdateError> {
+pub(crate) fn verify_release_signature(app: &Path) -> Result<(), UpdateError> {
     // The signature covers the whole bundle and names the right signer.
     run_check(
         "codesign",
@@ -36,7 +36,7 @@ pub fn verify_release_signature(app: &Path) -> Result<(), UpdateError> {
 
 /// Whether the bundle at `app` is signed as a release (Developer ID of the
 /// developer's team); a development build is signed ad hoc and is not.
-pub fn is_release_signed(app: &Path) -> bool {
+pub(crate) fn is_release_signed(app: &Path) -> bool {
     Command::new("/usr/bin/codesign")
         .args(["--verify", "--strict"])
         .arg(format!("-R{RELEASE_REQUIREMENT}"))

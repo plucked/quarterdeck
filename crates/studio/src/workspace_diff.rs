@@ -1,7 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 /// The folder of a workspace holding every changed file's numbered diff.
-pub const DIFFS_FOLDER: &str = "diffs";
+pub(crate) const DIFFS_FOLDER: &str = "diffs";
 /// What follows a changed file's path in its diff file's name.
 const DIFF_EXTENSION: &str = ".diff";
 

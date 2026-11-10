@@ -4,4 +4,4 @@
 /// numbered, and the language rules. Adapted from the Review Studio skill's
 /// authoring and representation guides and the research on presenting
 /// changes to reviewers.
-pub const STUDIO_GUIDE: &str = include_str!("studio_guide.md");
+pub(crate) const STUDIO_GUIDE: &str = include_str!("studio_guide.md");

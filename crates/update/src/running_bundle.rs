@@ -1,10 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{
-    AppVersion, ReleaseManifest, StagedUpdate, UpdateBlocker, UpdateError, is_release_signed,
-    verify_release_signature,
-};
+use crate::code_signature::{is_release_signed, verify_release_signature};
+use crate::{AppVersion, ReleaseManifest, StagedUpdate, UpdateBlocker, UpdateError};
 
 /// The folder macOS runs quarantined apps from when they were not moved
 /// (App Translocation): a read-only, randomized copy.

@@ -53,7 +53,7 @@ const GENERATED_NAME_ENDINGS: [&str; 12] = [
 const GENERATED_FOLDERS: [&str; 4] = ["generated", "__generated__", "node_modules", "dist"];
 
 /// Whether `path` looks like a test: in a test folder, or named like a test file.
-pub fn is_test_path(path: &str) -> bool {
+pub(crate) fn is_test_path(path: &str) -> bool {
     let (folders, file_name) = split_path(path);
     let in_test_folder = folders
         .iter()
@@ -72,7 +72,7 @@ pub fn is_test_path(path: &str) -> bool {
 
 /// Whether `path` looks generated: a lock file, a minified or generated
 /// file, a Unity `.meta` file, or anything in a generated folder.
-pub fn is_generated_path(path: &str) -> bool {
+pub(crate) fn is_generated_path(path: &str) -> bool {
     let (folders, file_name) = split_path(path);
     let lower_name = file_name.to_lowercase();
     let in_generated_folder = folders
@@ -88,7 +88,7 @@ pub fn is_generated_path(path: &str) -> bool {
 
 /// The file's extension in lower case with its dot (`.rs`), or `None` for
 /// names without one (`Makefile`, `.gitignore`).
-pub fn extension_of(path: &str) -> Option<String> {
+fn extension_of(path: &str) -> Option<String> {
     let (_, file_name) = split_path(path);
     let (stem, extension) = file_name.rsplit_once('.')?;
     (!stem.is_empty()).then(|| format!(".{}", extension.to_lowercase()))
@@ -97,7 +97,7 @@ pub fn extension_of(path: &str) -> Option<String> {
 /// What the file-type filter groups the file by: its extension (as
 /// [`extension_of`] gives it) or, for a name without one, the whole file
 /// name as written (`Dockerfile`, `.gitignore`).
-pub fn file_type_of(path: &str) -> String {
+pub(crate) fn file_type_of(path: &str) -> String {
     extension_of(path).unwrap_or_else(|| split_path(path).1.to_owned())
 }
 

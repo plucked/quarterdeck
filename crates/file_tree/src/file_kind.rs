@@ -6,9 +6,9 @@ use crate::file_category::{is_generated_path, is_test_path};
 pub enum FileKind {
     /// Everything not of another kind.
     Code,
-    /// Test files and folders ([`is_test_path`]).
+    /// Test files and folders (`is_test_path`).
     Tests,
-    /// Generated files ([`is_generated_path`]).
+    /// Generated files (`is_generated_path`).
     Generated,
     /// Moved or copied without changes: nothing in it to review.
     Moved,

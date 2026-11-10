@@ -30,7 +30,6 @@ mod update_error;
 mod update_feed;
 
 pub use app_version::AppVersion;
-pub use code_signature::{is_release_signed, verify_release_signature};
 pub use relaunch_after_exit::relaunch_after_exit;
 pub use release_manifest::ReleaseManifest;
 pub use running_bundle::RunningBundle;

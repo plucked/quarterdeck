@@ -9,7 +9,7 @@ use crate::{FacetCount, FacetFilter, FileKind, FilteredFile};
 pub struct FileFilter {
     pub hide_viewed: bool,
     pub kinds: FacetFilter<FileKind>,
-    /// File types as [`crate::file_type_of`] gives them: `.rs`, `Dockerfile`.
+    /// File types as `file_type_of` gives them: `.rs`, `Dockerfile`.
     pub file_types: FacetFilter<String>,
 }
 

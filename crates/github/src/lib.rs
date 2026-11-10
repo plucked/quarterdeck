@@ -140,7 +140,7 @@ pub use file_text::FileText;
 pub use file_text_location::FileTextLocation;
 pub use github_client::{GitHubClient, MAX_LISTED_FILES};
 pub use github_error::GitHubError;
-pub use keychain_token::{delete_stored_token, store_token, stored_token};
+pub use keychain_token::{delete_stored_token, store_token};
 pub use label::Label;
 pub use line_side::LineSide;
 pub use listed_pull_request_details::ListedPullRequestDetails;

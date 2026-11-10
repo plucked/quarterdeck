@@ -38,7 +38,6 @@ mod tree_row;
 pub use facet_choice::FacetChoice;
 pub use facet_count::FacetCount;
 pub use facet_filter::FacetFilter;
-pub use file_category::{extension_of, file_type_of, is_generated_path, is_test_path};
 pub use file_facets::FileFacets;
 pub use file_filter::FileFilter;
 pub use file_icon::FileIcon;

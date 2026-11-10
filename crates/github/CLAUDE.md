@@ -5,7 +5,7 @@
 | `github_client` | `GitHubClient`: authenticated blocking REST calls; `token()` hands the token to git for a brief's checkout |
 | `github_error` | `GitHubError` |
 | `resolve_token` / `resolved_token` / `token_source` | token lookup → `ResolvedToken` with its `TokenSource`: `GITHUB_TOKEN`, then the Keychain, then `gh auth token` (`gh` on `PATH`, `/opt/homebrew/bin/gh`, `/usr/local/bin/gh`: a Finder launch has neither Homebrew folder on `PATH`) |
-| `keychain_token` | the token saved from the app's settings, a generic password in the login Keychain (service `de.plucked.quarterdeck`, account `github-token`, `security-framework`): `stored_token`, `store_token`, `delete_stored_token`; `GitHubError::Keychain` |
+| `keychain_token` | the token saved from the app's settings, a generic password in the login Keychain (service `de.plucked.quarterdeck`, account `github-token`, `security-framework`): `stored_token` (crate-private, read by `resolve_token`), `store_token`, `delete_stored_token`; `GitHubError::Keychain` |
 | `viewer_request` | `GitHubClient::viewer()`: `GET /user`, which checks a pasted token; `viewer_login()` asks once and remembers (shared by clones) |
 | `repo_ref` | `RepoRef` (owner/name; `api_url()`, the `…/repos/{o}/{r}` base of every repository request, crate-private) |
 | `user` | `User` |
