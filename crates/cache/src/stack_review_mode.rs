@@ -10,6 +10,8 @@ pub enum StackReviewMode {
 }
 
 impl StackReviewMode {
+    const ALL: [Self; 2] = [Self::Layer, Self::Combined];
+
     /// The other mode, for a toggle.
     #[must_use]
     pub fn toggled(self) -> Self {
@@ -29,10 +31,8 @@ impl StackReviewMode {
 
     /// Decodes a stored value; `None` for anything else.
     pub(crate) fn from_sql_text(text: &str) -> Option<Self> {
-        match text {
-            "layer" => Some(Self::Layer),
-            "combined" => Some(Self::Combined),
-            _ => None,
-        }
+        Self::ALL
+            .into_iter()
+            .find(|mode| mode.as_sql_text() == text)
     }
 }

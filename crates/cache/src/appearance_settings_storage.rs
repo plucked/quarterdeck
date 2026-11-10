@@ -27,7 +27,7 @@ impl UiStateStore {
         self.connection().execute(
             "INSERT INTO appearance_settings (id, color_theme) VALUES (?1, ?2)
              ON CONFLICT (id) DO UPDATE SET color_theme = excluded.color_theme",
-            params![SINGLE_ROW_ID, theme.sql_text()],
+            params![SINGLE_ROW_ID, theme.as_sql_text()],
         )?;
         Ok(())
     }

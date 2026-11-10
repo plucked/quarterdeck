@@ -6,8 +6,8 @@ use rusqlite::{Transaction, params};
 
 use crate::brief_anchor_columns::AnchorColumns;
 use crate::brief_sql_text::{
-    AnchorSlot, BriefWidgetKind, ScopeList, change_sql_text, edge_style_sql_text,
-    message_style_sql_text, role_sql_text, tone_sql_text, weight_sql_text,
+    AnchorSlot, BriefWidgetKind, ScopeList, change_as_sql_text, edge_style_as_sql_text,
+    message_style_as_sql_text, role_as_sql_text, tone_as_sql_text, weight_as_sql_text,
 };
 use crate::cached_statements::execute_cached;
 
@@ -22,7 +22,7 @@ pub(crate) fn put_widget(
     // The shared columns: the kind, a title, a body, a tone.
     let (title, body, tone): (Option<&str>, Option<&str>, Option<&str>) = match widget {
         StudioWidget::Section { heading, body } => (Some(heading), Some(body), None),
-        StudioWidget::Callout { tone, text } => (None, Some(text), Some(tone_sql_text(*tone))),
+        StudioWidget::Callout { tone, text } => (None, Some(text), Some(tone_as_sql_text(*tone))),
         StudioWidget::CodeExcerpt { caption, .. } | StudioWidget::CodeCompare { caption, .. } => {
             (Some(caption), None, None)
         }
@@ -159,7 +159,7 @@ fn put_tour_steps(
                 step_position,
                 step.title,
                 step.explanation,
-                weight_sql_text(step.weight),
+                weight_as_sql_text(step.weight),
                 anchor.path,
                 anchor.side,
                 anchor.first_line,
@@ -198,9 +198,9 @@ fn put_graph(
                 node_position,
                 node.label,
                 node.detail,
-                role_sql_text(node.role),
+                role_as_sql_text(node.role),
                 node.group.map(i64::try_from).transpose()?,
-                change_sql_text(node.change),
+                change_as_sql_text(node.change),
                 anchor.path,
                 anchor.side,
                 anchor.first_line,
@@ -220,8 +220,8 @@ fn put_graph(
                 i64::try_from(edge.from)?,
                 i64::try_from(edge.to)?,
                 edge.label,
-                edge_style_sql_text(edge.style),
-                change_sql_text(edge.change)
+                edge_style_as_sql_text(edge.style),
+                change_as_sql_text(edge.change)
             ],
         )?;
     }
@@ -245,7 +245,7 @@ fn put_sequence(
                 position,
                 lane_position,
                 lane.label,
-                role_sql_text(lane.role)
+                role_as_sql_text(lane.role)
             ],
         )?;
     }
@@ -263,7 +263,7 @@ fn put_sequence(
                 i64::try_from(message.from)?,
                 i64::try_from(message.to)?,
                 message.label,
-                message_style_sql_text(message.style),
+                message_style_as_sql_text(message.style),
                 message.note,
                 anchor.path,
                 anchor.side,

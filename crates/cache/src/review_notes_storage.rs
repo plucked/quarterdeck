@@ -1,8 +1,11 @@
 use anyhow::{Result, anyhow};
-use qd_github::{LineSide, RepoRef};
+use qd_github::RepoRef;
 use rusqlite::{OptionalExtension, Row, params};
 
-use crate::review_summary::{event_from_sql_text, event_sql_text};
+use crate::github_enum_sql_text::{
+    line_side_as_sql_text, line_side_from_sql_text, review_event_as_sql_text,
+    review_event_from_sql_text,
+};
 use crate::scope_columns::ScopeColumns;
 use crate::sql_integers::sql_integer;
 use crate::{
@@ -44,7 +47,12 @@ impl UiStateStore {
                 side,
                 line,
                 start_line,
-            } => (Some(side_sql_text(*side)), Some(*line), *start_line, None),
+            } => (
+                Some(line_side_as_sql_text(*side)),
+                Some(*line),
+                *start_line,
+                None,
+            ),
             NoteAnchor::Reply { thread_id } => (None, None, None, Some(thread_id.as_str())),
         };
         self.connection().execute(
@@ -90,8 +98,8 @@ impl UiStateStore {
         let Some((event, body)) = stored else {
             return Ok(None);
         };
-        let event =
-            event_from_sql_text(&event).ok_or_else(|| anyhow!("unknown review event {event:?}"))?;
+        let event = review_event_from_sql_text(&event)
+            .ok_or_else(|| anyhow!("unknown review event {event:?}"))?;
         Ok(Some(ReviewSummary { event, body }))
     }
 
@@ -102,7 +110,7 @@ impl UiStateStore {
              ON CONFLICT (pr_id) DO UPDATE SET event = excluded.event, body = excluded.body",
             params![
                 sql_integer(pull_request_id)?,
-                event_sql_text(summary.event),
+                review_event_as_sql_text(summary.event),
                 summary.body
             ],
         )?;
@@ -116,14 +124,6 @@ impl UiStateStore {
             [sql_integer(pull_request_id)?],
         )?;
         Ok(())
-    }
-}
-
-/// The stored name of a side; the column's CHECK lists the same.
-fn side_sql_text(side: LineSide) -> &'static str {
-    match side {
-        LineSide::Old => "old",
-        LineSide::New => "new",
     }
 }
 
@@ -163,10 +163,8 @@ fn note_from_row(row: &Row<'_>) -> rusqlite::Result<Result<ReviewNote>> {
         };
         let anchor = match (side.as_deref(), line, reply_to_thread) {
             (Some(side), Some(line), None) => NoteAnchor::Line {
-                side: match side {
-                    "old" => LineSide::Old,
-                    _ => LineSide::New,
-                },
+                side: line_side_from_sql_text(side)
+                    .ok_or_else(|| anyhow!("note {id:?} has an unknown side {side:?}"))?,
                 line,
                 start_line,
             },
@@ -188,7 +186,7 @@ fn note_from_row(row: &Row<'_>) -> rusqlite::Result<Result<ReviewNote>> {
 
 #[cfg(test)]
 mod tests {
-    use qd_github::ReviewEvent;
+    use qd_github::{LineSide, ReviewEvent};
 
     use super::*;
 

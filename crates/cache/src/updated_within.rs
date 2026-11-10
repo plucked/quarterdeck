@@ -31,11 +31,8 @@ impl UpdatedWithin {
 
     /// Decodes a stored value; `None` for anything else.
     pub(crate) fn from_sql_text(text: &str) -> Option<Self> {
-        match text {
-            "any" => Some(Self::AnyTime),
-            "week" => Some(Self::Week),
-            "month" => Some(Self::Month),
-            _ => None,
-        }
+        Self::ALL
+            .into_iter()
+            .find(|within| within.as_sql_text() == text)
     }
 }

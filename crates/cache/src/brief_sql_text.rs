@@ -9,6 +9,24 @@ use qd_studio::{
     ReaderFamiliarity, StepWeight, StudioWidget, TableRole,
 };
 
+const TONES: [CalloutTone; 4] = [
+    CalloutTone::Note,
+    CalloutTone::Constraint,
+    CalloutTone::Verdict,
+    CalloutTone::Evidence,
+];
+const SIDES: [CodeSide; 2] = [CodeSide::Base, CodeSide::Head];
+const WEIGHTS: [StepWeight; 3] = [
+    StepWeight::Core,
+    StepWeight::Supporting,
+    StepWeight::Mechanical,
+];
+const CHANGES: [DiagramChange; 3] = [
+    DiagramChange::Same,
+    DiagramChange::Added,
+    DiagramChange::Removed,
+];
+
 /// A `brief_widgets.kind`: which widget a row holds; a table is stored as
 /// `table` or `trace` by its role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -159,7 +177,8 @@ impl CodeAccessKind {
     }
 }
 
-pub(crate) fn tone_sql_text(tone: CalloutTone) -> &'static str {
+/// The value stored for a callout's tone.
+pub(crate) fn tone_as_sql_text(tone: CalloutTone) -> &'static str {
     match tone {
         CalloutTone::Note => "note",
         CalloutTone::Constraint => "constraint",
@@ -168,32 +187,30 @@ pub(crate) fn tone_sql_text(tone: CalloutTone) -> &'static str {
     }
 }
 
+/// Decodes the stored value of a callout's tone; `None` for anything else.
 pub(crate) fn tone_from_sql_text(text: &str) -> Option<CalloutTone> {
-    match text {
-        "note" => Some(CalloutTone::Note),
-        "constraint" => Some(CalloutTone::Constraint),
-        "verdict" => Some(CalloutTone::Verdict),
-        "evidence" => Some(CalloutTone::Evidence),
-        _ => None,
-    }
+    TONES
+        .into_iter()
+        .find(|tone| tone_as_sql_text(*tone) == text)
 }
 
-pub(crate) fn side_sql_text(side: CodeSide) -> &'static str {
+/// The value stored for an anchor's side.
+pub(crate) fn side_as_sql_text(side: CodeSide) -> &'static str {
     match side {
         CodeSide::Base => "base",
         CodeSide::Head => "head",
     }
 }
 
+/// Decodes the stored value of an anchor's side; `None` for anything else.
 pub(crate) fn side_from_sql_text(text: &str) -> Option<CodeSide> {
-    match text {
-        "base" => Some(CodeSide::Base),
-        "head" => Some(CodeSide::Head),
-        _ => None,
-    }
+    SIDES
+        .into_iter()
+        .find(|side| side_as_sql_text(*side) == text)
 }
 
-pub(crate) fn weight_sql_text(weight: StepWeight) -> &'static str {
+/// The value stored for a reading-order step's weight.
+pub(crate) fn weight_as_sql_text(weight: StepWeight) -> &'static str {
     match weight {
         StepWeight::Core => "core",
         StepWeight::Supporting => "supporting",
@@ -201,16 +218,15 @@ pub(crate) fn weight_sql_text(weight: StepWeight) -> &'static str {
     }
 }
 
+/// Decodes the stored value of a reading-order step's weight; `None` for anything else.
 pub(crate) fn weight_from_sql_text(text: &str) -> Option<StepWeight> {
-    match text {
-        "core" => Some(StepWeight::Core),
-        "supporting" => Some(StepWeight::Supporting),
-        "mechanical" => Some(StepWeight::Mechanical),
-        _ => None,
-    }
+    WEIGHTS
+        .into_iter()
+        .find(|weight| weight_as_sql_text(*weight) == text)
 }
 
-pub(crate) fn role_sql_text(role: NodeRole) -> &'static str {
+/// The value stored for a box's or lane's role.
+pub(crate) fn role_as_sql_text(role: NodeRole) -> &'static str {
     match role {
         NodeRole::Actor => "actor",
         NodeRole::Owner => "owner",
@@ -221,13 +237,15 @@ pub(crate) fn role_sql_text(role: NodeRole) -> &'static str {
     }
 }
 
+/// Decodes the stored value of a box's or lane's role; `None` for anything else.
 pub(crate) fn role_from_sql_text(text: &str) -> Option<NodeRole> {
     NodeRole::ALL
         .into_iter()
-        .find(|role| role_sql_text(*role) == text)
+        .find(|role| role_as_sql_text(*role) == text)
 }
 
-pub(crate) fn change_sql_text(change: DiagramChange) -> &'static str {
+/// The value stored for a diagram part's change.
+pub(crate) fn change_as_sql_text(change: DiagramChange) -> &'static str {
     match change {
         DiagramChange::Same => "same",
         DiagramChange::Added => "added",
@@ -235,16 +253,15 @@ pub(crate) fn change_sql_text(change: DiagramChange) -> &'static str {
     }
 }
 
+/// Decodes the stored value of a diagram part's change; `None` for anything else.
 pub(crate) fn change_from_sql_text(text: &str) -> Option<DiagramChange> {
-    match text {
-        "same" => Some(DiagramChange::Same),
-        "added" => Some(DiagramChange::Added),
-        "removed" => Some(DiagramChange::Removed),
-        _ => None,
-    }
+    CHANGES
+        .into_iter()
+        .find(|change| change_as_sql_text(*change) == text)
 }
 
-pub(crate) fn edge_style_sql_text(style: EdgeStyle) -> &'static str {
+/// The value stored for an arrow's style.
+pub(crate) fn edge_style_as_sql_text(style: EdgeStyle) -> &'static str {
     match style {
         EdgeStyle::Control => "control",
         EdgeStyle::Data => "data",
@@ -253,13 +270,15 @@ pub(crate) fn edge_style_sql_text(style: EdgeStyle) -> &'static str {
     }
 }
 
+/// Decodes the stored value of an arrow's style; `None` for anything else.
 pub(crate) fn edge_style_from_sql_text(text: &str) -> Option<EdgeStyle> {
     EdgeStyle::ALL
         .into_iter()
-        .find(|style| edge_style_sql_text(*style) == text)
+        .find(|style| edge_style_as_sql_text(*style) == text)
 }
 
-pub(crate) fn message_style_sql_text(style: MessageStyle) -> &'static str {
+/// The value stored for a message's style.
+pub(crate) fn message_style_as_sql_text(style: MessageStyle) -> &'static str {
     match style {
         MessageStyle::Call => "call",
         MessageStyle::Reply => "reply",
@@ -267,13 +286,15 @@ pub(crate) fn message_style_sql_text(style: MessageStyle) -> &'static str {
     }
 }
 
+/// Decodes the stored value of a message's style; `None` for anything else.
 pub(crate) fn message_style_from_sql_text(text: &str) -> Option<MessageStyle> {
     MessageStyle::ALL
         .into_iter()
-        .find(|style| message_style_sql_text(*style) == text)
+        .find(|style| message_style_as_sql_text(*style) == text)
 }
 
-pub(crate) fn reader_sql_text(reader: ReaderFamiliarity) -> &'static str {
+/// The value stored for the reader's familiarity.
+pub(crate) fn reader_as_sql_text(reader: ReaderFamiliarity) -> &'static str {
     match reader {
         ReaderFamiliarity::Expert => "expert",
         ReaderFamiliarity::Overview => "overview",
@@ -281,8 +302,50 @@ pub(crate) fn reader_sql_text(reader: ReaderFamiliarity) -> &'static str {
     }
 }
 
+/// Decodes the stored value of the reader's familiarity; `None` for anything else.
 pub(crate) fn reader_from_sql_text(text: &str) -> Option<ReaderFamiliarity> {
     ReaderFamiliarity::ALL
         .into_iter()
-        .find(|reader| reader_sql_text(*reader) == text)
+        .find(|reader| reader_as_sql_text(*reader) == text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every value of the brief's own enums and of the `qd-studio` enums
+    /// without an `ALL` decodes from the text it is stored as.
+    #[test]
+    fn brief_enums_round_trip_through_sql_text() {
+        for kind in BriefWidgetKind::ALL {
+            assert_eq!(
+                BriefWidgetKind::from_sql_text(kind.as_sql_text()),
+                Some(kind)
+            );
+        }
+        for kind in CodeAccessKind::ALL {
+            assert_eq!(
+                CodeAccessKind::from_sql_text(kind.as_sql_text()),
+                Some(kind)
+            );
+        }
+        for tone in TONES {
+            assert_eq!(tone_from_sql_text(tone_as_sql_text(tone)), Some(tone));
+        }
+        for side in SIDES {
+            assert_eq!(side_from_sql_text(side_as_sql_text(side)), Some(side));
+        }
+        for weight in WEIGHTS {
+            assert_eq!(
+                weight_from_sql_text(weight_as_sql_text(weight)),
+                Some(weight)
+            );
+        }
+        for change in CHANGES {
+            assert_eq!(
+                change_from_sql_text(change_as_sql_text(change)),
+                Some(change)
+            );
+        }
+    }
 }

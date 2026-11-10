@@ -57,7 +57,7 @@
 //! - `others_filter.rs`: `OthersFilter` and `RepositoryOthersFilter`, how the Others tab narrows a repository's pull requests.
 //! - `updated_within.rs`: `UpdatedWithin`, how recently an Others pull request was updated.
 //! - `others_filter_storage.rs`: reads and writes of the Others filters.
-//! - `viewer_review_sql_text.rs`: the SQL text of `qd-github`'s `ViewerReview`.
+//! - `github_enum_sql_text.rs`: SQL text of the `qd-github` enums the cache stores (`ViewerReview`, `ReviewEvent`, `LineSide`).
 //! - `hidden_branch_rule.rs`: `HiddenBranchRule`, a pattern hiding pull requests by branch.
 //! - `branch_side.rs`: `BranchSide`, which branch of a pull request a rule looks at.
 //! - `hidden_branch_rules_storage.rs`: reads and writes of the hidden branch rules.
@@ -107,6 +107,7 @@ mod file_text_storage;
 mod folded_groups;
 mod folded_groups_storage;
 mod github_cache;
+mod github_enum_sql_text;
 mod hidden_branch_rule;
 mod hidden_branch_rules_storage;
 mod line_wrapping;
@@ -141,7 +142,6 @@ mod unix_now;
 mod updated_within;
 mod viewed_file;
 mod viewed_files_storage;
-mod viewer_review_sql_text;
 mod watched_repositories_storage;
 mod window_mode;
 mod window_placement;

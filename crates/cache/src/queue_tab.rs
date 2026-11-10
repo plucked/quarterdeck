@@ -13,6 +13,8 @@ pub enum QueueTab {
 }
 
 impl QueueTab {
+    const ALL: [Self; 3] = [Self::Authored, Self::ReviewRequested, Self::Others];
+
     /// The cached list the tab shows.
     pub fn list_key(self) -> PullRequestListKey {
         match self {
@@ -33,11 +35,6 @@ impl QueueTab {
 
     /// Decodes a stored value; `None` for anything else.
     pub(crate) fn from_sql_text(text: &str) -> Option<Self> {
-        match text {
-            "authored" => Some(Self::Authored),
-            "review_requested" => Some(Self::ReviewRequested),
-            "others" => Some(Self::Others),
-            _ => None,
-        }
+        Self::ALL.into_iter().find(|tab| tab.as_sql_text() == text)
     }
 }

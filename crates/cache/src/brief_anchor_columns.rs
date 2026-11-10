@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result, anyhow};
 use qd_studio::CodeAnchor;
 use rusqlite::Row;
 
-use crate::brief_sql_text::{side_from_sql_text, side_sql_text};
+use crate::brief_sql_text::{side_as_sql_text, side_from_sql_text};
 
 /// A code anchor as the four nullable columns a brief stores it in: the
 /// path, the side as stored text, the first and the last line. All four are
@@ -20,7 +20,7 @@ impl AnchorColumns {
         match anchor {
             Some(anchor) => Self {
                 path: Some(anchor.path.clone()),
-                side: Some(side_sql_text(anchor.side).to_owned()),
+                side: Some(side_as_sql_text(anchor.side).to_owned()),
                 first_line: Some(i64::from(anchor.first_line)),
                 last_line: Some(i64::from(anchor.last_line)),
             },

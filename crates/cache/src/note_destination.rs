@@ -8,6 +8,8 @@ pub enum NoteDestination {
 }
 
 impl NoteDestination {
+    const ALL: [Self; 2] = [Self::Local, Self::GitHub];
+
     /// The value stored in SQLite; the column's CHECK lists the same.
     pub(crate) fn as_sql_text(self) -> &'static str {
         match self {
@@ -18,10 +20,8 @@ impl NoteDestination {
 
     /// Decodes a stored value; `None` for anything else.
     pub(crate) fn from_sql_text(text: &str) -> Option<Self> {
-        match text {
-            "local" => Some(Self::Local),
-            "github" => Some(Self::GitHub),
-            _ => None,
-        }
+        Self::ALL
+            .into_iter()
+            .find(|destination| destination.as_sql_text() == text)
     }
 }

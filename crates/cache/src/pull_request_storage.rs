@@ -5,9 +5,9 @@ use qd_github::{Label, PullRequest, PullRequestBranches, RepoRef, StackMembershi
 use rusqlite::{Row, Transaction, params};
 
 use crate::cached_statements::execute_cached;
+use crate::github_enum_sql_text::{viewer_review_as_sql_text, viewer_review_from_sql_text};
 use crate::sql_integers::{read_u64, sql_integer};
 use crate::unix_now::unix_now;
-use crate::viewer_review_sql_text::{viewer_review_as_sql_text, viewer_review_from_sql_text};
 use crate::{GitHubCache, PullRequestListKey};
 
 /// The columns [`pull_request_from_row`] reads, in order, from `pull_requests p`.

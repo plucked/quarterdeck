@@ -25,11 +25,8 @@ impl BranchSide {
 
     /// Decodes a stored value; `None` for anything else.
     pub(crate) fn from_sql_text(text: &str) -> Option<Self> {
-        match text {
-            "head" => Some(Self::Head),
-            "base" => Some(Self::Base),
-            "either" => Some(Self::Either),
-            _ => None,
-        }
+        Self::ALL
+            .into_iter()
+            .find(|side| side.as_sql_text() == text)
     }
 }

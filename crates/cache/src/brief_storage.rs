@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow};
 use qd_studio::{BriefRecord, CodeAccess, RejectedWidget, RequestLayer, Studio, ToolCall};
 use rusqlite::{OptionalExtension, Transaction, params};
 
-use crate::brief_sql_text::{CodeAccessKind, reader_from_sql_text, reader_sql_text};
+use crate::brief_sql_text::{CodeAccessKind, reader_as_sql_text, reader_from_sql_text};
 use crate::brief_widget_writing::put_widget;
 use crate::cached_statements::execute_cached;
 use crate::scope_columns::ScopeColumns;
@@ -235,7 +235,7 @@ fn put_brief_row(
             record.url,
             record.subject,
             record.head_sha,
-            reader_sql_text(record.reader),
+            reader_as_sql_text(record.reader),
             code_access,
             diff_only_reason,
             record.prompt,
