@@ -1,6 +1,6 @@
 use gpui::{AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*};
 use qd_cache::{NoteDestination, ReviewNote};
-use qd_github::ReviewEvent;
+use qd_github::{PullRequestReviewState, ReviewEvent};
 
 use super::comment_card_rendering::element_id;
 use super::lines_label::note_lines_label;
@@ -80,37 +80,8 @@ impl PullRequestDetail {
         };
         let drafts: Vec<&ReviewNote> = comments.notes_to(NoteDestination::GitHub).collect();
         let has_pending = state.pending_review_id.is_some();
-        let event = comments.summary.event;
-        let can_submit = !drafts.is_empty()
-            || has_pending
-            || event != ReviewEvent::Comment
-            || !comments.summary.body.trim().is_empty();
-
-        // The verdict: approving and requesting changes are not for one's own pull request.
-        let verdict: AnyElement = if state.viewer_is_author {
-            muted_line("Your own pull request: your review can only comment.")
-        } else {
-            let detail = cx.entity().downgrade();
-            let pick = |event| view_option(&detail, event, PullRequestDetail::set_review_event);
-            SegmentedControl::new("review-event")
-                .option(
-                    "Comment",
-                    event == ReviewEvent::Comment,
-                    pick(ReviewEvent::Comment),
-                )
-                .option(
-                    "Approve",
-                    event == ReviewEvent::Approve,
-                    pick(ReviewEvent::Approve),
-                )
-                .option(
-                    "Request changes",
-                    event == ReviewEvent::RequestChanges,
-                    pick(ReviewEvent::RequestChanges),
-                )
-                .into_any_element()
-        };
-
+        let can_submit = comments.can_submit();
+        let verdict = self.render_verdict_switch(state, cx);
         let count = drafts.len();
         // While a submission runs the button says so and takes no clicks.
         let is_submitting = self.review().submission.is_some();
@@ -150,6 +121,39 @@ impl PullRequestDetail {
                         .disabled(!can_submit || is_submitting)
                         .on_click(cx.listener(|detail, _, _, cx| detail.submit_review(cx))),
                 ),
+            )
+            .into_any_element()
+    }
+
+    /// The verdict of the GitHub review: Comment, Approve or Request
+    /// changes; only a line saying so on the viewer's own pull request, which
+    /// GitHub lets them only comment on.
+    fn render_verdict_switch(
+        &self,
+        state: &PullRequestReviewState,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        if state.viewer_is_author {
+            return muted_line("Your own pull request: your review can only comment.");
+        }
+        let event = self.review().comments.summary.event;
+        let detail = cx.entity().downgrade();
+        let pick = |event| view_option(&detail, event, PullRequestDetail::set_review_event);
+        SegmentedControl::new("review-event")
+            .option(
+                "Comment",
+                event == ReviewEvent::Comment,
+                pick(ReviewEvent::Comment),
+            )
+            .option(
+                "Approve",
+                event == ReviewEvent::Approve,
+                pick(ReviewEvent::Approve),
+            )
+            .option(
+                "Request changes",
+                event == ReviewEvent::RequestChanges,
+                pick(ReviewEvent::RequestChanges),
             )
             .into_any_element()
     }

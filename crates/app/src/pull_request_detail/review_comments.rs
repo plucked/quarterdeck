@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use gpui::SharedString;
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewSummary};
-use qd_github::PullRequestReviewState;
+use qd_github::{PullRequestReviewState, ReviewEvent};
 use qd_markdown::MarkdownDocument;
 
 use super::comment_card::CommentCard;
@@ -80,6 +80,20 @@ impl ReviewComments {
             }
         }
         cards
+    }
+
+    /// Whether the GitHub review can be submitted: it has drafts, a pending
+    /// review begun in the browser, a verdict other than a comment, or a
+    /// summary.
+    pub fn can_submit(&self) -> bool {
+        let has_pending = self
+            .github
+            .as_ref()
+            .is_some_and(|state| state.pending_review_id.is_some());
+        self.notes_to(NoteDestination::GitHub).next().is_some()
+            || has_pending
+            || self.summary.event != ReviewEvent::Comment
+            || !self.summary.body.trim().is_empty()
     }
 
     pub fn note(&self, id: NoteId) -> Option<&ReviewNote> {
