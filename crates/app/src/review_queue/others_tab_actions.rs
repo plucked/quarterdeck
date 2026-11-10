@@ -6,7 +6,6 @@ use super::ReviewQueue;
 use super::others_filtering::OthersFacet;
 use crate::app_settings::AppSettings;
 use crate::avatar_images::AvatarImages;
-use crate::display_date::unix_now;
 use crate::ui_state::UiStateRecorder;
 
 impl ReviewQueue {
@@ -58,13 +57,6 @@ impl ReviewQueue {
             .map(|pull_request| pull_request.author.avatar_url.clone())
             .collect();
         AvatarImages::load(cx, urls);
-    }
-
-    /// Works out which of others' pull requests the Others tab shows.
-    pub(super) fn update_others_shown(&mut self) {
-        let lists = std::mem::take(self.lists_mut());
-        self.others_tab_mut().update_shown(&lists, unix_now());
-        *self.lists_mut() = lists;
     }
 
     /// Follows a change of the settings: changed hidden branch rules show

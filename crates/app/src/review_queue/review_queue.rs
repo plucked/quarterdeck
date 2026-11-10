@@ -36,6 +36,7 @@ use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::app_update::AppUpdater;
 use crate::avatar_images::AvatarImages;
+use crate::display_date::unix_now;
 use crate::fetch_stack::{cached_stack, refresh_stack};
 use crate::pull_request_detail::{DetailEvent, LayerRequest, PullRequestDetail};
 use crate::shared_cache::SharedCache;
@@ -381,10 +382,6 @@ impl ReviewQueue {
         &mut self.others_tab
     }
 
-    pub(super) fn lists_mut(&mut self) -> &mut QueueLists {
-        &mut self.lists
-    }
-
     /// Whether `repo`'s group is folded in the sidebar.
     pub(super) fn is_repository_collapsed(&self, repo: &RepoRef) -> bool {
         self.collapsed.repositories.contains(repo)
@@ -420,6 +417,11 @@ impl ReviewQueue {
         self.sidebar_width = width;
         UiStateRecorder::record_sidebar_width(cx, width);
         cx.notify();
+    }
+
+    /// Works out which of others' pull requests the Others tab shows.
+    pub(super) fn update_others_shown(&mut self) {
+        self.others_tab.update_shown(&self.lists, unix_now());
     }
 
     /// Rebuilds the sidebar rows of the shown tab, keeping the list's
