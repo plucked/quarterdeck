@@ -7,9 +7,26 @@ use qd_studio::{
     prepare_workspace,
 };
 
+/// Environment variables that point git at a repository. `cargo test` run
+/// from a git command (`git rebase -x`) inherits them, and they would send
+/// the test's `git init` and `git config` to the developer's repository
+/// instead of the temporary folder.
+const REPOSITORY_LOCATING_VARIABLES: [&str; 6] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+];
+
 /// Runs git in `folder`, returning its trimmed output.
 fn git(folder: &Path, arguments: &[&str]) -> String {
-    let output = Command::new("git")
+    let mut command = Command::new("git");
+    for variable in REPOSITORY_LOCATING_VARIABLES {
+        command.env_remove(variable);
+    }
+    let output = command
         .current_dir(folder)
         .args(arguments)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")

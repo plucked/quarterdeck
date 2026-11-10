@@ -26,6 +26,18 @@ pub const DIFF_FILE: &str = "change.diff";
 const STORE_FOLDER: &str = ".store";
 /// How much of git's error output is kept for the error message.
 const MAX_ERROR_OUTPUT_CHARS: usize = 1_500;
+/// Environment variables that point git at a repository. A process started
+/// from inside a git command (a hook, `git rebase -x`) inherits them, and
+/// they would win over the working folder: `git init` would then write to
+/// that repository's config instead of creating the store.
+const REPOSITORY_LOCATING_VARIABLES: [&str; 6] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+];
 
 /// Prepares a review workspace under `root` for `source`: fetches only the
 /// head commit (depth 1, no tags, Git LFS files left as pointers) into a
@@ -93,11 +105,15 @@ impl Git {
         command
     }
 
-    /// `git` with a predictable environment: no prompts, LFS smudging off,
-    /// system and user configuration ignored, and the token (when given) as
-    /// an authorization header for github.com only.
+    /// `git` with a predictable environment: no inherited repository
+    /// location, no prompts, LFS smudging off, system and user
+    /// configuration ignored, and the token (when given) as an
+    /// authorization header for github.com only.
     fn command_without_store(&self) -> Command {
         let mut command = Command::new("git");
+        for variable in REPOSITORY_LOCATING_VARIABLES {
+            command.env_remove(variable);
+        }
         command
             .env("GIT_TERMINAL_PROMPT", "0")
             .env("GIT_LFS_SKIP_SMUDGE", "1")
