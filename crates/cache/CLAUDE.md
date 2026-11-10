@@ -3,7 +3,7 @@
 | Module | Holds |
 |---|---|
 | `github_cache` | `GitHubCache`: cached pull requests, lists and changed files, with row mapping |
-| `ui_state_store` | `UiStateStore`: window placement and review queue state |
+| `ui_state_store` / `window_placement_storage` / `review_queue_view_storage` | `UiStateStore` (the UI state connection; each topic's reads and writes in its own `…_storage.rs`); the window placement row; the review queue view row (selection, detail scroll, tab, sidebar) |
 | `database_connection` | database path (`Quarterdeck/`, or `Quarterdeck Dev/` in debug builds, seeded once by `VACUUM INTO` from the release database, into a temporary file moved into place) and connection setup (WAL, foreign keys, migrations); `prepare_data_directory` runs before the default database opens |
 | `watched_repositories_storage` | the repositories the Others tab lists (`watched_repositories`, ordered by `position`; a preference, never expired) |
 | `others_filter` / `updated_within` / `others_filter_storage` | `OthersFilter` (hide drafts, hide review requests, `UpdatedWithin`, label and author `FacetFilter<String>`s) per repository (`RepositoryOthersFilter`); stored in `others_filters` + `others_filter_chips` (facet `label`/`author`, choice `only`/`hidden`), a row only while the filter narrows something |

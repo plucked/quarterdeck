@@ -17,7 +17,9 @@
 //! - `appearance_settings_storage.rs`: reads and writes of the color theme.
 //! - `sql_integers.rs`: checked conversions between GitHub numbers and SQLite integers.
 //! - `unix_now.rs`: the current time as stored.
-//! - `ui_state_store.rs`: `UiStateStore`, reads and writes of the UI state.
+//! - `ui_state_store.rs`: `UiStateStore`, the UI state connection; each topic's reads and writes sit in its `…_storage.rs` file.
+//! - `window_placement_storage.rs`: reads and writes of the window placement.
+//! - `review_queue_view_storage.rs`: reads and writes of the review queue's selection, scroll, tab and sidebar.
 //! - `brief_storage.rs`: stored briefs (user data): one per review scope, every part in typed rows; `brief_index` for the queue.
 //! - `stored_brief.rs`: `StoredBrief`, a checked studio with the record of its run.
 //! - `brief_index.rs`: `BriefIndex`, which pull requests have a brief.
@@ -115,6 +117,7 @@ mod review_layout_storage;
 mod review_note;
 mod review_notes_storage;
 mod review_queue_view_state;
+mod review_queue_view_storage;
 mod review_scope;
 mod review_summary;
 mod schema_migrations;
@@ -132,6 +135,7 @@ mod viewer_review_sql_text;
 mod watched_repositories_storage;
 mod window_mode;
 mod window_placement;
+mod window_placement_storage;
 
 pub use branch_side::BranchSide;
 pub use brief_index::BriefIndex;
