@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use qd_studio::{SequenceMessage, StudioSequence};
 
-use super::diagram_geometry::{DIAGRAM_MARGIN, DiagramRect};
+use super::diagram_geometry::{DIAGRAM_MARGIN, DiagramRect, DiagramSize};
 use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
 use crate::count_as_f32::count_as_f32;
 
@@ -99,6 +99,16 @@ pub struct MessagePlace {
     pub label: DiagramRect,
     /// The note, under the label; `None` without one.
     pub note: Option<DiagramRect>,
+}
+
+impl SequenceLayout {
+    /// How much room the whole sequence takes.
+    pub fn size(&self) -> DiagramSize {
+        DiagramSize {
+            width: self.width,
+            height: self.height,
+        }
+    }
 }
 
 /// Lays `sequence` out: lanes as evenly spaced columns, as far apart as

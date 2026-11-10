@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use qd_markdown::MarkdownDocument;
-use qd_studio::{BriefRecord, ShownPage, Studio, StudioWidget};
+use qd_studio::{BriefRecord, ShownPage, Studio};
 
 use super::diagram_geometry::DEFAULT_DIAGRAM_WIDTH;
-use super::graph_layout::lay_out_graph;
 use super::prepared_page::PreparedPage;
-use super::prepared_step::PreparedStep;
 use super::prepared_widget::PreparedWidget;
-use super::sequence_layout::lay_out_sequence;
+
+/// The least change of the column's width that lays diagrams out again.
+const WIDTH_CHANGE_THRESHOLD: f32 = 1.;
 
 /// A written brief as the pane draws it: the studio's widgets with their
 /// Markdown parsed and diagrams laid out, in one list across all pages (so
@@ -31,75 +31,12 @@ impl PreparedBrief {
     /// Parses every Markdown text of `studio` and lays out its diagrams (on
     /// the background executor: a large studio has many).
     pub fn prepare(studio: Studio, record: BriefRecord) -> Self {
-        let parse = |text: &str| Arc::new(MarkdownDocument::parse(text));
-        let prepare_widget = |widget| match widget {
-            StudioWidget::Section { heading, body } => PreparedWidget::Section {
-                heading,
-                body: parse(&body),
-            },
-            StudioWidget::Callout { tone, text } => PreparedWidget::Callout {
-                tone,
-                text: parse(&text),
-            },
-            StudioWidget::CodeExcerpt { caption, anchor } => {
-                PreparedWidget::CodeExcerpt { caption, anchor }
-            }
-            StudioWidget::CodeCompare {
-                caption,
-                before,
-                after,
-            } => PreparedWidget::CodeCompare {
-                caption,
-                before,
-                after,
-            },
-            StudioWidget::Table(table) => PreparedWidget::Table {
-                rows: table
-                    .rows
-                    .iter()
-                    .map(|row| row.iter().map(|cell| parse(cell)).collect())
-                    .collect(),
-                title: table.title,
-                columns: table.columns,
-                role: table.role,
-            },
-            StudioWidget::Scope(scope) => {
-                let parse_all = |items: &[String]| items.iter().map(|item| parse(item)).collect();
-                PreparedWidget::Scope {
-                    changes: parse_all(&scope.changes),
-                    unchanged: parse_all(&scope.unchanged),
-                    mechanical: parse_all(&scope.mechanical),
-                }
-            }
-            StudioWidget::Tour(tour) => PreparedWidget::Tour {
-                steps: tour
-                    .steps
-                    .into_iter()
-                    .map(|step| PreparedStep {
-                        explanation: parse(&step.explanation),
-                        title: step.title,
-                        weight: step.weight,
-                        anchor: step.anchor,
-                    })
-                    .collect(),
-                title: tour.title,
-            },
-            StudioWidget::Graph(graph) => PreparedWidget::Graph {
-                layout: lay_out_graph(&graph, DEFAULT_DIAGRAM_WIDTH),
-                graph,
-            },
-            StudioWidget::Sequence(sequence) => PreparedWidget::Sequence {
-                layout: lay_out_sequence(&sequence, DEFAULT_DIAGRAM_WIDTH),
-                sequence,
-            },
-        };
-
         // Every page's widgets into one list, each page remembering its range.
         let mut widgets = Vec::new();
         let mut pages = Vec::with_capacity(studio.pages.len().max(1));
         for page in studio.pages {
             let start = widgets.len();
-            widgets.extend(page.widgets.into_iter().map(prepare_widget));
+            widgets.extend(page.widgets.into_iter().map(PreparedWidget::prepare));
             pages.push(PreparedPage {
                 title: page.title,
                 summary: page.summary,
@@ -114,7 +51,7 @@ impl PreparedBrief {
             });
         }
         Self {
-            lead: parse(&studio.lead),
+            lead: Arc::new(MarkdownDocument::parse(&studio.lead)),
             widgets,
             pages,
             record,
@@ -143,44 +80,12 @@ impl PreparedBrief {
     /// of the widgets whose layout changed size: their rows need measuring
     /// again. A width within a pixel of the current one changes nothing.
     pub fn fit_diagrams(&mut self, width: f32) -> Vec<usize> {
-        if (width - self.diagram_width).abs() < 1. {
+        if (width - self.diagram_width).abs() < WIDTH_CHANGE_THRESHOLD {
             return Vec::new();
         }
         self.diagram_width = width;
-        let mut changed = Vec::new();
-        for (index, widget) in self.widgets.iter_mut().enumerate() {
-            let resized = match widget {
-                PreparedWidget::Graph { graph, layout } => {
-                    let fitted = lay_out_graph(graph, width);
-                    let resized =
-                        is_resized((layout.width, layout.height), (fitted.width, fitted.height));
-                    *layout = fitted;
-                    resized
-                }
-                PreparedWidget::Sequence { sequence, layout } => {
-                    let fitted = lay_out_sequence(sequence, width);
-                    let resized =
-                        is_resized((layout.width, layout.height), (fitted.width, fitted.height));
-                    *layout = fitted;
-                    resized
-                }
-                PreparedWidget::Section { .. }
-                | PreparedWidget::Callout { .. }
-                | PreparedWidget::CodeExcerpt { .. }
-                | PreparedWidget::CodeCompare { .. }
-                | PreparedWidget::Table { .. }
-                | PreparedWidget::Scope { .. }
-                | PreparedWidget::Tour { .. } => false,
-            };
-            if resized {
-                changed.push(index);
-            }
-        }
-        changed
+        (0..self.widgets.len())
+            .filter(|index| self.widgets[*index].fit_diagram(width))
+            .collect()
     }
-}
-
-/// Whether a diagram's size changed by half a pixel or more.
-fn is_resized(before: (f32, f32), after: (f32, f32)) -> bool {
-    (before.0 - after.0).abs() >= 0.5 || (before.1 - after.1).abs() >= 0.5
 }

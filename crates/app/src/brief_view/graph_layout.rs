@@ -36,6 +36,16 @@ pub struct GraphLayout {
     pub edges: Vec<EdgeRoute>,
 }
 
+impl GraphLayout {
+    /// How much room the whole graph takes.
+    pub fn size(&self) -> DiagramSize {
+        DiagramSize {
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
 /// Lays `graph` out along its arrows, left to right when that fits
 /// `width` (the brief's column), else top to bottom when that is narrower: each node one
 /// layer after the furthest node with an arrow into it (arrows closing a
