@@ -1,16 +1,7 @@
-use std::fmt::Write as _;
-
 use futures::StreamExt as _;
 use futures::channel::mpsc;
-use std::rc::Rc;
-
 use gpui::Context;
-use qd_file_tree::FileKind;
-use qd_github::{PullRequest, PullRequestStack};
-use qd_studio::{
-    CodeAccess, FileListing, ReaderFamiliarity, RequestLayer, StudioRequest, StudioRequestFile,
-    find_claude,
-};
+use qd_studio::{ReaderFamiliarity, find_claude};
 use qd_update::AppVersion;
 
 use super::brief_job::BriefJob;
@@ -19,18 +10,12 @@ use super::brief_pane::ShownBrief;
 use super::brief_row::BriefRow;
 use super::detail_event::DetailEvent;
 use super::detail_mode::DetailMode;
-use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
-use super::review_target::ReviewTarget;
 use super::run_cancel::RunCancel;
-use crate::brief_view::{
-    BriefHandlers, BriefPageRow, BriefReport, BriefState, PreparedBrief, ReportHost, view_action,
-    view_handler,
-};
+use super::studio_request::studio_request;
+use crate::brief_view::{BriefPageRow, BriefState, PreparedBrief, ReportHost};
 use crate::ui_state::UiStateRecorder;
 
-/// The report panel's text field while empty.
-const REPORT_PLACEHOLDER: &str = "What is wrong or weird: a part that misleads, is missing, is too long, a widget that looks off…";
 /// Shown when no `claude` executable is found.
 const CLAUDE_MISSING: &str = "Claude Code was not found. Install it (claude.ai/code) so `claude` is on PATH, in ~/.local/bin or in Homebrew's folder, and log in once in a terminal.";
 
@@ -133,7 +118,7 @@ impl PullRequestDetail {
 
     /// Writes a report on the shown brief with the words in the report
     /// panel and the page shown ([`ReportHost::save_report`]).
-    fn save_shown_brief_report(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn save_shown_brief_report(&mut self, cx: &mut Context<Self>) {
         let page = self.current_brief_page();
         if let Some(BriefState::Written(brief)) = self.current_brief() {
             let record = brief.record.clone();
@@ -258,45 +243,6 @@ impl PullRequestDetail {
     }
 }
 
-/// What the brief's links and buttons do in the detail: an anchor opens the
-/// diff there, the buttons run or cancel the agent, tabs switch pages. The handlers hold a weak handle, so a closed view
-/// ignores them.
-pub(super) fn detail_brief_handlers(cx: &mut Context<PullRequestDetail>) -> BriefHandlers {
-    let detail = cx.entity().downgrade();
-    BriefHandlers {
-        show_anchor: Rc::new({
-            let detail = detail.clone();
-            move |anchor, _, cx| {
-                detail
-                    .update(cx, |detail, cx| detail.show_anchor_in_diff(anchor, cx))
-                    .ok();
-            }
-        }),
-        write: view_action(&detail, |detail, _, cx| detail.write_brief(cx)),
-        cancel: view_action(&detail, |detail, _, cx| detail.cancel_brief(cx)),
-        show_page: view_handler(&detail, |detail, page, _, cx| {
-            detail.show_brief_page(page, cx);
-        }),
-        choose_reader: view_handler(&detail, |detail, familiarity, _, cx| {
-            detail.choose_familiarity(familiarity, cx);
-        }),
-        open_report: view_action(&detail, |detail, window, cx| {
-            detail.open_report(REPORT_PLACEHOLDER, window, cx);
-        }),
-        save_report: view_action(&detail, |detail, _, cx| detail.save_shown_brief_report(cx)),
-        close_report: view_action(&detail, |detail, _, cx| detail.close_report(cx)),
-        copy_report_path: view_action(&detail, |detail, _, cx| detail.copy_report_path(cx)),
-    }
-}
-
-/// The report panel lays itself out in the bar above the brief's rows, so
-/// the detail only hands out the pane's report.
-impl ReportHost for PullRequestDetail {
-    fn report_mut(&mut self) -> &mut BriefReport {
-        self.brief_mut().report_mut()
-    }
-}
-
 /// This build's version for a report: the package version, marked as a
 /// development build when it is one.
 fn app_version() -> String {
@@ -305,180 +251,5 @@ fn app_version() -> String {
         format!("{version} (development build)")
     } else {
         version.to_string()
-    }
-}
-
-/// What the agent is told about the shown pull request at `target`, with
-/// each loaded file's diff or why it is left out, for a combined range the
-/// stack layers it spans (from `stack`), bottom first, and how well the
-/// `reader` knows the area. The code access is set once the checkout ran.
-fn studio_request(
-    pull_request: &PullRequest,
-    target: &ReviewTarget,
-    stack: Option<&PullRequestStack>,
-    files: &[LoadedFile],
-    reader: ReaderFamiliarity,
-) -> StudioRequest {
-    let layers = match (target, stack) {
-        (ReviewTarget::Combined(range), Some(stack)) => stack
-            .layers
-            .get(range.first_index..=range.last_index)
-            .unwrap_or_default()
-            .iter()
-            .map(|layer| RequestLayer {
-                number: layer.number,
-                title: layer.title.clone(),
-                // The shown pull request's own; the others' are read with the run.
-                description: (layer.number == pull_request.number)
-                    .then(|| pull_request.body.clone())
-                    .flatten(),
-            })
-            .collect(),
-        _ => Vec::new(),
-    };
-    let subject = match target {
-        ReviewTarget::Combined(range) => format!(
-            "Stack layers #{} to #{} combined ({} layers), up to pull request #{}: {}",
-            range.first_number,
-            range.last_number,
-            range.layer_count(),
-            pull_request.number,
-            pull_request.title
-        ),
-        ReviewTarget::Layer | ReviewTarget::AwaitingStack => {
-            format!(
-                "Pull request #{}: {}",
-                pull_request.number, pull_request.title
-            )
-        }
-    };
-    StudioRequest {
-        repository: pull_request.repo.full_name(),
-        subject,
-        author: pull_request.author.login.clone(),
-        description: pull_request.body.clone().unwrap_or_default(),
-        files: files
-            .iter()
-            .map(|loaded| StudioRequestFile {
-                path: loaded.file.filename.clone(),
-                previous_path: loaded.file.previous_filename.clone(),
-                status: loaded.file.status.clone(),
-                additions: loaded.file.additions,
-                deletions: loaded.file.deletions,
-                listing: listing_of(loaded),
-            })
-            .collect(),
-        code: CodeAccess::DiffOnly("not prepared yet".into()),
-        reader,
-        layers,
-    }
-}
-
-/// The loaded files' patches as one unified diff, for the workspace's
-/// `change.diff`: every file (generated and moved ones too), with `---` /
-/// `+++` headers (`/dev/null` for an added or removed side, the previous
-/// path for a rename) so the agent can see what each file was before; a
-/// file without a patch is named with why.
-pub(super) fn change_diff_of(files: &[LoadedFile]) -> String {
-    let mut diff = String::new();
-    for loaded in files {
-        let file = &loaded.file;
-        let old_path = file.previous_filename.as_deref().unwrap_or(&file.filename);
-        let (old_side, new_side) = match file.status.as_str() {
-            "added" => ("/dev/null".to_owned(), format!("b/{}", file.filename)),
-            "removed" => (format!("a/{old_path}"), "/dev/null".to_owned()),
-            _ => (format!("a/{old_path}"), format!("b/{}", file.filename)),
-        };
-        let _ = writeln!(diff, "diff --git a/{old_path} b/{}", file.filename);
-        match &file.patch {
-            Some(patch) => {
-                let _ = writeln!(diff, "--- {old_side}\n+++ {new_side}");
-                diff.push_str(patch);
-                if !patch.ends_with('\n') {
-                    diff.push('\n');
-                }
-            }
-            None => {
-                let _ = writeln!(diff, "(no patch: binary, or too large for GitHub to show)");
-            }
-        }
-    }
-    diff
-}
-
-/// The file's diff for the agent, or why it is left out: generated and
-/// unchanged moved files say little, and a file without a patch has none.
-fn listing_of(loaded: &LoadedFile) -> FileListing {
-    match (loaded.facets.kind, loaded.file.patch.is_some()) {
-        (FileKind::Generated, _) => FileListing::LeftOut("generated".into()),
-        (FileKind::Moved, _) => FileListing::LeftOut("moved without changes".into()),
-        (FileKind::Code | FileKind::Tests, false) => {
-            FileListing::LeftOut("no patch (binary, or too large for GitHub to show)".into())
-        }
-        (FileKind::Code | FileKind::Tests, true) => FileListing::Diff(loaded.diff.clone()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use qd_diff::DiffOptions;
-    use qd_github::PullRequestFile;
-
-    use super::*;
-
-    fn loaded(
-        filename: &str,
-        previous: Option<&str>,
-        status: &str,
-        patch: Option<&str>,
-    ) -> LoadedFile {
-        LoadedFile::build(
-            PullRequestFile {
-                filename: filename.into(),
-                previous_filename: previous.map(Into::into),
-                status: status.into(),
-                additions: 1,
-                deletions: 1,
-                patch: patch.map(Into::into),
-                sha: None,
-            },
-            DiffOptions::default(),
-        )
-    }
-
-    /// The workspace's diff holds every file with headers that say what it
-    /// was before: added from nothing, renamed from its old path, and a
-    /// file without a patch named.
-    #[test]
-    fn writes_every_file_into_the_change_diff() {
-        let diff = change_diff_of(&[
-            loaded(
-                "src/new.rs",
-                None,
-                "added",
-                Some("@@ -0,0 +1 @@\n+fn new() {}"),
-            ),
-            loaded(
-                "src/lib.rs",
-                Some("src/old.rs"),
-                "renamed",
-                Some("@@ -1 +1 @@\n-a\n+b\n"),
-            ),
-            loaded("logo.png", None, "modified", None),
-        ]);
-        assert!(
-            diff.contains("--- /dev/null\n+++ b/src/new.rs\n@@ -0,0 +1 @@\n+fn new() {}\n"),
-            "{diff}"
-        );
-        assert!(
-            diff.contains(
-                "diff --git a/src/old.rs b/src/lib.rs\n--- a/src/old.rs\n+++ b/src/lib.rs\n"
-            ),
-            "{diff}"
-        );
-        assert!(
-            diff.contains("diff --git a/logo.png b/logo.png\n(no patch"),
-            "{diff}"
-        );
     }
 }

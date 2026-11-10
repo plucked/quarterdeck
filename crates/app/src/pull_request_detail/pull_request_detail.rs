@@ -14,7 +14,7 @@ use qd_markdown::MarkdownDocument;
 
 use super::action_panel::ActionPanel;
 use super::batch_progress::BatchProgress;
-use super::brief_actions::detail_brief_handlers;
+use super::brief_handlers::detail_brief_handlers;
 use super::brief_pane::BriefPane;
 use super::changed_files::ChangedFiles;
 use super::context_loads::ContextLoads;

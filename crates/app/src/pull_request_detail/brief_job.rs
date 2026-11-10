@@ -10,8 +10,8 @@ use qd_studio::{
     run_claude, studio_prompt,
 };
 
-use super::brief_actions::change_diff_of;
 use super::brief_code::BriefCode;
+use super::change_diff_of::change_diff_of;
 use super::loaded_file::LoadedFile;
 use super::review_target::ReviewTarget;
 use crate::app_services::AppServices;

@@ -89,6 +89,9 @@
 //! - `brief_job.rs`: `BriefJob`, one brief's background run: checkout, agent, checks, storing.
 //! - `brief_code.rs`: `BriefCode`, the shallow checkout of the head commit a brief's agent reads (or why there is none).
 //! - `brief_actions.rs`: writing a brief with Claude Code and cancelling it, its pages and reader.
+//! - `brief_handlers.rs`: `detail_brief_handlers`, what the brief's links and buttons do in the detail, and its report host.
+//! - `studio_request.rs`: `studio_request`, what the agent is told about the shown pull request and its files.
+//! - `change_diff_of.rs`: `change_diff_of`, the loaded patches as one unified diff for the agent's workspace.
 //! - `file_lookup.rs`: `file_index_of`, the loaded file an anchor's path names; the loaded files as the brief's `BriefDiffs`.
 //! - `brief_pane_rendering.rs`: the brief's rows in the main column, drawn by `brief_view`.
 
@@ -98,11 +101,13 @@ mod activity_rendering;
 mod batch_progress;
 mod brief_actions;
 mod brief_code;
+mod brief_handlers;
 mod brief_job;
 mod brief_key;
 mod brief_pane;
 mod brief_pane_rendering;
 mod brief_row;
+mod change_diff_of;
 mod changed_files;
 mod changed_rows;
 mod comment_card;
@@ -172,6 +177,7 @@ mod side_panel_tab;
 mod stack_actions;
 mod stack_bar_rendering;
 mod sticky_header_rendering;
+mod studio_request;
 mod syntax_highlighting;
 mod thread_resolution;
 mod viewed_toggle;
