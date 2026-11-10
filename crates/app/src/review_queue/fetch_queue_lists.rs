@@ -158,6 +158,34 @@ pub fn fill_stacks(pull_requests: &mut [PullRequest], details: &DetailsByNumber)
     }
 }
 
+/// Others' pull requests brought up to date ([`fetch_others`]) with the
+/// stack memberships in `details`, cached as the Others list; then cached
+/// data unused within `ttl` is removed.
+///
+/// Blocking: runs on the background executor.
+pub fn fetch_and_cache_others(
+    client: &GitHubClient,
+    cache: &SharedCache,
+    input: &RefreshInput,
+    details: &DetailsByNumber,
+    ttl: Duration,
+) -> anyhow::Result<FetchedOthers> {
+    // Others' pull requests, with their stacks filled in.
+    let mut fetched = fetch_others(
+        client,
+        &input.watched,
+        &input.known_others,
+        &input.others_synced_until,
+    );
+    fill_stacks(&mut fetched.pull_requests, details);
+
+    // Cache them, then drop what has not been used within the TTL.
+    let mut cache = cache.lock();
+    cache.replace_list(PullRequestListKey::OTHERS, &fetched.pull_requests)?;
+    cache.delete_expired(ttl)?;
+    Ok(fetched)
+}
+
 /// Others' open pull requests in `watched`, each repository brought up to
 /// date from what `known` has of it and where its last sync ended
 /// (`synced_until`), most recently updated first. A repository that fails
@@ -166,7 +194,7 @@ pub fn fill_stacks(pull_requests: &mut [PullRequest], details: &DetailsByNumber)
 /// asked and keep what was known too.
 ///
 /// Blocking: runs on the background executor.
-pub fn fetch_others(
+fn fetch_others(
     client: &GitHubClient,
     watched: &[RepoRef],
     known: &[PullRequest],

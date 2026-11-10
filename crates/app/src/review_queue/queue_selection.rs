@@ -14,6 +14,16 @@ pub struct PendingRestore {
     pub detail_scroll: DetailScrollPosition,
 }
 
+impl PendingRestore {
+    /// The selection in `saved` to restore, when one was saved.
+    pub fn from_saved(saved: &ReviewQueueViewState) -> Option<Self> {
+        saved.selected_pull_request_id.map(|pull_request_id| Self {
+            pull_request_id,
+            detail_scroll: saved.detail_scroll,
+        })
+    }
+}
+
 impl ReviewQueue {
     /// Selects the pull request of the shown list at `index` for the user:
     /// shows it from the top and records the new selection.

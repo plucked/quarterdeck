@@ -1,13 +1,12 @@
 use std::time::{Duration, Instant};
 
 use gpui::{Context, Window};
-use qd_cache::PullRequestListKey;
-use qd_github::GitHubError;
+use qd_github::{GitHubClient, GitHubError};
 
 use super::ReviewQueue;
 use super::activation_refresh::ActivationRefresh;
 use super::fetch_queue_lists::{
-    FetchedOthers, OwnLists, RefreshInput, fetch_others, fetch_own_lists, fill_stacks,
+    FetchedOthers, OwnLists, RefreshInput, fetch_and_cache_others, fetch_own_lists, fill_stacks,
     known_details,
 };
 use super::hidden_branches::without_hidden_branches;
@@ -35,22 +34,12 @@ impl ReviewQueue {
         self.auto_refresh_task = None;
 
         // Without a client there is nothing to refresh; say why.
-        let client = match &self.services.github {
-            Ok(client) => client.clone(),
-            Err(reason) => {
-                self.refresh_status = RefreshStatus::Failed(reason.clone().into());
-                cx.notify();
-                return;
-            }
+        let Some(client) = self.client_for_refresh(cx) else {
+            return;
         };
         let cache = self.services.cache.clone();
         let ttl = AppSettings::cache_ttl(cx).duration();
-        let input = RefreshInput {
-            watched: self.others_tab().watched().to_vec(),
-            known_details: known_details(&self.fetched),
-            known_others: self.fetched.others.clone(),
-            others_synced_until: self.others_tab().synced_until().clone(),
-        };
+        let mut input = self.refresh_input();
 
         self.refresh_status = RefreshStatus::Refreshing;
         cx.notify();
@@ -60,7 +49,7 @@ impl ReviewQueue {
             let own_client = client.clone();
             let own_cache = cache.clone();
             let watched = input.watched.clone();
-            let known_details = input.known_details;
+            let known_details = std::mem::take(&mut input.known_details);
             let own =
                 cx.background_executor()
                     .spawn(async move {
@@ -87,19 +76,9 @@ impl ReviewQueue {
             // Then others' pull requests, cached; then drop what has not been used within the TTL.
             let others = cx
                 .background_executor()
-                .spawn(async move {
-                    let mut fetched = fetch_others(
-                        &client,
-                        &input.watched,
-                        &input.known_others,
-                        &input.others_synced_until,
-                    );
-                    fill_stacks(&mut fetched.pull_requests, &details);
-                    let mut cache = cache.lock();
-                    cache.replace_list(PullRequestListKey::OTHERS, &fetched.pull_requests)?;
-                    cache.delete_expired(ttl)?;
-                    anyhow::Ok(fetched)
-                })
+                .spawn(
+                    async move { fetch_and_cache_others(&client, &cache, &input, &details, ttl) },
+                )
                 .await;
 
             // Show the result and arm the next refresh; a closed view simply drops it.
@@ -110,6 +89,30 @@ impl ReviewQueue {
                 })
                 .ok();
         }));
+    }
+
+    /// The client a refresh asks GitHub with; without one, the status says
+    /// why and there is nothing to refresh.
+    fn client_for_refresh(&mut self, cx: &mut Context<Self>) -> Option<GitHubClient> {
+        match &self.services.github {
+            Ok(client) => Some(client.clone()),
+            Err(reason) => {
+                self.refresh_status = RefreshStatus::Failed(reason.clone().into());
+                cx.notify();
+                None
+            }
+        }
+    }
+
+    /// What a refresh starts from: the watched repositories and what the
+    /// lists know now.
+    fn refresh_input(&self) -> RefreshInput {
+        RefreshInput {
+            watched: self.others_tab().watched().to_vec(),
+            known_details: known_details(&self.fetched),
+            known_others: self.fetched.others.clone(),
+            others_synced_until: self.others_tab().synced_until().clone(),
+        }
     }
 
     /// Shows the viewer's refreshed own lists, with the stacks just read

@@ -2,13 +2,31 @@ use gpui::{Context, Window};
 use qd_cache::QueueTab;
 
 use super::ReviewQueue;
+use super::selection_origin::SelectionOrigin;
 use crate::app_commands::{
     MarkViewedAndNext, NextFile, NextLayer, PreviousFile, PreviousLayer, Refresh, ShowAuthored,
     ShowOthers, ShowReviewRequested, ToggleFileTree, ToggleSidebar, ToggleStackReview,
 };
-use crate::pull_request_detail::PullRequestDetail;
+use crate::pull_request_detail::{DetailEvent, PullRequestDetail};
 
 impl ReviewQueue {
+    /// Handles the detail pane's events: its scrolling (saved), a layer it
+    /// opens, a pull request it merged or closed, a changed review target
+    /// (the sidebar's stack highlight), a stored brief (the sidebar's marks).
+    pub(super) fn on_detail_event(&mut self, event: &DetailEvent, cx: &mut Context<Self>) {
+        match event {
+            DetailEvent::Scrolled => self.record_view_state(cx),
+            DetailEvent::OpenLayer(request) => self.open_layer(request, cx),
+            DetailEvent::PullRequestChanged => {
+                // Keep it in view after the refresh drops it from the lists.
+                self.selection_origin = SelectionOrigin::Finished;
+                self.refresh(cx);
+            }
+            DetailEvent::TargetChanged => cx.notify(),
+            DetailEvent::BriefStored => self.load_brief_index(cx),
+        }
+    }
+
     /// Handles the Refresh action (cmd-r, View menu).
     pub(super) fn on_refresh(&mut self, _: &Refresh, _: &mut Window, cx: &mut Context<Self>) {
         self.refresh(cx);

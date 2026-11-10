@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 
 use gpui::{
-    Context, Entity, FocusHandle, ListAlignment, ListOffset, ListState, SharedString, Subscription,
-    Task, Window, div, prelude::*, px,
+    App, Context, Entity, FocusHandle, ListAlignment, ListOffset, ListState, SharedString,
+    Subscription, Task, Window, div, prelude::*, px,
 };
-use qd_cache::{BriefIndex, HiddenBranchRule, PanelVisibility, QueueTab};
+use qd_cache::{
+    BriefIndex, FoldedGroups, HiddenBranchRule, PanelVisibility, QueueTab, RepositoryOthersFilter,
+    ReviewQueueViewState,
+};
 use qd_github::{PullRequest, PullRequestStack, RepoRef};
 
 use super::collapsed_groups::CollapsedGroups;
@@ -33,6 +36,29 @@ use crate::ui_state::{UiStateRecorder, read_brief_index};
 
 /// How far past the sidebar's edges rows are laid out, so scrolling shows no gaps.
 const QUEUE_LIST_OVERDRAW: f32 = 300.;
+
+/// What the queue restores from the UI state saved before the relaunch.
+/// Nothing saved, or a row that no longer reads, restores nothing (the
+/// defaults).
+struct SavedQueueState {
+    sidebar_width: f32,
+    view_state: ReviewQueueViewState,
+    folded_groups: FoldedGroups,
+    others_filters: Vec<RepositoryOthersFilter>,
+}
+
+impl SavedQueueState {
+    /// Reads it on the main thread: a few small local rows, read at startup only.
+    fn read(cx: &App) -> Self {
+        let recorder = cx.global::<UiStateRecorder>();
+        Self {
+            sidebar_width: recorder.saved_panel_widths().unwrap_or_default().sidebar,
+            view_state: recorder.saved_review_queue_view_state().unwrap_or_default(),
+            folded_groups: recorder.saved_folded_groups(),
+            others_filters: recorder.saved_others_filters(),
+        }
+    }
+}
 
 /// The main view: the viewer's own pull requests, those that request their
 /// review or that they reviewed, and others' in the watched repositories on
@@ -130,38 +156,14 @@ impl ReviewQueue {
         // The cached layers of the listed stacks; local and small, read at startup.
         let stacks = read_cached_stacks(&services.cache, &lists);
 
-        // Nothing saved, or a row that no longer reads, restores nothing.
-        let sidebar_width = cx
-            .global::<UiStateRecorder>()
-            .saved_panel_widths()
-            .unwrap_or_default()
-            .sidebar;
-        let saved = cx
-            .global::<UiStateRecorder>()
-            .saved_review_queue_view_state()
-            .unwrap_or_default();
-        let pending_restore =
-            saved
-                .selected_pull_request_id
-                .map(|pull_request_id| PendingRestore {
-                    pull_request_id,
-                    detail_scroll: saved.detail_scroll,
-                });
+        // What was saved before the relaunch: the tab, selection, folds, widths, filters.
+        let saved = SavedQueueState::read(cx);
 
         // The detail pane reports its scrolling (to save it) and the layers it opens.
         let detail = cx.new(|cx| PullRequestDetail::new(services.clone(), cx));
-        let detail_subscription =
-            cx.subscribe(&detail, |queue, _, event: &DetailEvent, cx| match event {
-                DetailEvent::Scrolled => queue.record_view_state(cx),
-                DetailEvent::OpenLayer(request) => queue.open_layer(request, cx),
-                DetailEvent::PullRequestChanged => {
-                    // Keep it in view after the refresh drops it from the lists.
-                    queue.selection_origin = SelectionOrigin::Finished;
-                    queue.refresh(cx);
-                }
-                DetailEvent::TargetChanged => cx.notify(),
-                DetailEvent::BriefStored => queue.load_brief_index(cx),
-            });
+        let detail_subscription = cx.subscribe(&detail, |queue, _, event: &DetailEvent, cx| {
+            queue.on_detail_event(event, cx);
+        });
 
         let hidden_branch_rules = AppSettings::hidden_branch_rules(cx).to_vec();
         let shown_lists = without_hidden_branches(&lists, &hidden_branch_rules);
@@ -172,32 +174,30 @@ impl ReviewQueue {
             lists: shown_lists,
             fetched: lists,
             hidden_branch_rules,
-            tab: saved.tab,
-            sidebar_visibility: saved.sidebar,
+            tab: saved.view_state.tab,
+            sidebar_visibility: saved.view_state.sidebar,
             rows: Vec::new(),
-            collapsed: CollapsedGroups::from_saved(
-                cx.global::<UiStateRecorder>().saved_folded_groups(),
-            ),
+            collapsed: CollapsedGroups::from_saved(saved.folded_groups),
             selected: None,
             selection_origin: SelectionOrigin::Listed,
             refresh_status,
             refresh_schedule: RefreshSchedule::default(),
             queue_list: ListState::new(0, ListAlignment::Top, px(QUEUE_LIST_OVERDRAW)),
             detail,
-            pending_restore,
+            pending_restore: PendingRestore::from_saved(&saved.view_state),
             refresh_task: None,
             is_refresh_requested: false,
             auto_refresh_task: None,
             opening_layer: None,
             layer_error: None,
-            sidebar_width,
+            sidebar_width: saved.sidebar_width,
             stacks,
             stacks_task: None,
             brief_index: BriefIndex::default(),
             brief_index_task: None,
             others_tab: OthersTab::new(
                 AppSettings::watched_repositories(cx).to_vec(),
-                cx.global::<UiStateRecorder>().saved_others_filters(),
+                saved.others_filters,
             ),
             _subscriptions: [
                 activation_subscription,
@@ -221,7 +221,7 @@ impl ReviewQueue {
 
     /// Reads which pull requests have a stored brief, on the background
     /// executor, and redraws the sidebar with their marks.
-    fn load_brief_index(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn load_brief_index(&mut self, cx: &mut Context<Self>) {
         let store = cx.global::<UiStateRecorder>().shared_store();
         self.brief_index_task = Some(cx.spawn(async move |queue, cx| {
             let index = cx
