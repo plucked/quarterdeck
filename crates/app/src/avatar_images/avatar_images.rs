@@ -77,11 +77,7 @@ impl AvatarImages {
 
     /// Queues each of `urls` not asked for before, and starts as many
     /// downloads as there are free slots.
-    pub fn request<'url>(
-        &mut self,
-        urls: impl IntoIterator<Item = &'url str>,
-        cx: &mut Context<Self>,
-    ) {
+    fn request<'url>(&mut self, urls: impl IntoIterator<Item = &'url str>, cx: &mut Context<Self>) {
         for url in urls {
             if url.is_empty() || self.avatars.contains_key(url) {
                 continue;

@@ -6,7 +6,7 @@ use super::queue_lists::QueueLists;
 /// Whether one of `rules` hides `pull_request`: its branch on the rule's
 /// side matches the rule's pattern. A pull request whose branches are not
 /// known yet is never hidden.
-pub fn is_hidden_by_branch(rules: &[HiddenBranchRule], pull_request: &PullRequest) -> bool {
+fn is_hidden_by_branch(rules: &[HiddenBranchRule], pull_request: &PullRequest) -> bool {
     let Some(branches) = &pull_request.branches else {
         return false;
     };
@@ -39,7 +39,7 @@ pub fn without_hidden_branches(lists: &QueueLists, rules: &[HiddenBranchRule]) -
 /// Whether `branch` matches the wildcard `pattern` as a whole: `*` stands
 /// for any run of characters (`/` included, none too), `?` for exactly one,
 /// every other character for itself (case matters, as in git).
-pub fn branch_pattern_matches(pattern: &str, branch: &str) -> bool {
+fn branch_pattern_matches(pattern: &str, branch: &str) -> bool {
     let pattern: Vec<char> = pattern.chars().collect();
     let branch: Vec<char> = branch.chars().collect();
     let (mut pattern_index, mut branch_index) = (0, 0);

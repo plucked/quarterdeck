@@ -205,9 +205,9 @@ impl OthersTab {
     }
 }
 
-/// The ids of the pull requests in the Review tab, for the filters' Hide
-/// review requests switch.
-pub fn review_requested_ids(lists: &QueueLists) -> HashSet<u64> {
+/// The ids of the pull requests that request the viewer's review, for the
+/// filters' Hide review requests switch.
+fn review_requested_ids(lists: &QueueLists) -> HashSet<u64> {
     lists
         .review_requested
         .iter()
