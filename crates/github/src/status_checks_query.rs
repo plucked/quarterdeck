@@ -7,6 +7,10 @@ use crate::{CheckOutcome, CheckSource, StatusCheck};
 
 /// Checks per page: GraphQL's largest.
 pub(crate) const CHECKS_PAGE_SIZE: u32 = 100;
+/// GitHub's `mergeable` value of a pull request that can merge into its base.
+pub(crate) const MERGEABLE: &str = "MERGEABLE";
+/// GitHub's `mergeable` value of a pull request that conflicts with its base.
+pub(crate) const CONFLICTING: &str = "CONFLICTING";
 
 /// The head commit's rollup and one page of its checks (`$after` is the
 /// previous page's end, `null` for the first), and the checks the base

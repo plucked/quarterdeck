@@ -1,13 +1,16 @@
 use std::collections::HashMap;
-use std::fmt::Write as _;
 
 use serde::Deserialize;
 
+use crate::aliased_pull_requests_query::{AliasedPullRequestsData, AliasedPullRequestsQuery};
 use crate::{PullRequestBranches, ViewerReview};
 
-/// The alias prefix of each looked-up pull request (`pr7`): GraphQL field
-/// aliases must start with a letter.
-const ALIAS_PREFIX: &str = "pr";
+/// The lookup of pull requests' branches and the viewer's latest review.
+const LOOKUP_QUERY: AliasedPullRequestsQuery = AliasedPullRequestsQuery {
+    operation: "PullRequestLookup",
+    alias_prefix: "pr",
+    selection: "number headRefName baseRefName viewerLatestReview { state }",
+};
 
 /// What a lookup found of one pull request.
 pub(crate) struct LookedUpPullRequest {
@@ -17,27 +20,16 @@ pub(crate) struct LookedUpPullRequest {
 
 /// The GraphQL text looking up the branches and the viewer's latest review
 /// of pull requests `numbers` of the repository in the `owner` and `name`
-/// variables, one aliased `pullRequest(number:)` field each. The numbers
-/// are integers, so writing them into the text cannot change the query.
+/// variables, one aliased `pullRequest(number:)` field each.
 pub(crate) fn pull_request_lookup_query(numbers: &[u64]) -> String {
-    let mut fields = String::new();
-    for number in numbers {
-        // Writing to a String cannot fail.
-        let _ = writeln!(
-            fields,
-            "    {ALIAS_PREFIX}{number}: pullRequest(number: {number}) {{ number headRefName baseRefName viewerLatestReview {{ state }} }}"
-        );
-    }
-    format!(
-        "query PullRequestLookup($owner: String!, $name: String!) {{\n  repository(owner: $owner, name: $name) {{\n{fields}  }}\n}}\n"
-    )
+    LOOKUP_QUERY.text(numbers)
 }
 
 /// The data of a [`pull_request_lookup_query`].
 #[derive(Deserialize)]
+#[serde(transparent)]
 pub(crate) struct PullRequestLookupData {
-    /// `None` when the repository is gone or invisible to the token.
-    repository: Option<HashMap<String, Option<LookupNode>>>,
+    found: AliasedPullRequestsData<LookupNode>,
 }
 
 /// One looked-up pull request.
@@ -58,10 +50,8 @@ struct ReviewNode {
 impl PullRequestLookupData {
     /// What was found, by pull request number.
     pub fn into_pull_requests(self) -> HashMap<u64, LookedUpPullRequest> {
-        self.repository
-            .into_iter()
-            .flat_map(HashMap::into_values)
-            .flatten()
+        self.found
+            .into_pull_requests()
             .map(|node| {
                 let looked_up = LookedUpPullRequest {
                     branches: PullRequestBranches {
@@ -83,15 +73,13 @@ mod tests {
     use super::*;
     use crate::graphql_response::GraphQlResponse;
 
-    /// The query asks for each number under its own alias.
+    /// The query asks for each number's branches and review under its own alias.
     #[test]
     fn writes_one_aliased_field_per_number() {
-        let query = pull_request_lookup_query(&[7, 12]);
-        assert!(query.contains(
-            "pr7: pullRequest(number: 7) { number headRefName baseRefName viewerLatestReview { state } }"
-        ));
-        assert!(query.contains("pr12: pullRequest(number: 12)"));
-        assert!(query.contains("repository(owner: $owner, name: $name)"));
+        assert_eq!(
+            pull_request_lookup_query(&[7, 12]),
+            "query PullRequestLookup($owner: String!, $name: String!) {\n  repository(owner: $owner, name: $name) {\n    pr7: pullRequest(number: 7) { number headRefName baseRefName viewerLatestReview { state } }\n    pr12: pullRequest(number: 12) { number headRefName baseRefName viewerLatestReview { state } }\n  }\n}\n"
+        );
     }
 
     /// The answer maps to branches and reviews by number; a null field is skipped, a pending review is none.

@@ -38,6 +38,7 @@
 //! - `listed_pull_request_details.rs`: `ListedPullRequestDetails`, a listed pull request's branches and stack membership.
 //! - `listed_details_query.rs`: the GraphQL query for those details and its response.
 //! - `pull_request_branches.rs`: `PullRequestBranches`, the branches a pull request comes from and goes into.
+//! - `aliased_pull_requests_query.rs`: `AliasedPullRequestsQuery`, a GraphQL query reading chosen pull requests of one repository under one alias each, and its data.
 //! - `pull_request_lookup_query.rs`: the GraphQL query for the branches and viewer review of chosen pull requests of one repository.
 //! - `viewer_review.rs`: `ViewerReview`, the viewer's latest submitted review verdict.
 //! - `pull_request_stack.rs`: `PullRequestStack`, a stack with its layers, and its response shape.
@@ -71,6 +72,7 @@
 //! - `workflow_jobs_response.rs`: the REST answers of a commit's Actions runs, their jobs and its statuses.
 //! - `workflow_job_requests.rs`: `GitHubClient::workflow_job_checks`, a commit's checks read through GitHub Actions.
 
+mod aliased_pull_requests_query;
 mod api_usage;
 mod changed_file_requests;
 mod check_outcome;

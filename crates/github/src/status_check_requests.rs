@@ -2,7 +2,8 @@ use crate::expected_checks::{RequiredMarks, add_expected_checks};
 use crate::github_client::graphql_error;
 use crate::layer_conflicts_query::{LayerConflictsData, layer_conflicts_query};
 use crate::status_checks_query::{
-    CHECKS_PAGE_SIZE, STATUS_CHECKS_QUERY, StatusChecksData, StatusChecksPage,
+    CHECKS_PAGE_SIZE, CONFLICTING, MERGEABLE, STATUS_CHECKS_QUERY, StatusChecksData,
+    StatusChecksPage,
 };
 use crate::{
     CheckDetails, ConflictLocation, GitHubClient, GitHubError, MergeConflict, PullRequestChecks,
@@ -14,9 +15,6 @@ const MAX_CHECK_PAGES: usize = 10;
 /// The statuses a token gets for what it may not read.
 const FORBIDDEN: u16 = 403;
 const NOT_FOUND: u16 = 404;
-/// GitHub's `mergeable` values the conflict lookup reads.
-const MERGEABLE: &str = "MERGEABLE";
-const CONFLICTING: &str = "CONFLICTING";
 
 impl GitHubClient {
     /// The checks on pull request `number`'s head commit: one GraphQL
