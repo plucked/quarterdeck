@@ -2,13 +2,15 @@ use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::{AppContext as _, ClipboardItem, Context, Window};
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewScope, ReviewSummary};
-use qd_github::{
-    LineSide, NewReviewThread, NewThreadReply, ReviewEvent, ReviewSubmission, SubmittedPart,
-};
+use qd_github::{NewReviewThread, NewThreadReply, ReviewEvent, ReviewSubmission, SubmittedPart};
 
 use super::comment_editor::{CommentEditor, EditorTarget};
 use super::comment_placement::CommentPlacement;
+use super::comment_range::CommentRange;
+use super::comment_scope::CommentScope;
+use super::composer_opening::ComposerOpening;
 use super::detail_row::DetailRow;
+use super::diff_line_ref::DiffLineRef;
 use super::local_review_export::{ReviewExportHeader, local_review_markdown};
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
@@ -23,6 +25,15 @@ use crate::ui_state::{ReviewChange, UiStateRecorder};
 
 /// The placeholder of a new comment's editor.
 const COMMENT_PLACEHOLDER: &str = "Write a comment… (⌘↩ to save, esc to cancel)";
+
+/// A GitHub review to submit, with the ids of the notes its new
+/// conversations and replies come from, in order, so each draft GitHub
+/// takes can be dropped as it is taken.
+struct CollectedSubmission {
+    submission: ReviewSubmission,
+    thread_notes: Vec<NoteId>,
+    reply_notes: Vec<NoteId>,
+}
 
 impl PullRequestDetail {
     /// Where new comments go now: the chosen destination for a single pull
@@ -39,13 +50,25 @@ impl PullRequestDetail {
         *self.target() == ReviewTarget::Layer
     }
 
+    /// Which comments the diff shows for the shown target.
+    fn comment_scope(&self) -> CommentScope {
+        match self.target() {
+            ReviewTarget::Layer => CommentScope::GitHubAndLocal,
+            ReviewTarget::Combined(_) | ReviewTarget::AwaitingStack => CommentScope::LocalOnly,
+        }
+    }
+
     /// Recomputes the cards for the active destination and where they and
     /// the composer go; the row rebuild that follows places them.
     pub(super) fn refresh_comment_layout(&mut self) {
         let composer = match self.review().editor.as_ref().map(|editor| &editor.target) {
             Some(EditorTarget::NewComment {
                 file, side, line, ..
-            }) => Some((*file, *side, *line)),
+            }) => Some(DiffLineRef {
+                file: *file,
+                side: *side,
+                line: *line,
+            }),
             Some(_) | None => None,
         };
         let files: Vec<String> = self
@@ -53,10 +76,10 @@ impl PullRequestDetail {
             .iter()
             .map(|loaded| loaded.filename().to_owned())
             .collect();
-        let include_github = self.can_review_on_github();
+        let scope = self.comment_scope();
         let review = self.review_mut();
         review.comments.refresh_documents();
-        review.cards = review.comments.cards(include_github);
+        review.cards = review.comments.cards(scope);
         review.placement = CommentPlacement::build(
             &review.cards,
             |path| files.iter().position(|file| file == path),
@@ -136,18 +159,17 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Opens the editor of a new comment under line `line` of `side` in file
-    /// `file`; with `extend` (shift-click) and an editor open on the same
-    /// file and side, stretches that comment over the lines in between.
+    /// Opens the editor of a new comment under `at`; opened to extend
+    /// (shift-click) with an editor open on the same file and side, stretches
+    /// that comment over the lines in between instead.
     pub(super) fn open_composer(
         &mut self,
-        file: usize,
-        side: LineSide,
-        line: u32,
-        extend: bool,
+        at: DiffLineRef,
+        opening: ComposerOpening,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let DiffLineRef { file, side, line } = at;
         let Some(path) = self
             .loaded_files()
             .get(file)
@@ -157,7 +179,7 @@ impl PullRequestDetail {
         };
 
         // A shift-click on the same file and side makes the open comment span the lines.
-        if extend
+        if opening == ComposerOpening::ExtendOpen
             && let Some(editor) = &mut self.review_mut().editor
             && let EditorTarget::NewComment {
                 file: open_file,
@@ -280,18 +302,18 @@ impl PullRequestDetail {
         }
     }
 
-    /// The lines the comment being written or edited is about: file, side,
-    /// first and last line; `None` without one (or for a reply).
-    pub(super) fn comment_range(&self) -> Option<(usize, LineSide, u32, u32)> {
+    /// The lines the comment being written or edited is about; `None`
+    /// without one (or for a reply).
+    pub(super) fn comment_range(&self) -> Option<CommentRange> {
         let editor = self.review().editor.as_ref()?;
-        let (file, side, line, start_line) = match &editor.target {
+        match &editor.target {
             EditorTarget::NewComment {
                 file,
                 side,
                 line,
                 start_line,
                 ..
-            } => (*file, *side, *line, *start_line),
+            } => Some(CommentRange::ending_at(*file, *side, *line, *start_line)),
             EditorTarget::EditNote(id) => {
                 let note = self.review().comments.note(*id)?;
                 let NoteAnchor::Line {
@@ -302,11 +324,11 @@ impl PullRequestDetail {
                 else {
                     return None;
                 };
-                (self.file_of_path(&note.path)?, *side, *line, *start_line)
+                let file = self.file_of_path(&note.path)?;
+                Some(CommentRange::ending_at(file, *side, *line, *start_line))
             }
-            EditorTarget::Reply { .. } | EditorTarget::EditGitHubComment { .. } => return None,
-        };
-        Some((file, side, start_line.unwrap_or(line), line))
+            EditorTarget::Reply { .. } | EditorTarget::EditGitHubComment { .. } => None,
+        }
     }
 
     /// Lets the list measure the editor's row again as its text grows.
@@ -648,7 +670,11 @@ impl PullRequestDetail {
             return;
         };
 
-        let (mut submission, thread_notes, reply_notes) = self.collect_submission();
+        let CollectedSubmission {
+            mut submission,
+            thread_notes,
+            reply_notes,
+        } = self.collect_submission();
         // GitHub refuses approving or requesting changes on one's own pull request.
         if state.viewer_is_author {
             submission.event = ReviewEvent::Comment;
@@ -724,7 +750,7 @@ impl PullRequestDetail {
 
     /// The GitHub review to submit from the drafts and the summary, with
     /// the note ids of its threads and replies in order.
-    fn collect_submission(&self) -> (ReviewSubmission, Vec<NoteId>, Vec<NoteId>) {
+    fn collect_submission(&self) -> CollectedSubmission {
         // The drafts: new conversations and replies, with their note ids.
         let drafts: Vec<ReviewNote> = self
             .review()
@@ -768,7 +794,11 @@ impl PullRequestDetail {
             threads,
             replies,
         };
-        (submission, thread_notes, reply_notes)
+        CollectedSubmission {
+            submission,
+            thread_notes,
+            reply_notes,
+        }
     }
 
     /// Copies the local notes as Markdown for an agent.

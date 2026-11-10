@@ -6,6 +6,8 @@ use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewSummary};
 use qd_github::{LineSide, PullRequestReviewState};
 use qd_markdown::MarkdownDocument;
 
+use super::comment_scope::CommentScope;
+
 /// One card of comments in the diff.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommentCard {
@@ -47,13 +49,15 @@ pub struct ReviewComments {
 }
 
 impl ReviewComments {
-    /// The cards to show: GitHub's conversations and drafts (with
-    /// `include_github`, on a single pull request) and the local notes.
-    pub fn cards(&self, include_github: bool) -> Vec<PlacedCard> {
+    /// The cards to show in `scope`: GitHub's conversations and drafts (on
+    /// a single pull request) and the local notes.
+    pub fn cards(&self, scope: CommentScope) -> Vec<PlacedCard> {
         let mut cards = Vec::new();
 
         // GitHub's conversations, each with the drafts replying to it.
-        if include_github && let Some(state) = &self.github {
+        if scope.includes(NoteDestination::GitHub)
+            && let Some(state) = &self.github
+        {
             for (index, thread) in state.threads.iter().enumerate() {
                 let replies = self
                     .notes
@@ -80,7 +84,7 @@ impl ReviewComments {
         for note in self
             .notes
             .iter()
-            .filter(|note| include_github || note.destination == NoteDestination::Local)
+            .filter(|note| scope.includes(note.destination))
         {
             if let NoteAnchor::Line {
                 side,

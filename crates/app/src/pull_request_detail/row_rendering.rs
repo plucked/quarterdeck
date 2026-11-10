@@ -9,8 +9,10 @@ use qd_cache::{DiffLayout, LineWrapping, PanelVisibility};
 use qd_diff::{GapPlace, LineOrigin};
 use qd_github::LineSide;
 
+use super::composer_opening::ComposerOpening;
 use super::detail_mode::DetailMode;
 use super::detail_row::DetailRow;
+use super::diff_line_ref::DiffLineRef;
 use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
 use super::selection_granularity::DOUBLE_CLICK;
@@ -382,17 +384,15 @@ impl PullRequestDetail {
         content: AnyElement,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some((side, line)) = numbers.primary() else {
+        let Some(primary) = numbers.primary(file) else {
             return content;
         };
-        let is_in_comment =
-            self.comment_range()
-                .is_some_and(|(range_file, range_side, first, last)| {
-                    range_file == file
-                        && numbers
-                            .on(range_side)
-                            .is_some_and(|number| (first..=last).contains(&number))
-                });
+        let is_in_comment = self.comment_range().is_some_and(|range| {
+            range.file == file
+                && numbers
+                    .on(range.side)
+                    .is_some_and(|number| (range.first..=range.last).contains(&number))
+        });
 
         // The hover area reaches into the pane's padding where the `+` sits,
         // so moving the pointer onto the `+` keeps it shown.
@@ -411,14 +411,16 @@ impl PullRequestDetail {
                     .code_segments()
                     .hit(event.position())
                     .map(|(side, _)| side);
-                let (side, line) = match (clicked_side, numbers.old) {
-                    (Some(DiffSide::Old), Some(old)) => (LineSide::Old, old),
-                    (Some(DiffSide::Old | DiffSide::New | DiffSide::Unified) | None, _) => {
-                        (side, line)
-                    }
+                let at = match (clicked_side, numbers.old) {
+                    (Some(DiffSide::Old), Some(old)) => DiffLineRef {
+                        file,
+                        side: LineSide::Old,
+                        line: old,
+                    },
+                    (Some(DiffSide::Old | DiffSide::New | DiffSide::Unified) | None, _) => primary,
                 };
                 detail.clear_diff_selection();
-                detail.open_composer(file, side, line, false, window, cx);
+                detail.open_composer(at, ComposerOpening::New, window, cx);
             }))
             .child(content)
             .when(is_in_comment, |row| {
@@ -455,7 +457,12 @@ impl PullRequestDetail {
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |detail, event: &ClickEvent, window, cx| {
                         cx.stop_propagation();
-                        detail.open_composer(file, side, line, event.modifiers().shift, window, cx);
+                        let opening = if event.modifiers().shift {
+                            ComposerOpening::ExtendOpen
+                        } else {
+                            ComposerOpening::New
+                        };
+                        detail.open_composer(primary, opening, window, cx);
                     }))
                     .child("+"),
             )
@@ -471,11 +478,13 @@ struct RowLines {
 }
 
 impl RowLines {
-    /// The line a comment on the row goes to: the new side's, else the old side's.
-    fn primary(self) -> Option<(LineSide, u32)> {
+    /// The line of file `file` a comment on the row goes to: the new
+    /// side's, else the old side's.
+    fn primary(self, file: usize) -> Option<DiffLineRef> {
+        let on = |side, line| DiffLineRef { file, side, line };
         self.new
-            .map(|line| (LineSide::New, line))
-            .or(self.old.map(|line| (LineSide::Old, line)))
+            .map(|line| on(LineSide::New, line))
+            .or(self.old.map(|line| on(LineSide::Old, line)))
     }
 
     /// The row's line on `side`.

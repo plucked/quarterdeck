@@ -9,6 +9,7 @@ use super::changed_files::ChangedFiles;
 use super::comment_placement::CommentPlacement;
 use super::detail_content::DetailContent;
 use super::detail_row::DetailRow;
+use super::diff_line_ref::DiffLineRef;
 use super::loaded_file::LoadedFile;
 use crate::diff_line_sides::line_number_on;
 use crate::diff_view::{FileDiffState, FileNote};
@@ -197,17 +198,19 @@ fn push_comment_rows(
     comments: &CommentPlacement,
     placed: &mut HashSet<usize>,
 ) {
-    for (side, line) in anchors.iter().flatten() {
-        for card in comments.cards_on(file, *side, *line) {
+    let lines: Vec<DiffLineRef> = anchors
+        .iter()
+        .flatten()
+        .map(|&(side, line)| DiffLineRef { file, side, line })
+        .collect();
+    for line in &lines {
+        for card in comments.cards_on(*line) {
             if placed.insert(*card) {
                 rows.push(DetailRow::CommentCard { file, card: *card });
             }
         }
     }
-    let has_composer = anchors
-        .iter()
-        .flatten()
-        .any(|(side, line)| comments.has_composer_on(file, *side, *line));
+    let has_composer = lines.iter().any(|line| comments.has_composer_on(*line));
     if has_composer {
         rows.push(DetailRow::Composer { file });
     }

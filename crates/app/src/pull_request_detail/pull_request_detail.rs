@@ -19,6 +19,7 @@ use qd_markdown::MarkdownDocument;
 use qd_syntax::DiffSyntax;
 
 use super::action_panel::ActionPanel;
+use super::batch_progress::BatchProgress;
 use super::brief_actions::detail_brief_handlers;
 use super::brief_pane::BriefPane;
 use super::changed_files::ChangedFiles;
@@ -191,7 +192,7 @@ pub struct PullRequestDetail {
     /// The stack being loaded; replacing it cancels the previous one.
     stack_task: Option<Task<()>>,
     /// Syntax batches colored of all started, while highlighting runs.
-    highlight_progress: Option<(usize, usize)>,
+    highlight_progress: Option<BatchProgress>,
     /// The side panel's width, as dragged (and saved).
     side_panel_width: f32,
     /// Where each row starts, estimated for the scrollbar (the list lays
@@ -506,7 +507,7 @@ impl PullRequestDetail {
     }
 
     /// Syntax batches colored of all, while highlighting runs.
-    pub(super) fn highlight_progress(&self) -> Option<(usize, usize)> {
+    pub(super) fn highlight_progress(&self) -> Option<BatchProgress> {
         self.highlight_progress
     }
 
@@ -1683,14 +1684,20 @@ impl PullRequestDetail {
 
         // Show batches in order, counting them for the indicator; dropping this task cancels the rest.
         let batch_count = batches.len();
-        self.highlight_progress = Some((0, batch_count));
+        self.highlight_progress = Some(BatchProgress {
+            done: 0,
+            total: batch_count,
+        });
         self.syntax_task = Some(cx.spawn(async move |detail, cx| {
             for (index, batch) in batches.into_iter().enumerate() {
                 let highlighted = batch.await;
                 let applied = detail.update(cx, |detail, cx| {
                     detail.apply_syntax(highlighted);
                     let done = index + 1;
-                    detail.highlight_progress = (done < batch_count).then_some((done, batch_count));
+                    detail.highlight_progress = (done < batch_count).then_some(BatchProgress {
+                        done,
+                        total: batch_count,
+                    });
                     cx.notify();
                 });
                 if applied.is_err() {

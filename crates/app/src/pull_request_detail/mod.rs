@@ -36,12 +36,17 @@
 //! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
 //! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.
 //! - `load_progress.rs`: `LoadProgress`, how far loading the files has come.
+//! - `batch_progress.rs`: `BatchProgress`, how many of the syntax coloring's batches are done.
 //! - `review_target.rs`: `ReviewTarget`, one layer or a combined range of stack layers.
 //! - `fetch_combined_files.rs`: gets a combined range's files from the cache or one diff download.
 //! - `stack_bar_rendering.rs`: the header's stack line: layer, neighbours, review mode, range.
 //! - `review_pane.rs`: `ReviewPane`, the detail's review state: comments, cards, editor, tab.
 //! - `review_comments.rs`: `ReviewComments`, GitHub's conversations and the user's notes, as cards.
 //! - `comment_placement.rs`: `CommentPlacement`, which line each card and the composer go under.
+//! - `diff_line_ref.rs`: `DiffLineRef`, one line of a loaded file's diff, by file, side and number.
+//! - `comment_range.rs`: `CommentRange`, the lines the comment being written is about.
+//! - `comment_scope.rs`: `CommentScope`, whether GitHub's comments show with the local notes.
+//! - `composer_opening.rs`: `ComposerOpening`, a new comment or stretching the open one.
 //! - `comment_editor.rs`: `CommentEditor`, the comment being written and what it is for.
 //! - `operation_status.rs`: `OperationStatus`, how the last review or pull request action went, and its line.
 //! - `side_panel_tab.rs`: `SidePanelTab`, files, review, actions or checks.
@@ -70,6 +75,7 @@
 mod action_panel;
 mod action_panel_rendering;
 mod activity_rendering;
+mod batch_progress;
 mod brief_actions;
 mod brief_code;
 mod brief_job;
@@ -81,6 +87,9 @@ mod changed_rows;
 mod comment_card_rendering;
 mod comment_editor;
 mod comment_placement;
+mod comment_range;
+mod comment_scope;
+mod composer_opening;
 mod context_expansion;
 mod context_loads;
 mod detail_content;
@@ -88,6 +97,7 @@ mod detail_event;
 mod detail_mode;
 mod detail_row;
 mod detail_row_list;
+mod diff_line_ref;
 mod diff_selection;
 mod fetch_changed_files;
 mod fetch_combined_files;

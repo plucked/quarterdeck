@@ -5,6 +5,7 @@ use gpui::{
     prelude::*, px, relative,
 };
 
+use super::batch_progress::BatchProgress;
 use super::pull_request_detail::PullRequestDetail;
 use crate::count_as_f32::count_as_f32;
 use crate::pulsing_status::dot_pulse;
@@ -47,7 +48,7 @@ impl PullRequestDetail {
                 is_network: true,
             });
         }
-        let (done, total) = self.highlight_progress()?;
+        let BatchProgress { done, total } = self.highlight_progress()?;
         Some(Activity {
             label: format!("Coloring syntax… {done} of {total}").into(),
             fraction: Some(share(done, total)),
