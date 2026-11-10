@@ -4,6 +4,7 @@ use anyhow::Result;
 use qd_github::{Label, PullRequest, PullRequestBranches, RepoRef, StackMembership, User};
 use rusqlite::{Row, Transaction, params};
 
+use crate::cached_statements::execute_cached;
 use crate::sql_integers::{read_u64, sql_integer};
 use crate::unix_now::unix_now;
 use crate::viewer_review_sql_text::{viewer_review_as_sql_text, viewer_review_from_sql_text};
@@ -34,7 +35,8 @@ impl GitHubCache {
         // Upsert each pull request and record its position in the list.
         for (position, pull_request) in pull_requests.iter().enumerate() {
             let id = upsert_pull_request(&transaction, pull_request, fetched_at)?;
-            transaction.execute(
+            execute_cached(
+                &transaction,
                 "INSERT INTO pr_lists (list_key, pr_id, position) VALUES (?1, ?2, ?3)",
                 params![list_key.as_str(), id, i64::try_from(position)?],
             )?;
@@ -158,9 +160,10 @@ fn upsert_pull_request(
     upsert_pull_request_row(transaction, pull_request, id, fetched_at)?;
 
     // Its labels replace the ones stored before.
-    transaction.execute("DELETE FROM pr_labels WHERE pr_id = ?1", [id])?;
+    execute_cached(transaction, "DELETE FROM pr_labels WHERE pr_id = ?1", [id])?;
     for (position, label) in pull_request.labels.iter().enumerate() {
-        transaction.execute(
+        execute_cached(
+            transaction,
             "INSERT INTO pr_labels (pr_id, position, name, color) VALUES (?1, ?2, ?3, ?4)",
             params![id, i64::try_from(position)?, label.name, label.color],
         )?;
@@ -177,7 +180,8 @@ fn upsert_pull_request_row(
 ) -> Result<()> {
     let stack = pull_request.stack.as_ref();
     let branches = pull_request.branches.as_ref();
-    transaction.execute(
+    execute_cached(
+        transaction,
         "INSERT INTO pull_requests (
             id, repo_owner, repo_name, number, title, body, author_login,
             author_avatar_url, html_url, draft, created_at, updated_at, fetched_at,

@@ -2,6 +2,7 @@ use anyhow::Result;
 use qd_github::{ETag, PullRequestStack, RepoRef, StackLayer};
 use rusqlite::{OptionalExtension, Row, params};
 
+use crate::cached_statements::execute_cached;
 use crate::sql_integers::{read_u64, sql_integer};
 use crate::unix_now::unix_now;
 use crate::{CachedStack, GitHubCache};
@@ -93,7 +94,8 @@ impl GitHubCache {
 
         // Insert the layers bottom first.
         for (position, layer) in stack.layers.iter().enumerate() {
-            transaction.execute(
+            execute_cached(
+                &transaction,
                 "INSERT INTO pr_stack_layers (
                     repo_owner, repo_name, stack_number, position, pr_id, pr_number, title,
                     is_open, is_draft, is_merged, html_url, head_ref, head_sha, base_ref,

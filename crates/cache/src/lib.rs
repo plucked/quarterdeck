@@ -16,6 +16,7 @@
 //! - `cache_settings_storage.rs`: reads and writes of the cache TTL.
 //! - `color_theme.rs`: `ColorTheme`, the app's color theme.
 //! - `appearance_settings_storage.rs`: reads and writes of the color theme.
+//! - `cached_statements.rs`: `execute_cached`, a write through the connection's statement cache, for statements run per row.
 //! - `sql_integers.rs`: checked conversions between GitHub numbers and SQLite integers.
 //! - `unix_now.rs`: the current time as stored.
 //! - `ui_state_store.rs`: `UiStateStore`, the UI state connection; each topic's reads and writes sit in its `…_storage.rs` file.
@@ -83,6 +84,7 @@ mod cache_usage;
 mod cache_usage_storage;
 mod cached_file_set;
 mod cached_stack;
+mod cached_statements;
 mod cleanup_counts;
 mod color_theme;
 mod comparison_storage;

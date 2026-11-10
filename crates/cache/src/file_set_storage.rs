@@ -2,6 +2,7 @@ use anyhow::Result;
 use qd_github::{ETag, PullRequest, PullRequestFile, PullRequestRevision};
 use rusqlite::{OptionalExtension, Row, params};
 
+use crate::cached_statements::execute_cached;
 use crate::sql_integers::{read_u64, sql_integer};
 use crate::unix_now::unix_now;
 use crate::{CachedFileSet, FileSetRevision, GitHubCache};
@@ -115,7 +116,8 @@ impl GitHubCache {
 
         // Insert the files in GitHub's order.
         for (position, file) in files.iter().enumerate() {
-            transaction.execute(
+            execute_cached(
+                &transaction,
                 "INSERT INTO pr_files (
                     pr_id, position, filename, previous_filename, status, additions, deletions,
                     patch, sha)

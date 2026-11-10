@@ -6,7 +6,7 @@ use qd_studio::{
     RequestLayer, SequenceLane, SequenceMessage, Studio, StudioGraph, StudioPage, StudioSequence,
     StudioTable, StudioTour, StudioWidget, TableRole, ToolCall, TourStep,
 };
-use rusqlite::{OptionalExtension, Params, Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::brief_sql_text::{
     change_from_sql_text, change_sql_text, edge_style_from_sql_text, edge_style_sql_text,
@@ -14,6 +14,7 @@ use crate::brief_sql_text::{
     role_from_sql_text, role_sql_text, side_from_sql_text, side_sql_text, tone_from_sql_text,
     tone_sql_text, weight_from_sql_text, weight_sql_text,
 };
+use crate::cached_statements::execute_cached;
 use crate::scope_columns::ScopeColumns;
 use crate::sql_integers::{read_u64, sql_integer};
 use crate::{BriefIndex, ReviewScope, StoredBrief, UiStateStore};
@@ -21,12 +22,6 @@ use crate::{BriefIndex, ReviewScope, StoredBrief, UiStateStore};
 /// The scope condition of a brief query, the scope columns as ?1 to ?5.
 const SCOPE_MATCH: &str = "pr_id IS ?1 AND repo_owner IS ?2 AND repo_name IS ?3
     AND first_number IS ?4 AND last_number IS ?5";
-
-/// Runs `sql` with `params` through the connection's statement cache, so a
-/// statement run for every row is compiled once.
-fn execute_cached(transaction: &Transaction, sql: &str, params: impl Params) -> Result<usize> {
-    Ok(transaction.prepare_cached(sql)?.execute(params)?)
-}
 
 /// An anchor as its four nullable columns: path, side, first and last line.
 type AnchorColumns<'a> = (

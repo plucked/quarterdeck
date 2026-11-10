@@ -3,6 +3,7 @@ use qd_github::{PullRequestFile, RepoRef};
 use rusqlite::params;
 
 use crate::GitHubCache;
+use crate::cached_statements::execute_cached;
 use crate::file_set_storage::pull_request_file_from_row;
 use crate::sql_integers::sql_integer;
 use crate::unix_now::unix_now;
@@ -63,7 +64,8 @@ impl GitHubCache {
 
         // Insert the files in the diff's order.
         for (position, file) in files.iter().enumerate() {
-            transaction.execute(
+            execute_cached(
+                &transaction,
                 "INSERT INTO compare_files (
                     repo_owner, repo_name, base_sha, head_sha, position, filename,
                     previous_filename, status, additions, deletions, patch, sha)
