@@ -3,7 +3,8 @@
 //! restores after a relaunch. All state is stored in typed columns.
 //!
 //! Files:
-//! - `github_cache.rs`: `GitHubCache`, cached pull requests and lists.
+//! - `github_cache.rs`: `GitHubCache`, the connection to the cached GitHub data.
+//! - `pull_request_storage.rs`: cached pull requests and lists, with their labels and row mapping.
 //! - `file_set_storage.rs`: a pull request's cached changed files, and confirming them.
 //! - `cache_cleanup.rs`: removing expired cache entries, and clearing the cache.
 //! - `cache_usage.rs`: `CacheUsage` and `CachedData`, how much the cache holds and takes on disk.
@@ -111,6 +112,7 @@ mod panel_widths;
 mod panel_widths_storage;
 mod patch_fingerprint;
 mod pull_request_list_key;
+mod pull_request_storage;
 mod queue_tab;
 mod review_layout_state;
 mod review_layout_storage;

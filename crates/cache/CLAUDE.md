@@ -2,7 +2,7 @@
 
 | Module | Holds |
 |---|---|
-| `github_cache` | `GitHubCache`: cached pull requests, lists and changed files, with row mapping |
+| `github_cache` / `pull_request_storage` | `GitHubCache` (open, connection); cached pull requests and lists (`replace_list`, `put_pull_request`, `pull_request`, `pull_request_by_number`, `list`), labels, with row mapping |
 | `ui_state_store` / `window_placement_storage` / `review_queue_view_storage` | `UiStateStore` (the UI state connection; each topic's reads and writes in its own `…_storage.rs`); the window placement row; the review queue view row (selection, detail scroll, tab, sidebar) |
 | `database_connection` | database path (`Quarterdeck/`, or `Quarterdeck Dev/` in debug builds, seeded once by `VACUUM INTO` from the release database, into a temporary file moved into place) and connection setup (WAL, foreign keys, migrations); `prepare_data_directory` runs before the default database opens |
 | `watched_repositories_storage` | the repositories the Others tab lists (`watched_repositories`, ordered by `position`; a preference, never expired) |
@@ -34,7 +34,7 @@
 - Pull requests keep their labels in `pr_labels` (position order, cascade-deleted with the pull request). Migration 20 added it, the Others tables and `queue_tab = 'others'` (the column re-made with the wider CHECK, its value kept).
 - Schema changes append a new entry to `SCHEMA_MIGRATIONS`; never edit a shipped one. A database whose `user_version` is past the known migrations (a newer app ran) is refused, not opened.
 - Every field is its own typed column; nothing is stored as JSON. Changed files are `pr_file_sets` (version tag) + `pr_files` (one row per file, `position` keeps GitHub's order).
-- Adding a field to a `qd-github` type means a migration adding its column and updating the row mapping in `github_cache.rs`.
+- Adding a field to a `qd-github` type means a migration adding its column and updating the row mapping in `pull_request_storage.rs`.
 - UI state tables hold one row (`id = 1`); `review_queue_view.selected_pr_id`, `viewed_files.pr_id` and `combined_viewed_files` have no foreign key (the PR may be gone or refetched; the user's state stays). Combined marks are keyed by repo + first and last layer number.
 - `pull_requests` carries the stack membership (`stack_*` columns, all NULL for a standalone PR) and the branches (`head_ref`, `base_ref`; NULL until GraphQL answered) and the viewer's latest review (`viewer_review`, CHECKed text mapped in `viewer_review_sql_text.rs`; NULL: none or not known). The migration adding `viewer_review` cleared the cached branches, so others' pull requests are looked up once again. `put_pull_request`/`pull_request(id)` hold a stack layer opened outside any list.
 - `review_notes`: one table for both destinations; scope is `pr_id` or (repo, first, last layer numbers), enforced by CHECKs; anchor is (side, line, start_line) or `reply_to_thread`. GitHub drafts are deleted by the app as GitHub takes them.
