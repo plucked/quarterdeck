@@ -1,6 +1,6 @@
 //! The main view: the viewer's own pull requests, those that request
-//! their review and others' in watched repositories on the left (a tab
-//! each, grouped by repository and stack), and the selected one in the
+//! their review or that they reviewed, and others' in watched repositories
+//! on the left (Mine, Review and Others tabs, grouped by repository and stack), and the selected one in the
 //! detail pane on the right. It opens
 //! stack layers the detail asks for, and records the tab, selection and
 //! detail scroll as UI state to restore them after a relaunch.
@@ -15,7 +15,7 @@
 //! - `selection_after_refresh.rs`: decides what stays selected when the queue is replaced.
 //! - `selection_restore.rs`: decides how a selection saved before a relaunch is restored.
 //! - `restore_phase.rs`: `RestorePhase`, which queue a saved selection is matched against.
-//! - `queue_lists.rs`: `QueueLists`, the authored, review-requested and others' lists.
+//! - `queue_lists.rs`: `QueueLists`, the authored, review-requested, reviewed and others' lists.
 //! - `hidden_branches.rs`: whether the hidden branch rules hide a pull request, and the lists without those.
 //! - `others_tab.rs`: `OthersTab`, the Others tab's state: watched repositories, their filters, what passes, their order.
 //! - `others_tab_actions.rs`: the queue's Others actions: open a filter, change it, follow the watched repositories.

@@ -97,7 +97,7 @@ impl ReviewQueue {
         )
     }
 
-    /// The Mine / Review tabs atop the list, and what is going on
+    /// The Mine / Review / Others tabs atop the list, and what is going on
     /// (refreshing, opening a layer, a failure) while it lasts.
     fn render_sidebar_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let status = self.render_status_line();

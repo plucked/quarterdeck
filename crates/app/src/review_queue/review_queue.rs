@@ -103,9 +103,10 @@ struct OpeningLayer {
     _task: Task<()>,
 }
 
-/// The main view: the viewer's own pull requests and those that request
-/// their review on the left (one tab each, stacks grouped), and the
-/// selected one in a [`PullRequestDetail`] on the right.
+/// The main view: the viewer's own pull requests, those that request their
+/// review or that they reviewed, and others' in the watched repositories on
+/// the left (the Mine, Review and Others tabs, grouped by repository and
+/// stack), and the selected one in a [`PullRequestDetail`] on the right.
 ///
 /// The lists are shown from the cache at once and refreshed from GitHub in
 /// the background: at launch, on cmd-r, on a timer after each refresh and
@@ -1056,12 +1057,12 @@ impl ReviewQueue {
             .update(cx, PullRequestDetail::mark_current_viewed_and_advance);
     }
 
-    /// Handles the `ToggleFileTree` action (cmd-b): shows or hides the file tree.
     /// Handles the `ToggleSidebar` action (ctrl-cmd-s): shows or hides the lists.
     fn on_toggle_sidebar(&mut self, _: &ToggleSidebar, _: &mut Window, cx: &mut Context<Self>) {
         self.toggle_sidebar(cx);
     }
 
+    /// Handles the `ToggleFileTree` action (cmd-b): shows or hides the side panel with the file tree.
     fn on_toggle_file_tree(&mut self, _: &ToggleFileTree, _: &mut Window, cx: &mut Context<Self>) {
         self.detail.update(cx, PullRequestDetail::toggle_file_tree);
     }
@@ -1187,7 +1188,7 @@ fn fetch_own_lists(
     watched: &[RepoRef],
     known_details: DetailsByNumber,
 ) -> anyhow::Result<OwnLists> {
-    // Both lists, then the branches and stacks of all three in one request.
+    // The three lists, then the branches and stacks of all of them in one request.
     let mut authored = client.authored()?;
     let mut review_requested = client.review_requested()?;
     let mut reviewed = client.reviewed_by_viewer()?;

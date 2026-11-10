@@ -548,8 +548,8 @@ pub fn read_viewed_files(store: &Mutex<UiStateStore>, scope: &ReviewScope) -> Ve
         })
 }
 
-/// Locks the store; see [`UiStateRecorder::lock_store`] for why a poisoned
-/// lock is safe to use.
+/// Locks the store. A poisoned lock is used as is: every store write is a
+/// single SQL statement, so a panic while holding the lock leaves the rows consistent.
 fn lock_store(store: &Mutex<UiStateStore>) -> MutexGuard<'_, UiStateStore> {
     store.lock().unwrap_or_else(PoisonError::into_inner)
 }

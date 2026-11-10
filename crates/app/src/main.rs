@@ -16,7 +16,7 @@
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
 //! - `fetch_stack.rs`: gets a stack's layers from the cache, and checks them with GitHub.
 //! - `word_range_at.rs`: the word around an offset, for double-click selection.
-//! - `theme.rs`: the color palette (Graphite) and fonts.
+//! - `theme/`: the eight color themes, the active one's colors, and the fonts.
 //! - `tree_locate_button.rs`: `TreeLocateButton`, the file header's icon button showing the file in the file tree.
 //! - `bundled_fonts.rs`: registers the fonts built into the binary (`Schibsted Grotesk`, `JetBrains Mono`).
 //! - `bundled_icons.rs`: `BundledIcons`, the asset source serving the SVG icons built into the binary.
