@@ -7,12 +7,6 @@ use crate::pull_request_lookup_query::{PullRequestLookupData, pull_request_looku
 use crate::search_issue::SearchIssue;
 use crate::{GitHubClient, GitHubError, OtherPullRequestsUpdate, PullRequest, RepoRef};
 
-/// Open pull requests by anyone but the viewer, most recently updated
-/// first, as the stack membership query searches for them (GraphQL search
-/// takes its order from the text); `repo:` qualifiers follow.
-const OTHERS_QUERY: &str = "is:pr is:open archived:false -author:@me sort:updated-desc";
-/// Repositories per stack membership search.
-const REPOSITORIES_PER_SEARCH: usize = 10;
 /// Pages of 100 issues and pull requests followed per repository and
 /// refresh (2000 items), so a huge repository cannot stall the refresh.
 const MAX_ISSUE_PAGES: usize = 20;
@@ -225,43 +219,9 @@ impl GitHubClient {
     }
 }
 
-/// The search texts for others' pull requests in `repositories`, ten
-/// repositories each, for the stack membership query; none without
-/// repositories.
-pub(crate) fn others_search_queries(repositories: &[RepoRef]) -> Vec<String> {
-    repositories
-        .chunks(REPOSITORIES_PER_SEARCH)
-        .map(|group| {
-            group.iter().fold(OTHERS_QUERY.to_owned(), |query, repo| {
-                format!("{query} repo:{}", repo.full_name())
-            })
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn repo(name: &str) -> RepoRef {
-        RepoRef {
-            owner: "o".into(),
-            name: name.into(),
-        }
-    }
-
-    /// Each search names its repositories, ten at most.
-    #[test]
-    fn groups_repositories_ten_per_search() {
-        let repositories: Vec<RepoRef> = (0..12).map(|index| repo(&format!("r{index}"))).collect();
-        let queries = others_search_queries(&repositories);
-        assert_eq!(queries.len(), 2);
-        assert_eq!(
-            queries[1],
-            "is:pr is:open archived:false -author:@me sort:updated-desc repo:o/r10 repo:o/r11"
-        );
-        assert_eq!(others_search_queries(&[]), Vec::<String>::new());
-    }
 
     /// With nothing known, every open pull request is fetched; a known end
     /// of the last sync wins over the newest known pull request.

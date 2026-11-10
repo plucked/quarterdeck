@@ -100,15 +100,14 @@ struct StackEntry {
 impl ListedDetailsData {
     /// The details of every pull request in the lists, each once.
     pub fn into_details(self) -> Vec<ListedPullRequestDetails> {
-        let data = self;
         let mut details: Vec<ListedPullRequestDetails> = Vec::new();
-        for node in data
+        for node in self
             .authored
             .nodes
             .into_iter()
-            .chain(data.review_requested.nodes)
-            .chain(data.reviewed.nodes)
-            .chain(data.others.into_iter().flat_map(|others| others.nodes))
+            .chain(self.review_requested.nodes)
+            .chain(self.reviewed.nodes)
+            .chain(self.others.into_iter().flat_map(|others| others.nodes))
         {
             let Some(listed) = node.into_listed() else {
                 continue;

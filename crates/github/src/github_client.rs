@@ -9,7 +9,6 @@ use ureq::{Body, RequestBuilder};
 use crate::graphql_response::GraphQlResponse;
 use crate::listed_details_query::{LISTED_DETAILS_QUERY, ListedDetailsData};
 use crate::next_page_url::next_page_url;
-use crate::other_pull_requests::others_search_queries;
 use crate::pull_request_revision::PullRequestRefs;
 use crate::pull_request_stack::StackResponse;
 use crate::search_issue::SearchIssue;
@@ -42,6 +41,12 @@ const REVIEW_REQUESTED_QUERY: &str = "is:pr is:open archived:false review-reques
 const AUTHORED_QUERY: &str = "is:pr is:open archived:false author:@me";
 /// Open pull requests by others that the viewer submitted a review on.
 const REVIEWED_QUERY: &str = "is:pr is:open archived:false reviewed-by:@me -author:@me";
+/// Open pull requests by anyone but the viewer, most recently updated
+/// first, as the stack membership query searches for them (GraphQL search
+/// takes its order from the text); `repo:` qualifiers follow.
+const OTHERS_QUERY: &str = "is:pr is:open archived:false -author:@me sort:updated-desc";
+/// Repositories the stack membership query searches others' pull requests in.
+const REPOSITORIES_PER_SEARCH: usize = 10;
 /// How much of a body is read between progress reports.
 const READ_CHUNK_BYTES: usize = 64 * 1024;
 
@@ -128,7 +133,7 @@ impl GitHubClient {
         &self,
         other_repositories: &[RepoRef],
     ) -> Result<Vec<ListedPullRequestDetails>, GitHubError> {
-        let others = others_search_queries(other_repositories).into_iter().next();
+        let others = others_search_query(other_repositories);
         let data: ListedDetailsData = self.graphql(
             LISTED_DETAILS_QUERY,
             &serde_json::json!({
@@ -455,6 +460,20 @@ impl GitHubClient {
         })
     }
 }
+/// The search text for others' pull requests in the first ten of
+/// `repositories`, for the stack membership query; none without
+/// repositories.
+fn others_search_query(repositories: &[RepoRef]) -> Option<String> {
+    (!repositories.is_empty()).then(|| {
+        repositories
+            .iter()
+            .take(REPOSITORIES_PER_SEARCH)
+            .fold(OTHERS_QUERY.to_owned(), |query, repo| {
+                format!("{query} repo:{}", repo.full_name())
+            })
+    })
+}
+
 /// A GraphQL failure (reported with status 200) as an API error.
 pub(crate) fn graphql_error(message: String) -> GitHubError {
     GitHubError::Api {
@@ -512,6 +531,23 @@ mod tests {
             headers.insert(*name, HeaderValue::from_static(value));
         }
         headers
+    }
+
+    /// The others' search names the first ten repositories; none without any.
+    #[test]
+    fn others_search_names_the_first_ten_repositories() {
+        let repositories: Vec<RepoRef> = (0..12)
+            .map(|index| RepoRef {
+                owner: "o".into(),
+                name: format!("r{index}"),
+            })
+            .collect();
+        let query = others_search_query(&repositories).unwrap();
+        assert!(query.starts_with(
+            "is:pr is:open archived:false -author:@me sort:updated-desc repo:o/r0 repo:o/r1 "
+        ));
+        assert!(query.ends_with(" repo:o/r9"));
+        assert_eq!(others_search_query(&[]), None);
     }
 
     /// The core budget is read from GitHub's rate-limit headers.
