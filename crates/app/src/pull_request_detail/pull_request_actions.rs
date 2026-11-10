@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
-use gpui::Context;
-use qd_github::{MergeMethod, MergeOptions, MergeOutcome};
+use gpui::{BackgroundExecutor, Context};
+use qd_github::{GitHubClient, GitHubError, MergeMethod, MergeOptions, MergeOutcome, RepoRef};
 
 use super::action_panel::{ActionPanel, ArmedAction, PanelAction};
 use super::detail_event::DetailEvent;
@@ -127,19 +127,19 @@ impl PullRequestDetail {
             return;
         };
         let method = panel.method;
-        let delete_branch = panel.delete_branch;
+        // The branch goes when asked, and always for a finished pull request's branch.
+        let delete_branch = panel.delete_branch || armed == ArmedAction::DeleteBranch;
         let working = match armed {
             ArmedAction::Merge | ArmedAction::AdminMerge => "Merging on GitHub…",
             ArmedAction::Close => "Closing on GitHub…",
             ArmedAction::DeleteBranch => "Deleting the branch on GitHub…",
         };
-        let delete_branch = delete_branch || armed == ArmedAction::DeleteBranch;
         let task = cx.spawn(async move |detail, cx| {
             let repo = pull_request.repo.clone();
             let number = pull_request.number;
 
-            // The action itself: start a merge and follow it, or close.
-            let mut outcome = match armed {
+            // The action itself: start a merge, or close.
+            let started = match armed {
                 ArmedAction::Merge | ArmedAction::AdminMerge => {
                     let Some(method) = method else {
                         return;
@@ -165,19 +165,9 @@ impl PullRequestDetail {
                 }
             };
 
-            // GitHub merges in the background: look again until it says how it ended.
-            let started = Instant::now();
-            while let Ok(MergeOutcome::Pending { uuid }) = &outcome {
-                if started.elapsed() > MERGE_POLL_LIMIT {
-                    break;
-                }
-                cx.background_executor().timer(MERGE_POLL_INTERVAL).await;
-                let (poll_client, poll_repo, uuid) = (client.clone(), repo.clone(), uuid.clone());
-                outcome = cx
-                    .background_executor()
-                    .spawn(async move { poll_client.merge_outcome(&poll_repo, number, &uuid) })
-                    .await;
-            }
+            // GitHub merges in the background: follow it until it says how it ended.
+            let outcome =
+                follow_merge(&client, &repo, number, started, cx.background_executor()).await;
 
             // The branch goes once the pull request is merged or closed (not while queued).
             let mut branch_error = None;
@@ -215,10 +205,34 @@ impl PullRequestDetail {
     }
 }
 
+/// Follows a merge GitHub runs in the background (`outcome` pending) until
+/// GitHub says how it ended, for at most [`MERGE_POLL_LIMIT`]; any other
+/// outcome passes through.
+async fn follow_merge(
+    client: &GitHubClient,
+    repo: &RepoRef,
+    number: u64,
+    mut outcome: Result<MergeOutcome, GitHubError>,
+    executor: &BackgroundExecutor,
+) -> Result<MergeOutcome, GitHubError> {
+    let started = Instant::now();
+    while let Ok(MergeOutcome::Pending { uuid }) = &outcome {
+        if started.elapsed() > MERGE_POLL_LIMIT {
+            break;
+        }
+        executor.timer(MERGE_POLL_INTERVAL).await;
+        let (poll_client, poll_repo, uuid) = (client.clone(), repo.clone(), uuid.clone());
+        outcome = executor
+            .spawn(async move { poll_client.merge_outcome(&poll_repo, number, &uuid) })
+            .await;
+    }
+    outcome
+}
+
 /// What the panel says after `armed` ended with `outcome`.
 fn action_result(
     armed: ArmedAction,
-    outcome: &Result<MergeOutcome, qd_github::GitHubError>,
+    outcome: &Result<MergeOutcome, GitHubError>,
     branch_error: Option<&str>,
 ) -> OperationStatus {
     let branch_note = branch_error
