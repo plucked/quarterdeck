@@ -1,7 +1,7 @@
 use qd_github::{CheckDetails, CheckOutcome, MergeConflict, PullRequestChecks};
 
 use super::check_tree::CheckTree;
-use crate::display_date::unix_now;
+use crate::display_text::unix_now;
 
 /// Checks as last read.
 pub struct ShownChecks {

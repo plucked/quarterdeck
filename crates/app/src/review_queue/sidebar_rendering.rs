@@ -12,7 +12,7 @@ use crate::controls::{
     FoldChevron, FoldState, PulsingStatus, RepoMonogram, ResizeEdge, ResizeHandle,
     SegmentedControl, view_option,
 };
-use crate::display_date::unix_now;
+use crate::display_text::unix_now;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
 

@@ -16,7 +16,7 @@ use super::loaded_file::LoadedFile;
 use super::review_target::ReviewTarget;
 use crate::app_services::AppServices;
 use crate::brief_view::PreparedBrief;
-use crate::display_date::unix_now;
+use crate::display_text::unix_now;
 use crate::ui_state::write_brief;
 
 /// One brief to write, with everything its background run needs.

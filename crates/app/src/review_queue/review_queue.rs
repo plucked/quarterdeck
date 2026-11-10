@@ -29,7 +29,7 @@ use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::app_update::AppUpdater;
 use crate::avatar_images::AvatarImages;
-use crate::display_date::unix_now;
+use crate::display_text::unix_now;
 use crate::pull_request_detail::{DetailEvent, PullRequestDetail};
 use crate::theme;
 use crate::ui_state::{UiStateRecorder, read_brief_index};

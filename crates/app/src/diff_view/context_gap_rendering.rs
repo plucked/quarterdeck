@@ -7,7 +7,7 @@ use super::diff_cell_rendering::render_row;
 use super::file_card_rendering::frame_file_row;
 use super::gap_part::CONTEXT_STEP;
 use super::{FileTextLoad, GapPart};
-use crate::counted::counted;
+use crate::display_text::counted;
 use crate::theme;
 
 /// The most buttons a gap bar shows; ids of a row's buttons are spaced by it.

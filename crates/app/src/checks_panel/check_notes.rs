@@ -2,8 +2,7 @@ use qd_github::{CheckOutcome, ConflictLocation, MergeConflict};
 
 use super::check_tally::CheckTally;
 use super::shown_checks::{CheckContent, ShownChecks};
-use crate::display_date::{time_ago, unix_now};
-use crate::short_sha::short_sha;
+use crate::display_text::{short_sha, time_ago, unix_now};
 
 /// `This pull request conflicts with develop.`, or the layer below that does.
 pub(super) fn conflict_sentence(conflict: &MergeConflict) -> String {

@@ -8,7 +8,7 @@ use super::composer_opening::ComposerOpening;
 use super::detail_row::DetailRow;
 use super::diff_line_ref::DiffLineRef;
 use super::pull_request_detail::PullRequestDetail;
-use crate::display_date::unix_now;
+use crate::display_text::unix_now;
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::ui_state::{ReviewChange, UiStateRecorder};
 

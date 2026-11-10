@@ -8,7 +8,7 @@ use super::lines_label::note_lines_label;
 use super::loaded_file::LoadedFile;
 use super::review_target::ReviewTarget;
 use crate::diff_line_sides::line_number_on;
-use crate::short_sha::short_sha;
+use crate::display_text::short_sha;
 
 /// Lines of code shown above a note's first line.
 const CONTEXT_LINES: usize = 2;

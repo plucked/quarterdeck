@@ -5,7 +5,7 @@ use super::brief_handlers::{BriefHandlers, on_click};
 use super::familiarity_picker::render_familiarity_picker;
 use super::prepared_brief::PreparedBrief;
 use crate::controls::Button;
-use crate::counted::counted;
+use crate::display_text::counted;
 use crate::theme;
 
 /// Who wrote the brief, for which reader and what it cost, and writing it

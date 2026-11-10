@@ -4,7 +4,7 @@ use qd_github::{PullRequest, PullRequestBranches};
 use super::ReviewQueue;
 use super::sidebar_rendering::{render_meta, row_frame};
 use crate::avatar_images::Avatar;
-use crate::display_date::relative_age;
+use crate::display_text::relative_age;
 use crate::review_verdict_badge::ReviewVerdictBadge;
 use crate::theme;
 

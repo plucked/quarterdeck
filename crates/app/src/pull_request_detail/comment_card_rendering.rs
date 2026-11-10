@@ -11,7 +11,7 @@ use super::thread_resolution::ThreadResolution;
 use crate::avatar_images::Avatar;
 use crate::controls::Button;
 use crate::diff_view::frame_file_row;
-use crate::display_date::short_date;
+use crate::display_text::short_date;
 use crate::markdown_view::MarkdownView;
 use crate::theme;
 

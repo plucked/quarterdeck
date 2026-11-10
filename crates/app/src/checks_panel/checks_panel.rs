@@ -8,7 +8,7 @@ use super::checks_target::ChecksTarget;
 use super::shown_checks::ShownChecks;
 use super::unfolded_checks::UnfoldedChecks;
 use crate::app_services::AppServices;
-use crate::display_date::unix_now;
+use crate::display_text::unix_now;
 
 /// How often the checks are read again while some are pending and the tab shows.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(30);

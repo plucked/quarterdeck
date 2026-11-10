@@ -5,7 +5,7 @@ use qd_file_tree::FacetCount;
 use qd_github::PullRequest;
 
 use super::others_facet::OthersFacet;
-use crate::display_date::unix_seconds;
+use crate::display_text::unix_seconds;
 
 /// Seconds in a day, to say the Updated within limit in days.
 const SECONDS_PER_DAY: i64 = 24 * 60 * 60;

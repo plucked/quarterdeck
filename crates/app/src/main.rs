@@ -25,12 +25,9 @@
 //! - `diff_line_sides.rs`: a diff line's number on the old or new side, and a brief anchor's side as one.
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
-//! - `display_date.rs`: `short_date`, a GitHub timestamp as `21 Oct 2026`; ages and durations.
-//! - `counted.rs`: `counted`, a count with its noun in the singular or plural.
+//! - `display_text/`: values as people read them: dates and ages, sizes, short SHAs, counts with their noun.
 //! - `count_as_f32.rs`: `count_as_f32`, a small count as a float for layout arithmetic.
-//! - `display_size.rs`: `byte_size`, a byte count as `151.7 MB`.
 //! - `distinct_repositories.rs`: `distinct_repositories`, repositories each once in the order first seen.
-//! - `short_sha.rs`: `short_sha`, a commit SHA's first seven characters.
 //! - `facet_chips/`: filter chips (pick with a click, hide with ⌥-click), shared by the file tree and the Others tab.
 //! - `review_verdict_badge.rs`: `ReviewVerdictBadge`, the viewer's latest review verdict as a small round mark.
 //! - `panel_toggle.rs`: `PanelToggle`, the icon button showing or hiding a side panel.
@@ -53,11 +50,9 @@ mod bundled_icons;
 mod checks_panel;
 mod controls;
 mod count_as_f32;
-mod counted;
 mod diff_line_sides;
 mod diff_view;
-mod display_date;
-mod display_size;
+mod display_text;
 mod distinct_repositories;
 mod facet_chips;
 mod fetch_stack;
@@ -73,7 +68,6 @@ mod review_verdict_badge;
 mod scrollbar;
 mod settings_window;
 mod shared_cache;
-mod short_sha;
 mod startup_splash;
 mod text_area;
 mod theme;

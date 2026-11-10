@@ -4,7 +4,7 @@ use super::check_notes::conflict_sentence;
 use super::check_tally::CheckTally;
 use super::check_tree::CheckTree;
 use super::shown_checks::ShownChecks;
-use crate::counted::counted;
+use crate::display_text::counted;
 
 /// What the summary says about the checks.
 pub(super) struct Summary {

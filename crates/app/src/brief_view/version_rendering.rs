@@ -4,8 +4,7 @@ use qd_studio::BriefRecord;
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::report_state::ReportState;
 use crate::controls::Button;
-use crate::display_date::{time_ago, unix_now};
-use crate::short_sha::short_sha;
+use crate::display_text::{short_sha, time_ago, unix_now};
 use crate::theme;
 
 /// Width of the bar marking a brief written for an older version.

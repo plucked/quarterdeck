@@ -6,7 +6,7 @@ use super::detail_row::DetailRow;
 use super::local_review_export::{ReviewExportHeader, local_review_markdown};
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
-use crate::display_date::unix_now;
+use crate::display_text::unix_now;
 use crate::ui_state::{ReviewChange, UiStateRecorder};
 
 impl PullRequestDetail {

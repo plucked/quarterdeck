@@ -5,8 +5,8 @@ use qd_studio::CodeAnchor;
 use super::brief_excerpt::{ExcerptLine, brief_excerpt};
 use super::brief_handlers::{BriefHandlers, on_anchor_click};
 use super::brief_widget_context::BriefWidgetContext;
-use crate::counted::counted;
 use crate::diff_view::DIFF_ROW_HEIGHT;
+use crate::display_text::counted;
 use crate::theme;
 
 /// Width of an excerpt's line-number column.
