@@ -67,6 +67,6 @@ pub use file_note::FileNote;
 pub use file_note_rendering::render_file_note;
 pub use file_status_badge::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
 pub use file_text_load::FileTextLoad;
-pub use gap_part::{CONTEXT_STEP, GapPart};
+pub use gap_part::GapPart;
 pub use split_rendering::render_split_row;
 pub use unified_rendering::render_unified_line;

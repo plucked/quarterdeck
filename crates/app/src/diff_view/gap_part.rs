@@ -3,7 +3,7 @@ use std::ops::Range;
 use qd_diff::ContextGap;
 
 /// Lines revealed per click, as GitHub does.
-pub const CONTEXT_STEP: u32 = 20;
+pub(super) const CONTEXT_STEP: u32 = 20;
 
 /// Which lines of a gap a click reveals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

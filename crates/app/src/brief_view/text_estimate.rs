@@ -29,7 +29,7 @@ impl TextMetrics {
 
     /// The lines `text` takes when wrapped at word boundaries to `max_width`
     /// (a word longer than a line takes as many lines as it needs); at least one.
-    pub fn line_count(self, text: &str, max_width: f32) -> usize {
+    fn line_count(self, text: &str, max_width: f32) -> usize {
         let per_line = self.characters_within(max_width);
         let mut lines = 1;
         let mut used = 0;

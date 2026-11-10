@@ -5,7 +5,8 @@ use qd_diff::{ContextGap, GapPlace};
 
 use super::diff_cell_rendering::render_row;
 use super::file_card_rendering::frame_file_row;
-use super::{CONTEXT_STEP, FileTextLoad, GapPart};
+use super::gap_part::CONTEXT_STEP;
+use super::{FileTextLoad, GapPart};
 use crate::counted::counted;
 use crate::theme;
 
