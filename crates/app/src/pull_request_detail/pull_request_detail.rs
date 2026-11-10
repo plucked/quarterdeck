@@ -458,8 +458,11 @@ impl PullRequestDetail {
             .and_then(ParsedDescription::document)
     }
 
-    pub(super) fn changed_files_mut(&mut self) -> Option<&mut ChangedFiles> {
-        self.changed_files.as_mut()
+    /// The loaded files to change in place, once loaded.
+    pub(super) fn loaded_files_mut(&mut self) -> Option<&mut Vec<LoadedFile>> {
+        self.changed_files
+            .as_mut()
+            .and_then(ChangedFiles::loaded_mut)
     }
 
     pub(super) fn context_loads(&self) -> &ContextLoads {
@@ -468,10 +471,6 @@ impl PullRequestDetail {
 
     pub(super) fn context_loads_mut(&mut self) -> &mut ContextLoads {
         &mut self.context_loads
-    }
-
-    pub(super) fn changed_files(&self) -> Option<&ChangedFiles> {
-        self.changed_files.as_ref()
     }
 
     pub(super) fn diff_settings(&self) -> DiffViewSettings {
@@ -492,23 +491,19 @@ impl PullRequestDetail {
 
     /// The loaded files, or none while loading or after a failure.
     pub(super) fn loaded_files(&self) -> &[LoadedFile] {
-        match &self.changed_files {
-            Some(ChangedFiles::Loaded(files)) => files,
-            Some(ChangedFiles::Loading(_) | ChangedFiles::Failed(_)) | None => &[],
-        }
+        self.changed_files
+            .as_ref()
+            .map_or(&[], ChangedFiles::loaded)
     }
 
-    /// Whether the files' load failed.
-    pub(super) fn load_failed(&self) -> bool {
-        matches!(self.changed_files, Some(ChangedFiles::Failed(_)))
+    /// Why the files' load failed, if it did.
+    pub(super) fn load_failure(&self) -> Option<&SharedString> {
+        self.changed_files.as_ref().and_then(ChangedFiles::failure)
     }
 
     /// How far the files' load has come, while they load.
     pub(super) fn load_progress(&self) -> Option<LoadProgress> {
-        match &self.changed_files {
-            Some(ChangedFiles::Loading(progress)) => Some(*progress),
-            Some(ChangedFiles::Loaded(_) | ChangedFiles::Failed(_)) | None => None,
-        }
+        self.changed_files.as_ref().and_then(ChangedFiles::progress)
     }
 
     /// Syntax batches colored of all, while highlighting runs.
@@ -1064,7 +1059,7 @@ impl PullRequestDetail {
         // The shown pull request or target may have changed, and with it the brief.
         self.refresh_brief_rows();
 
-        let files_settled = !matches!(self.changed_files, Some(ChangedFiles::Loading(_)));
+        let files_settled = self.load_progress().is_none();
         let pending = if files_settled {
             self.pending_scroll.take()
         } else {
@@ -1161,10 +1156,10 @@ impl PullRequestDetail {
 
     /// Recomputes the tree's visible rows from the files, filter and marks.
     fn refresh_tree_rows(&mut self) {
-        let files = match &self.changed_files {
-            Some(ChangedFiles::Loaded(files)) => files.as_slice(),
-            Some(ChangedFiles::Loading(_) | ChangedFiles::Failed(_)) | None => &[],
-        };
+        let files = self
+            .changed_files
+            .as_ref()
+            .map_or(&[][..], ChangedFiles::loaded);
         self.file_tree.refresh_rows(files, &self.file_review);
     }
 
@@ -1610,7 +1605,7 @@ impl PullRequestDetail {
             // Show each step as it is reported; the channel ends with the load.
             while let Some(step) = progress.next().await {
                 let shown = detail.update(cx, |detail, cx| {
-                    if let Some(ChangedFiles::Loading(current)) = &mut detail.changed_files {
+                    if let Some(ChangedFiles::Loading(current)) = detail.changed_files.as_mut() {
                         *current = step;
                         cx.notify();
                     }
@@ -1709,7 +1704,7 @@ impl PullRequestDetail {
     /// Sets the syntax colors of the files whose diffs are still the ones
     /// highlighted; a diff rebuilt meanwhile waits for its own pass.
     pub(super) fn apply_syntax(&mut self, highlighted: Vec<HighlightedDiff>) {
-        let Some(ChangedFiles::Loaded(files)) = &mut self.changed_files else {
+        let Some(files) = self.loaded_files_mut() else {
             return;
         };
         for result in highlighted {

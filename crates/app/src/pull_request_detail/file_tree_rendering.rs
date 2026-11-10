@@ -94,7 +94,7 @@ impl PullRequestDetail {
     fn render_files_pending(&self) -> AnyElement {
         let text = match self.load_progress() {
             Some(_) => "Loading files…",
-            None if self.load_failed() => "The files could not be loaded.",
+            None if self.load_failure().is_some() => "The files could not be loaded.",
             None => "No changed files.",
         };
         div()

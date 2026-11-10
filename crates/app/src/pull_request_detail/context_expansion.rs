@@ -3,7 +3,6 @@ use std::sync::Arc;
 use gpui::Context;
 use qd_diff::{GapPlace, SourceLines};
 
-use super::changed_files::ChangedFiles;
 use super::fetch_file_text::{HeadCommit, fetch_file_text};
 use super::loaded_file::{FileContext, LoadedFile};
 use super::pull_request_detail::{HighlightedDiff, PullRequestDetail};
@@ -118,7 +117,7 @@ impl PullRequestDetail {
             cx.notify();
             return;
         };
-        let Some(ChangedFiles::Loaded(files)) = self.changed_files_mut() else {
+        let Some(files) = self.loaded_files_mut() else {
             return;
         };
         let Some(slot) = files.get_mut(file) else {

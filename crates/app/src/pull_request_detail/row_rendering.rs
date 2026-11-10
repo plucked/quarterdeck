@@ -9,7 +9,6 @@ use qd_cache::{DiffLayout, LineWrapping, PanelVisibility};
 use qd_diff::{GapPlace, LineOrigin};
 use qd_github::LineSide;
 
-use super::changed_files::ChangedFiles;
 use super::detail_mode::DetailMode;
 use super::detail_row::DetailRow;
 use super::loaded_file::LoadedFile;
@@ -238,10 +237,7 @@ impl PullRequestDetail {
     }
 
     fn render_failure(&self) -> AnyElement {
-        let message = match self.changed_files() {
-            Some(ChangedFiles::Failed(message)) => message.clone(),
-            Some(ChangedFiles::Loading(_) | ChangedFiles::Loaded(_)) | None => "".into(),
-        };
+        let message = self.load_failure().cloned().unwrap_or_default();
         render_status_line(message, theme::danger())
     }
 
