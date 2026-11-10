@@ -1,4 +1,4 @@
-use gpui::{AnyElement, ClickEvent, Context, Div, IntoElement, Stateful, div, prelude::*, px};
+use gpui::{AnyElement, Context, Div, IntoElement, Stateful, div, prelude::*, px};
 use qd_cache::{OthersFilter, UpdatedWithin};
 use qd_file_tree::FacetCount;
 use qd_github::RepoRef;
@@ -9,8 +9,8 @@ use super::others_facet::OthersFacet;
 use super::others_filtering::describe;
 use crate::controls::{CheckState, Checkbox, SegmentedControl};
 use crate::facet_chips::{
-    CHIP_HINT, COLLAPSED_CHIPS, ChipClick, CollapsedChipRow, FacetChip, render_chip_row,
-    render_more_chip,
+    CHIP_HINT, ChipClick, ChipRowClick, CollapsedChipRow, FacetChipRow, first_values,
+    render_chip_row,
 };
 use crate::settings_window::{SettingsCategory, open_settings_window_at};
 use crate::theme;
@@ -177,57 +177,43 @@ impl ReviewQueue {
         counts: &[FacetCount<String>],
         chip_marks: &ChipMarks,
         cx: &mut Context<Self>,
-    ) -> Div {
+    ) -> FacetChipRow {
         let chips_filter = facet.chips_of(filter);
         let is_expanded = self.others_tab().is_chip_row_expanded(repo, facet);
 
         // The first ones (most matching first), plus every chip that is set,
         // so a set chip never hides behind "more".
-        let most_common: Vec<&str> = counts
-            .iter()
-            .take(COLLAPSED_CHIPS)
-            .map(|count| count.value.as_str())
-            .collect();
+        let most_common = first_values(counts);
         let row = CollapsedChipRow::of(counts, &most_common, is_expanded, |value| {
             chips_filter.is_set(value)
         });
-        let mut chips: Vec<AnyElement> = row
-            .shown
-            .into_iter()
-            .map(|count| {
-                let value = count.value.clone();
-                let repo = repo.clone();
-                FacetChip::new(
-                    format!("others-{}-{value}", facet.id_part()),
-                    count.value.clone(),
+
+        // The chips that show with their marks, then the more / less link
+        // when there is more than the collapsed row holds.
+        let chip_row = row.shown.into_iter().fold(
+            FacetChipRow::new(format!("others-{}", facet.id_part()), facet.label()),
+            |chip_row, count| {
+                chip_row.chip(
                     count,
                     chips_filter.choice_of(&count.value),
+                    chip_marks.mark_of(facet, &count.value),
                 )
-                .leading(chip_marks.mark_of(facet, &count.value))
-                .on_click(cx.listener(move |queue, event: &ClickEvent, _, cx| {
-                    let click = ChipClick::of(event);
-                    queue.change_others_filter(
-                        &repo,
-                        |filter| click_chip(filter, facet, &value, click),
-                        cx,
-                    );
-                }))
-                .into_any_element()
-            })
-            .collect();
-
-        // The more / less link, when there is more than the collapsed row holds.
-        if let Some(label) = row.more_label {
-            let repo = repo.clone();
-            chips.push(
-                render_more_chip(("others-more", facet.index()), label)
-                    .on_click(
-                        cx.listener(move |queue, _, _, cx| queue.toggle_chip_row(&repo, facet, cx)),
-                    )
-                    .into_any_element(),
-            );
-        }
-        render_chip_row(facet.label(), chips)
+            },
+        );
+        let chip_repo = repo.clone();
+        let more_repo = repo.clone();
+        chip_row
+            .more_label(row.more_label)
+            .on_chip(cx.listener(move |queue, chip: &ChipRowClick, _, cx| {
+                queue.change_others_filter(
+                    &chip_repo,
+                    |filter| click_chip(filter, facet, &chip.value, chip.click),
+                    cx,
+                );
+            }))
+            .on_toggle_more(
+                cx.listener(move |queue, _, _, cx| queue.toggle_chip_row(&more_repo, facet, cx)),
+            )
     }
 
     /// `Showing 4 of 12 · bug · no drafts   Reset` while the filter narrows
@@ -399,11 +385,12 @@ fn filter_summary_text(parts: &[String]) -> String {
 }
 
 /// Applies a chip click to `filter`'s row of `facet`.
-fn click_chip(filter: &mut OthersFilter, facet: OthersFacet, value: &String, click: ChipClick) {
+fn click_chip(filter: &mut OthersFilter, facet: OthersFacet, value: &str, click: ChipClick) {
     let chips = facet.chips_of_mut(filter);
+    let value = value.to_owned();
     match click {
-        ChipClick::Pick => chips.toggle_only(value),
-        ChipClick::Hide => chips.toggle_hidden(value),
+        ChipClick::Pick => chips.toggle_only(&value),
+        ChipClick::Hide => chips.toggle_hidden(&value),
     }
 }
 

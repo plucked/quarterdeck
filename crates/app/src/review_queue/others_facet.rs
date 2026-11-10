@@ -40,12 +40,4 @@ impl OthersFacet {
             Self::Authors => "author",
         }
     }
-
-    /// The row's place in the filter, for its more / less link's element id.
-    pub fn index(self) -> usize {
-        match self {
-            Self::Labels => 0,
-            Self::Authors => 1,
-        }
-    }
 }

@@ -41,6 +41,16 @@ impl<'count> CollapsedChipRow<'count> {
     }
 }
 
+/// The first [`COLLAPSED_CHIPS`] values in the counts' order, which a
+/// collapsed row shows when its counts come sorted by what they would show.
+pub fn first_values(counts: &[FacetCount<String>]) -> Vec<&str> {
+    counts
+        .iter()
+        .take(COLLAPSED_CHIPS)
+        .map(|count| count.value.as_str())
+        .collect()
+}
+
 /// The [`COLLAPSED_CHIPS`] values with the most items (ties keep the
 /// counts' order), which a collapsed row shows.
 pub fn most_common_values(counts: &[FacetCount<String>]) -> Vec<&str> {

@@ -3,8 +3,8 @@ use gpui::{AnyElement, ClickEvent, Context, IntoElement, div, prelude::*};
 use super::pull_request_detail::PullRequestDetail;
 use crate::controls::{Button, CheckState, Checkbox};
 use crate::facet_chips::{
-    CHIP_HINT, ChipClick, CollapsedChipRow, FacetChip, most_common_values, render_chip_row,
-    render_more_chip,
+    CHIP_HINT, ChipClick, ChipRowClick, CollapsedChipRow, FacetChip, FacetChipRow,
+    most_common_values, render_chip_row,
 };
 use crate::theme;
 
@@ -109,33 +109,20 @@ impl PullRequestDetail {
         let row = CollapsedChipRow::of(counts, &most_common, is_expanded, |value| {
             filter.file_types.is_set(value)
         });
-        let mut chips: Vec<AnyElement> = row
+
+        // The chips that show, then the more / less link when there is more than the collapsed row holds.
+        let chip_row = row
             .shown
             .into_iter()
-            .map(|count| {
-                let file_type = count.value.clone();
-                FacetChip::new(
-                    format!("type-{file_type}"),
-                    count.value.clone(),
-                    count,
-                    filter.file_types.choice_of(&count.value),
-                )
-                .on_click(cx.listener(move |detail, event: &ClickEvent, _, cx| {
-                    detail.click_file_type(&file_type, ChipClick::of(event), cx);
-                }))
-                .into_any_element()
-            })
-            .collect();
-
-        // The more / less chip, when there is more than the collapsed row holds.
-        if let Some(label) = row.more_label {
-            chips.push(
-                render_more_chip("type-more", label)
-                    .on_click(cx.listener(|detail, _, _, cx| detail.toggle_types_expanded(cx)))
-                    .into_any_element(),
-            );
-        }
-        render_chip_row("Type", chips)
+            .fold(FacetChipRow::new("type", "Type"), |chip_row, count| {
+                chip_row.chip(count, filter.file_types.choice_of(&count.value), None)
+            });
+        chip_row
+            .more_label(row.more_label)
+            .on_chip(cx.listener(|detail, chip: &ChipRowClick, _, cx| {
+                detail.click_file_type(&chip.value, chip.click, cx);
+            }))
+            .on_toggle_more(cx.listener(|detail, _, _, cx| detail.toggle_types_expanded(cx)))
     }
 
     /// `Showing 312 of 1390 · Moved · Reset` while anything narrows the

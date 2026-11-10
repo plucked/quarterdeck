@@ -5,16 +5,22 @@
 //!
 //! Files:
 //! - `chip_click.rs`: `ChipClick`, a chip clicked to pick or (option) to hide.
+//! - `chip_row_click.rs`: `ChipRowClick`, a click on a chip of a `FacetChipRow`: its value and `ChipClick`.
 //! - `facet_chip.rs`: `FacetChip`, one chip (picked, hidden or open) with its count.
-//! - `collapsed_chip_row.rs`: `CollapsedChipRow`, which chips of a row show and its more / less link; the most common values.
+//! - `facet_chip_row.rs`: `FacetChipRow`, a labelled row of the chips its caller chose, closed by a more / less link.
+//! - `collapsed_chip_row.rs`: `CollapsedChipRow`, which chips of a row show and its more / less link; the two ways to pick a collapsed row's chips (`first_values`, `most_common_values`).
 //! - `facet_chip_rendering.rs`: a labelled row of chips, the "more" link, the hint on how chips work.
 
 mod chip_click;
+mod chip_row_click;
 mod collapsed_chip_row;
 mod facet_chip;
 mod facet_chip_rendering;
+mod facet_chip_row;
 
 pub use chip_click::ChipClick;
-pub use collapsed_chip_row::{COLLAPSED_CHIPS, CollapsedChipRow, most_common_values};
+pub use chip_row_click::ChipRowClick;
+pub use collapsed_chip_row::{CollapsedChipRow, first_values, most_common_values};
 pub use facet_chip::FacetChip;
-pub use facet_chip_rendering::{CHIP_HINT, render_chip_row, render_more_chip};
+pub use facet_chip_rendering::{CHIP_HINT, render_chip_row};
+pub use facet_chip_row::FacetChipRow;
