@@ -1,16 +1,13 @@
-use std::time::Duration;
-
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, FontWeight, IntoElement, RenderOnce, Rgba,
-    Styled, Window, div, prelude::*, pulsating_between, px,
+    AnimationExt as _, App, ElementId, FontWeight, IntoElement, RenderOnce, Rgba, Styled, Window,
+    div, prelude::*, px,
 };
 use qd_github::CheckOutcome;
 
+use crate::pulsing_status::dot_pulse;
 use crate::text_tooltip::TextTooltip;
 use crate::theme;
 
-/// One breath of a running check's dot.
-const PULSE_PERIOD: Duration = Duration::from_millis(1200);
 /// A glyph's size as a share of the mark's diameter.
 const GLYPH_SHARE: f32 = 0.64;
 /// A dot's diameter as a share of the mark's.
@@ -144,15 +141,9 @@ impl RenderOnce for CheckOutcomeMark {
                     .rounded_full()
                     .bg(color);
                 match motion {
-                    DotMotion::Pulsing => mark.child(
-                        dot.with_animation(
-                            self.id,
-                            Animation::new(PULSE_PERIOD)
-                                .repeat()
-                                .with_easing(pulsating_between(0.3, 1.)),
-                            Styled::opacity,
-                        ),
-                    ),
+                    DotMotion::Pulsing => {
+                        mark.child(dot.with_animation(self.id, dot_pulse(), Styled::opacity))
+                    }
                     DotMotion::Still => mark.child(dot),
                 }
             }

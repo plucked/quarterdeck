@@ -1,8 +1,6 @@
-use std::time::Duration;
-
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, Context, Div, FontWeight, IntoElement, Render, Rgba,
-    SharedString, Stateful, Styled, Window, div, list, prelude::*, pulsating_between, px, relative,
+    AnyElement, Context, Div, FontWeight, IntoElement, Render, Rgba, SharedString, Stateful,
+    Styled, Window, div, list, prelude::*, px, relative,
 };
 use qd_github::{CheckOutcome, ConflictLocation, MergeConflict, StatusCheck};
 
@@ -14,12 +12,11 @@ use super::checks_panel::{CheckContent, CheckOrigin, ChecksPanel, ShownChecks};
 use crate::button::Button;
 use crate::display_date::{age_since, unix_now, unix_seconds};
 use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
+use crate::pulsing_status::PulsingStatus;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::short_sha::short_sha;
 use crate::theme;
 
-/// One breath of the pulsing "Reading" status, as in the top bar.
-const PULSE_PERIOD: Duration = Duration::from_millis(1200);
 /// Diameter of the mark beside the verdict.
 const VERDICT_MARK_SIZE: f32 = 18.;
 /// Diameter of a row's mark.
@@ -60,7 +57,7 @@ impl Render for ChecksPanel {
                 ),
                 (None, true) => div()
                     .p_3()
-                    .child(render_pulsing_status(
+                    .child(PulsingStatus::new(
                         "checks-first-read",
                         "Reading the checks from GitHub…",
                     ))
@@ -147,7 +144,7 @@ impl ChecksPanel {
             return div()
                 .flex_none()
                 .pt_0p5()
-                .child(render_pulsing_status("checks-reading", "Reading…"))
+                .child(PulsingStatus::new("checks-reading", "Reading…"))
                 .into_any_element();
         }
         Button::new("checks-refresh", "Refresh")
@@ -660,21 +657,6 @@ fn render_outcome_bar(tally: CheckTally) -> impl IntoElement {
                         .w(relative(share(count, ran)))
                         .bg(bar_color(outcome))
                 }),
-        )
-}
-
-/// A status that pulses while it lasts, in the accent color.
-fn render_pulsing_status(id: &'static str, text: &'static str) -> impl IntoElement {
-    div()
-        .text_xs()
-        .text_color(theme::accent())
-        .child(text)
-        .with_animation(
-            id,
-            Animation::new(PULSE_PERIOD)
-                .repeat()
-                .with_easing(pulsating_between(0.4, 1.)),
-            Styled::opacity,
         )
 }
 

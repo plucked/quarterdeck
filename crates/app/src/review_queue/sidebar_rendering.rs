@@ -1,9 +1,4 @@
-use std::time::Duration;
-
-use gpui::{
-    Animation, AnimationExt as _, AnyElement, Context, FontWeight, SharedString, Styled, div, list,
-    prelude::*, pulsating_between, px,
-};
+use gpui::{AnyElement, Context, FontWeight, SharedString, div, list, prelude::*, px};
 use qd_cache::QueueTab;
 use qd_github::{PullRequest, PullRequestBranches, StackLayer, ViewerReview};
 
@@ -14,6 +9,7 @@ use super::refresh_status::RefreshStatus;
 use crate::avatar_images::Avatar;
 use crate::display_date::{relative_age, unix_now};
 use crate::fold_chevron::{FoldChevron, FoldState};
+use crate::pulsing_status::PulsingStatus;
 use crate::repo_monogram::RepoMonogram;
 use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::review_verdict_badge::ReviewVerdictBadge;
@@ -24,8 +20,6 @@ use crate::theme;
 /// How narrow and how wide the sidebar can be dragged.
 const MIN_SIDEBAR_WIDTH: f32 = 240.;
 const MAX_SIDEBAR_WIDTH: f32 = 720.;
-/// The breath of the pulsing "Refreshing…" status.
-const PULSE_PERIOD: Duration = Duration::from_millis(1200);
 /// Width of the column holding a stack layer's position and rail.
 const LAYER_GUTTER_WIDTH: f32 = 28.;
 /// The open / draft ring before a pull request's title.
@@ -153,10 +147,10 @@ impl ReviewQueue {
     /// The refresh state, an opening stack layer, or why one did not open.
     fn render_status_line(&self) -> Option<AnyElement> {
         if let Some(number) = self.opening_layer() {
-            return Some(render_pulsing_status(
-                "opening-layer",
-                format!("Opening #{number} from GitHub…").into(),
-            ));
+            return Some(
+                PulsingStatus::new("opening-layer", format!("Opening #{number} from GitHub…"))
+                    .into_any_element(),
+            );
         }
         if let Some(error) = self.layer_error() {
             return Some(render_error_status(error.clone()));
@@ -170,10 +164,9 @@ impl ReviewQueue {
         }
         match self.refresh_status() {
             RefreshStatus::Idle => None,
-            RefreshStatus::Refreshing => Some(render_pulsing_status(
-                "refreshing",
-                "Refreshing from GitHub…".into(),
-            )),
+            RefreshStatus::Refreshing => {
+                Some(PulsingStatus::new("refreshing", "Refreshing from GitHub…").into_any_element())
+            }
             RefreshStatus::Failed(message) => Some(render_error_status(message.clone())),
         }
     }
@@ -324,22 +317,6 @@ impl PullRequestState {
             Self::Draft => theme::muted(),
         }
     }
-}
-
-/// A status in the header that pulses while it lasts.
-fn render_pulsing_status(id: &'static str, text: SharedString) -> AnyElement {
-    div()
-        .text_xs()
-        .text_color(theme::accent())
-        .child(text)
-        .with_animation(
-            id,
-            Animation::new(PULSE_PERIOD)
-                .repeat()
-                .with_easing(pulsating_between(0.4, 1.)),
-            Styled::opacity,
-        )
-        .into_any_element()
 }
 
 /// A failure in the header.

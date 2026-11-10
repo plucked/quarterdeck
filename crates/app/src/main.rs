@@ -35,6 +35,7 @@
 //! - `text_tooltip.rs`: `TextTooltip`, a short text shown over an element on hover.
 //! - `review_verdict_badge.rs`: `ReviewVerdictBadge`, the viewer's latest review verdict as a small round mark.
 //! - `panel_toggle.rs`: `PanelToggle`, the icon button showing or hiding a side panel.
+//! - `pulsing_status.rs`: `PulsingStatus`, an accent status that pulses while it lasts, and the shared dot pulse.
 //! - `resize_handle.rs`: `ResizeHandle`, a divider dragged to resize the panel beside it.
 //! - `text_area/`: `TextArea`, a multiline text editor (gpui has none).
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
@@ -68,6 +69,7 @@ mod main_window;
 mod markdown_view;
 mod panel_toggle;
 mod pull_request_detail;
+mod pulsing_status;
 mod repo_monogram;
 mod resize_handle;
 mod review_queue;

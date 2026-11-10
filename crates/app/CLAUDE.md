@@ -26,6 +26,7 @@
 | `fold_chevron` | `FoldChevron` + `FoldState`: the 24 px fold button (▶ / ▼, tints on hover; its own click or the row's), used for every fold: sidebar repositories and stacks, tree folders, diff file headers, the description; rows without one leave `FOLD_CHEVRON_SIZE` of room |
 | `text_tooltip` | `TextTooltip`: the view a `.tooltip(TextTooltip::builder(text))` shows, one line on a card |
 | `review_verdict_badge` | `ReviewVerdictBadge`: the viewer's latest review (`qd_github::ViewerReview`) as a 14 px circle: ✓ on success (approved), ✕ on danger (changes requested), … on a ring (commented), – on a ring (dismissed), with a tooltip; in sidebar pull request and layer rows |
+| `pulsing_status` | `PulsingStatus`: a small accent status that pulses while it lasts (the top bar's `Refreshing from GitHub…` / `Opening #n…`, the Checks tab's `Reading…`); `dot_pulse`, the same 1.2 s pulse for activity dots (the detail's activity pill, a running check's mark) |
 | `checkbox` | `Checkbox` + `CheckState` (unchecked, checked, mixed): a drawn checkbox, used for viewed marks and options |
 | `display_date` | `short_date`: a GitHub timestamp as `21 Oct 2026`; `relative_age`; `unix_seconds` (the Others filter's Updated within) |
 | `display_size` | `byte_size`: a byte count as `151.7 MB` |

@@ -2,14 +2,13 @@ use std::time::Duration;
 
 use gpui::{
     Animation, AnimationExt as _, AnyElement, FontWeight, IntoElement, SharedString, Styled, div,
-    prelude::*, pulsating_between, px, relative,
+    prelude::*, px, relative,
 };
 
 use super::pull_request_detail::PullRequestDetail;
+use crate::pulsing_status::dot_pulse;
 use crate::theme;
 
-/// One breath of the pulsing activity dot and bar.
-const PULSE_PERIOD: Duration = Duration::from_millis(1200);
 /// One sweep of the bar when the share done is unknown.
 const SWEEP_PERIOD: Duration = Duration::from_millis(1400);
 /// The share of the track the sweeping bar covers.
@@ -77,15 +76,11 @@ impl PullRequestDetail {
                 .bg(theme::surface())
                 .text_xs()
                 .text_color(theme::muted())
-                .child(
-                    div().size_2().rounded_full().bg(color).with_animation(
-                        "activity-pulse",
-                        Animation::new(PULSE_PERIOD)
-                            .repeat()
-                            .with_easing(pulsating_between(0.3, 1.)),
-                        Styled::opacity,
-                    ),
-                )
+                .child(div().size_2().rounded_full().bg(color).with_animation(
+                    "activity-pulse",
+                    dot_pulse(),
+                    Styled::opacity,
+                ))
                 .child(activity.label)
                 .into_any_element(),
         )
