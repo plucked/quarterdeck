@@ -31,6 +31,7 @@
 //! - `counted.rs`: `counted`, a count with its noun in the singular or plural.
 //! - `count_as_f32.rs`: `count_as_f32`, a small count as a float for layout arithmetic.
 //! - `display_size.rs`: `byte_size`, a byte count as `151.7 MB`.
+//! - `distinct_repositories.rs`: `distinct_repositories`, repositories each once in the order first seen.
 //! - `short_sha.rs`: `short_sha`, a commit SHA's first seven characters.
 //! - `facet_chips/`: filter chips (pick with a click, hide with ⌥-click), shared by the file tree and the Others tab.
 //! - `repo_monogram.rs`: `RepoMonogram`, a repository's colored letter (sidebar, settings).
@@ -67,6 +68,7 @@ mod diff_line_sides;
 mod diff_view;
 mod display_date;
 mod display_size;
+mod distinct_repositories;
 mod facet_chips;
 mod fetch_stack;
 mod file_icon_svgs;

@@ -11,6 +11,7 @@ use super::others_filtering::{FilterContext, chip_counts, passes};
 use super::others_group::OthersGroup;
 use super::others_repository::OthersRepository;
 use super::queue_lists::QueueLists;
+use crate::distinct_repositories::distinct_repositories;
 
 /// The Others tab's state: the watched repositories, each one's filter,
 /// which pull requests pass, and what the sidebar has open.
@@ -176,17 +177,12 @@ impl OthersTab {
     /// order they were added; each with its counts and filter state.
     pub fn repositories(&self, lists: &QueueLists) -> Vec<OthersRepository> {
         // The watched repositories with pull requests, most recent first, then the others.
-        let mut order: Vec<&RepoRef> = Vec::new();
-        for pull_request in &lists.others {
-            if self.watched.contains(&pull_request.repo) && !order.contains(&&pull_request.repo) {
-                order.push(&pull_request.repo);
-            }
-        }
-        for repo in &self.watched {
-            if !order.contains(&repo) {
-                order.push(repo);
-            }
-        }
+        let with_pull_requests = lists
+            .others
+            .iter()
+            .map(|pull_request| &pull_request.repo)
+            .filter(|repo| self.watched.contains(repo));
+        let order = distinct_repositories(with_pull_requests.chain(&self.watched));
 
         // Each one's counts and filter.
         order

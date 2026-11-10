@@ -35,6 +35,7 @@
 | `counted` | `counted(count, one, many)`: `1 check`, `3 checks` |
 | `count_as_f32` | `count_as_f32`: a small count as `f32` through `u16` (clamped), for layout arithmetic |
 | `display_size` | `byte_size`: a byte count as `151.7 MB` |
+| `distinct_repositories` | `distinct_repositories`: repositories each once, in the order first seen (the sidebar's repository groups, the Others tab's order, the Repositories settings' quick picks) |
 | `short_sha` | `short_sha`: a commit SHA's first seven characters (the stack range line, a brief's version line) |
 | `resize_handle` | `ResizeHandle`: reusable divider strip between two panels in a flex row; dragging it reports a clamped width (`ResizeEdge` says which side the panel is on) |
 | `markdown_view` | `MarkdownView`: reusable component rendering a `qd_markdown::MarkdownDocument`, with mouse text selection and copy; `is_openable` (absolute `http(s)` URLs only, also for the Checks tab's details links); `edge_pieces` / `covers` (a text cut at the edges of ranges, so each piece has one look; also `code_highlights`') |

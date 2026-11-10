@@ -3,10 +3,12 @@ use std::collections::{HashMap, HashSet};
 use qd_github::{PullRequest, PullRequestStack, RepoRef};
 
 use super::collapsed_groups::CollapsedGroups;
+use super::others_group::OthersGroup;
 use super::others_repository::OthersRepository;
 use super::repo_group::RepoGroup;
 use super::stack_group::StackGroup;
 use super::stack_key::StackKey;
+use crate::distinct_repositories::distinct_repositories;
 
 /// One row of the queue's sidebar list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,29 +46,15 @@ impl QueueRow {
         stacks: &HashMap<StackKey, PullRequestStack>,
     ) -> Vec<Self> {
         // The repositories in the order they first appear.
-        let mut repositories: Vec<&RepoRef> = Vec::new();
-        for pull_request in list {
-            if !repositories.contains(&&pull_request.repo) {
-                repositories.push(&pull_request.repo);
-            }
-        }
+        let repositories =
+            distinct_repositories(list.iter().map(|pull_request| &pull_request.repo));
 
         // Each one's header, then its rows.
         let mut rows = Vec::new();
         for repo in repositories {
-            let indexes: Vec<usize> = list
-                .iter()
-                .enumerate()
-                .filter(|(_, pull_request)| pull_request.repo == *repo)
-                .map(|(index, _)| index)
-                .collect();
+            let indexes = repository_indexes(list, repo);
             let is_collapsed = collapsed.repositories.contains(repo);
-            rows.push(Self::RepoHeader(RepoGroup {
-                repo: repo.clone(),
-                pull_requests: indexes.len(),
-                is_collapsed,
-                others: None,
-            }));
+            rows.push(repo_header(repo, &indexes, is_collapsed, None));
             if !is_collapsed {
                 rows.extend(repository_rows(list, &indexes, &collapsed.stacks, stacks));
             }
@@ -88,19 +76,14 @@ impl QueueRow {
         let mut rows = Vec::new();
         for repository in repositories {
             let repo = &repository.repo;
-            let indexes: Vec<usize> = shown
-                .iter()
-                .enumerate()
-                .filter(|(_, pull_request)| &pull_request.repo == repo)
-                .map(|(index, _)| index)
-                .collect();
+            let indexes = repository_indexes(shown, repo);
             let is_collapsed = collapsed.repositories.contains(repo);
-            rows.push(Self::RepoHeader(RepoGroup {
-                repo: repo.clone(),
-                pull_requests: indexes.len(),
+            rows.push(repo_header(
+                repo,
+                &indexes,
                 is_collapsed,
-                others: Some(repository.group.clone()),
-            }));
+                Some(repository.group.clone()),
+            ));
             if is_collapsed {
                 continue;
             }
@@ -127,6 +110,31 @@ impl QueueRow {
             | Self::NothingShown(_) => None,
         }
     }
+}
+
+/// The indexes in `list` of `repo`'s pull requests, in list order.
+fn repository_indexes(list: &[PullRequest], repo: &RepoRef) -> Vec<usize> {
+    list.iter()
+        .enumerate()
+        .filter(|(_, pull_request)| &pull_request.repo == repo)
+        .map(|(index, _)| index)
+        .collect()
+}
+
+/// The header row of `repo`, whose pull requests are at `indexes` in the
+/// shown list; `others` holds its filter in the Others tab.
+fn repo_header(
+    repo: &RepoRef,
+    indexes: &[usize],
+    is_collapsed: bool,
+    others: Option<OthersGroup>,
+) -> QueueRow {
+    QueueRow::RepoHeader(RepoGroup {
+        repo: repo.clone(),
+        pull_requests: indexes.len(),
+        is_collapsed,
+        others,
+    })
 }
 
 /// The rows of one repository's pull requests, at `indexes` in `list`: a
@@ -236,7 +244,6 @@ mod tests {
     use qd_github::{RepoRef, StackLayer, StackMembership, User};
 
     use super::*;
-    use crate::review_queue::others_group::OthersGroup;
 
     fn pull_request(number: u64, stack: Option<(u64, u64)>) -> PullRequest {
         in_repo("b", number, stack)

@@ -8,6 +8,7 @@ use super::settings_window::SettingsWindow;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::button::Button;
+use crate::distinct_repositories::distinct_repositories;
 use crate::repo_monogram::RepoMonogram;
 use crate::section_label::SectionLabel;
 use crate::theme;
@@ -155,18 +156,20 @@ impl SettingsWindow {
                 .background_executor()
                 .spawn(async move {
                     let cache = cache.lock();
-                    let mut repositories: Vec<RepoRef> = Vec::new();
+                    let mut pull_requests = Vec::new();
                     for key in [
                         PullRequestListKey::REVIEW_REQUESTED,
                         PullRequestListKey::REVIEWED,
                         PullRequestListKey::AUTHORED,
                     ] {
-                        for pull_request in cache.list(key)? {
-                            if !repositories.contains(&pull_request.repo) {
-                                repositories.push(pull_request.repo);
-                            }
-                        }
+                        pull_requests.extend(cache.list(key)?);
                     }
+                    let repositories: Vec<RepoRef> = distinct_repositories(
+                        pull_requests.iter().map(|pull_request| &pull_request.repo),
+                    )
+                    .into_iter()
+                    .cloned()
+                    .collect();
                     anyhow::Ok(repositories)
                 })
                 .await;
