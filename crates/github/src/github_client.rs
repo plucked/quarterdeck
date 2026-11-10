@@ -6,7 +6,7 @@ use ureq::Agent;
 use ureq::http::{HeaderMap, Response, StatusCode};
 use ureq::{Body, RequestBuilder};
 
-use crate::graphql_response::GraphQlResponse;
+use crate::graphql_response::{GraphQlData, GraphQlResponse};
 use crate::listed_details_query::{LISTED_DETAILS_QUERY, ListedDetailsData};
 use crate::next_page_url::next_page_url;
 use crate::other_pull_requests::others_search_queries;
@@ -186,6 +186,29 @@ impl GitHubClient {
         query: &str,
         variables: &serde_json::Value,
     ) -> Result<T, GitHubError> {
+        self.graphql_answer(query, variables)?
+            .into_data()
+            .map_err(graphql_error)
+    }
+
+    /// [`Self::graphql`], keeping data GitHub sent without the parts the
+    /// token may not read (`FORBIDDEN` errors) instead of failing.
+    pub(crate) fn graphql_allowing_forbidden<T: DeserializeOwned>(
+        &self,
+        query: &str,
+        variables: &serde_json::Value,
+    ) -> Result<GraphQlData<T>, GitHubError> {
+        self.graphql_answer(query, variables)?
+            .into_data_or_forbidden()
+            .map_err(graphql_error)
+    }
+
+    /// Sends a GraphQL query or mutation and decodes the whole answer.
+    fn graphql_answer<T: DeserializeOwned>(
+        &self,
+        query: &str,
+        variables: &serde_json::Value,
+    ) -> Result<GraphQlResponse<T>, GitHubError> {
         let request = serde_json::json!({ "query": query, "variables": variables });
         let builder = self.with_headers(
             self.agent.post(format!("{API_BASE}/graphql")),
@@ -193,8 +216,7 @@ impl GitHubClient {
             None,
         );
         let response = self.read_response(builder.send_json(&request)?, &mut |_| {})?;
-        let answer: GraphQlResponse<T> = serde_json::from_str(&response.body)?;
-        answer.into_data().map_err(graphql_error)
+        Ok(serde_json::from_str(&response.body)?)
     }
 
     /// A pull request by number, shaped like the search results (same id),

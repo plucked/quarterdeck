@@ -56,12 +56,24 @@
 //! - `file_text_location.rs`: `FileTextLocation`, a blob SHA or a path in a commit.
 //! - `file_text_query.rs`: the GraphQL query of a file at a path, and its answer.
 //! - `file_text_requests.rs`: `GitHubClient::file_text`, by blob (REST) or path (GraphQL).
+//! - `check_outcome.rs`: `CheckOutcome`, where one check stands (failed, running, passed, …).
+//! - `expected_checks.rs`: marks the checks the base branch requires and adds those not reported yet as expected.
+//! - `status_check.rs`: `StatusCheck` and `CheckSource`, one check on a head commit and what produced it.
+//! - `pull_request_checks.rs`: `PullRequestChecks` and `CheckDetails`, a head commit's checks or why they are hidden.
+//! - `status_checks_query.rs`: the GraphQL query of a head commit's checks, page by page, and its answer.
+//! - `status_check_requests.rs`: `GitHubClient::pull_request_checks`, every page of a pull request's checks.
+//! - `merge_conflict.rs`: `MergeConflict` and `ConflictLocation`, a pull request (or a layer below it) that conflicts with its base.
+//! - `layer_conflicts_query.rs`: the GraphQL query of whether chosen stack layers conflict with their bases.
+//! - `workflow_jobs_response.rs`: the REST answers of a commit's Actions runs, their jobs and its statuses.
+//! - `workflow_job_requests.rs`: `GitHubClient::workflow_job_checks`, a commit's checks read through GitHub Actions.
 
 mod api_usage;
+mod check_outcome;
 mod conditional_response;
 mod download_avatar;
 mod download_progress;
 mod etag;
+mod expected_checks;
 mod file_text;
 mod file_text_location;
 mod file_text_query;
@@ -71,9 +83,11 @@ mod github_error;
 mod graphql_response;
 mod keychain_token;
 mod label;
+mod layer_conflicts_query;
 mod line_side;
 mod listed_details_query;
 mod listed_pull_request_details;
+mod merge_conflict;
 mod merge_method;
 mod merge_options;
 mod merge_outcome;
@@ -83,6 +97,7 @@ mod other_pull_requests;
 mod other_pull_requests_update;
 mod pull_request;
 mod pull_request_branches;
+mod pull_request_checks;
 mod pull_request_file;
 mod pull_request_lookup_query;
 mod pull_request_requests;
@@ -104,13 +119,19 @@ mod search_issue;
 mod search_response;
 mod stack_layer;
 mod stack_membership;
+mod status_check;
+mod status_check_requests;
+mod status_checks_query;
 mod token_source;
 mod unified_diff;
 mod user;
 mod viewer_request;
 mod viewer_review;
+mod workflow_job_requests;
+mod workflow_jobs_response;
 
 pub use api_usage::{ApiUsage, ApiUsageSnapshot};
+pub use check_outcome::CheckOutcome;
 pub use conditional_response::ConditionalResponse;
 pub use download_avatar::download_avatar;
 pub use download_progress::DownloadProgress;
@@ -123,6 +144,7 @@ pub use keychain_token::{delete_stored_token, store_token, stored_token};
 pub use label::Label;
 pub use line_side::LineSide;
 pub use listed_pull_request_details::ListedPullRequestDetails;
+pub use merge_conflict::{ConflictLocation, MergeConflict};
 pub use merge_method::MergeMethod;
 pub use merge_options::{
     MergeOptions, MergePermissions, MergeQueueState, MergeReadiness, PullRequestState,
@@ -131,6 +153,7 @@ pub use merge_outcome::MergeOutcome;
 pub use other_pull_requests_update::OtherPullRequestsUpdate;
 pub use pull_request::PullRequest;
 pub use pull_request_branches::PullRequestBranches;
+pub use pull_request_checks::{CheckDetails, PullRequestChecks};
 pub use pull_request_file::PullRequestFile;
 pub use pull_request_review_state::PullRequestReviewState;
 pub use pull_request_revision::PullRequestRevision;
@@ -145,6 +168,7 @@ pub use review_thread::{ReviewThread, ThreadComment, ThreadPermissions};
 pub use revision_check::RevisionCheck;
 pub use stack_layer::StackLayer;
 pub use stack_membership::StackMembership;
+pub use status_check::{CheckSource, StatusCheck};
 pub use token_source::TokenSource;
 pub use user::User;
 pub use viewer_review::ViewerReview;
