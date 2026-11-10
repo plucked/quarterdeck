@@ -2,7 +2,9 @@ use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::Context;
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewScope, ReviewSummary};
-use qd_github::{NewReviewThread, NewThreadReply, ReviewEvent, ReviewSubmission, SubmittedPart};
+use qd_github::{
+    GitHubError, NewReviewThread, NewThreadReply, ReviewEvent, ReviewSubmission, SubmittedPart,
+};
 
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
@@ -198,46 +200,55 @@ impl PullRequestDetail {
                 }
             }
             let submitted = submitted.await;
-
             detail
                 .update(cx, |detail, cx| {
-                    // This task ends here: let go of its handle without cancelling it.
-                    if let Some(task) = detail.review_mut().submission.take() {
-                        task.detach();
-                    }
-
-                    // The saved summary of a submitted review goes, whatever shows now.
-                    if submitted.is_ok() {
-                        UiStateRecorder::record_review_change(
-                            cx,
-                            ReviewChange::DeleteSummary(pull_request_id),
-                        );
-                    }
-
-                    // Another pull request or range shows now: its review stays as it is.
-                    if detail.review_scope() != Some(&ReviewScope::PullRequest(pull_request_id)) {
-                        cx.notify();
-                        return;
-                    }
-
-                    // Say how it went and read the conversations again.
-                    detail.review_mut().status = match submitted {
-                        Ok(()) => {
-                            detail.review_mut().comments.summary = ReviewSummary::default();
-                            if let Some(area) = detail.review().summary_editor.clone() {
-                                area.update(cx, |area, cx| area.set_text("", cx));
-                            }
-                            OperationStatus::Done("Review submitted.".into())
-                        }
-                        Err(error) => OperationStatus::Failed(format!("{error:#}").into()),
-                    };
-                    detail.load_github_review(cx);
-                    detail.rebuild_rows_in_place();
-                    cx.notify();
+                    detail.finish_submission(pull_request_id, submitted, cx);
                 })
                 .ok();
         });
         self.review_mut().submission = Some(task);
+        cx.notify();
+    }
+
+    /// Takes in how the submission of pull request `pull_request_id`'s
+    /// review ended: its saved summary goes once submitted, and while that
+    /// pull request still shows, the review tab says how it went and the
+    /// conversations are read again.
+    fn finish_submission(
+        &mut self,
+        pull_request_id: u64,
+        submitted: Result<(), GitHubError>,
+        cx: &mut Context<Self>,
+    ) {
+        // This task ends here: let go of its handle without cancelling it.
+        if let Some(task) = self.review_mut().submission.take() {
+            task.detach();
+        }
+
+        // The saved summary of a submitted review goes, whatever shows now.
+        if submitted.is_ok() {
+            UiStateRecorder::record_review_change(cx, ReviewChange::DeleteSummary(pull_request_id));
+        }
+
+        // Another pull request or range shows now: its review stays as it is.
+        if self.review_scope() != Some(&ReviewScope::PullRequest(pull_request_id)) {
+            cx.notify();
+            return;
+        }
+
+        // Say how it went and read the conversations again.
+        self.review_mut().status = match submitted {
+            Ok(()) => {
+                self.review_mut().comments.summary = ReviewSummary::default();
+                if let Some(area) = self.review().summary_editor.clone() {
+                    area.update(cx, |area, cx| area.set_text("", cx));
+                }
+                OperationStatus::Done("Review submitted.".into())
+            }
+            Err(error) => OperationStatus::Failed(format!("{error:#}").into()),
+        };
+        self.load_github_review(cx);
+        self.rebuild_rows_in_place();
         cx.notify();
     }
 
