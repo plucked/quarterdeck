@@ -5,9 +5,8 @@ use super::brief_card::brief_card;
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::brief_state::BriefState;
 use super::familiarity_picker::render_familiarity_picker;
-use crate::button::Button;
+use crate::controls::{Button, SectionLabel};
 use crate::counted::counted;
-use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// Characters per thousand, for the writing progress.

@@ -9,7 +9,7 @@ use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::note_key;
 use super::thread_resolution::ThreadResolution;
 use crate::avatar_images::Avatar;
-use crate::button::Button;
+use crate::controls::Button;
 use crate::diff_view::frame_file_row;
 use crate::display_date::short_date;
 use crate::markdown_view::MarkdownView;

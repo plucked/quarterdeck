@@ -4,7 +4,7 @@ use gpui::{AnyElement, IntoElement, div, prelude::*, px};
 use qd_markdown::MarkdownDocument;
 
 use super::brief_text_rendering::markdown;
-use crate::section_label::SectionLabel;
+use crate::controls::SectionLabel;
 use crate::theme;
 
 /// The narrowest a scope list gets before the lists stack.

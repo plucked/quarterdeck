@@ -4,7 +4,7 @@ use qd_studio::{CodeAccess, ReaderFamiliarity, RejectedWidget};
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::familiarity_picker::render_familiarity_picker;
 use super::prepared_brief::PreparedBrief;
-use crate::button::Button;
+use crate::controls::Button;
 use crate::counted::counted;
 use crate::theme;
 

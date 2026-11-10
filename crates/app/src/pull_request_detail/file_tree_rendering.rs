@@ -9,10 +9,9 @@ use qd_file_tree::{FileIcon, TreeNodeKind, TreeRow};
 use super::folder_viewed_state::FolderViewedState;
 use super::line_counts::LineCounts;
 use super::pull_request_detail::PullRequestDetail;
-use crate::checkbox::{CheckState, Checkbox};
+use crate::controls::{CheckState, Checkbox, FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::diff_view::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
 use crate::file_icon_svgs::file_icon_path;
-use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
 

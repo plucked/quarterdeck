@@ -7,12 +7,11 @@ use super::ReviewQueue;
 use super::chip_marks::ChipMarks;
 use super::others_facet::OthersFacet;
 use super::others_filtering::describe;
-use crate::checkbox::{CheckState, Checkbox};
+use crate::controls::{CheckState, Checkbox, SegmentedControl};
 use crate::facet_chips::{
     CHIP_HINT, COLLAPSED_CHIPS, ChipClick, CollapsedChipRow, FacetChip, render_chip_row,
     render_more_chip,
 };
-use crate::segmented_control::SegmentedControl;
 use crate::settings_window::{SettingsCategory, open_settings_window_at};
 use crate::theme;
 
@@ -324,7 +323,7 @@ pub(super) fn render_others_empty_state() -> impl IntoElement {
                 .child("Choose repositories, and their open pull requests by others show here, with filters per repository."),
         )
         .child(
-            crate::button::Button::new("choose-repositories", "Choose repositories…")
+            crate::controls::Button::new("choose-repositories", "Choose repositories…")
                 .primary()
                 .on_click(|_, _, cx| open_settings_window_at(SettingsCategory::Repositories, cx)),
         )

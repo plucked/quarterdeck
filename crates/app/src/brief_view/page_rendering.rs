@@ -2,7 +2,7 @@ use gpui::{AnyElement, FontWeight, IntoElement, SharedString, div, prelude::*, p
 
 use super::brief_handlers::BriefHandlers;
 use super::prepared_page::PreparedPage;
-use crate::section_label::SectionLabel;
+use crate::controls::SectionLabel;
 use crate::theme;
 
 /// Height of the underline marking the shown page's tab.

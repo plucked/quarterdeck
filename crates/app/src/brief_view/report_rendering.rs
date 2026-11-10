@@ -3,8 +3,7 @@ use gpui::{AnyElement, Entity, IntoElement, div, prelude::*};
 use super::brief_card::brief_card;
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::report_state::ReportState;
-use crate::button::Button;
-use crate::section_label::SectionLabel;
+use crate::controls::{Button, SectionLabel};
 use crate::text_area::TextArea;
 use crate::theme;
 

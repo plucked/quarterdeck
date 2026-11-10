@@ -4,8 +4,7 @@ use gpui::{
 };
 use qd_github::CheckOutcome;
 
-use crate::pulsing_status::dot_pulse;
-use crate::text_tooltip::TextTooltip;
+use crate::controls::{TextTooltip, dot_pulse};
 use crate::theme;
 
 /// A glyph's size as a share of the mark's diameter.

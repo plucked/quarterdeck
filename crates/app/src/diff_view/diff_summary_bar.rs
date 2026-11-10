@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*};
 
 use super::DiffSummary;
-use crate::button::Button;
+use crate::controls::Button;
 use crate::theme;
 
 /// What a summary bar link does when clicked.

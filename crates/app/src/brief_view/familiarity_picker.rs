@@ -2,8 +2,7 @@ use gpui::{AnyElement, IntoElement, div, prelude::*};
 use qd_studio::ReaderFamiliarity;
 
 use super::brief_handlers::BriefHandlers;
-use crate::section_label::SectionLabel;
-use crate::segmented_control::SegmentedControl;
+use crate::controls::{SectionLabel, SegmentedControl};
 use crate::theme;
 
 /// The question how well the reader knows the area, its three answers as

@@ -6,7 +6,7 @@ use gpui::{
 };
 use qd_github::ViewerReview;
 
-use crate::text_tooltip::TextTooltip;
+use crate::controls::TextTooltip;
 use crate::theme;
 
 /// Diameter of the badge.

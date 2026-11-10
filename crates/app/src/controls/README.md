@@ -1,0 +1,3 @@
+# controls
+
+Small reusable UI components that look and behave the same wherever a view places them: buttons, checkboxes, option rows, fold chevrons, resize handles, tooltips, section labels, pulsing status lines and repository monograms, plus the helper that turns an option's pick into a call on its view. Each one draws only what it is given and reports clicks or drags through the handler it was handed; it keeps no state of its own and knows nothing about pull requests, the queue or the settings. Larger pieces with state of their own (the scrollbar, the text area, Markdown, filter chips) are their own modules beside this one.

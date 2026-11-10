@@ -3,7 +3,7 @@ use qd_update::AppVersion;
 
 use super::setting_row::SettingRow;
 use crate::app_update::{AppUpdater, UpdateStatus};
-use crate::button::Button;
+use crate::controls::Button;
 use crate::markdown_view::MarkdownView;
 use crate::theme;
 

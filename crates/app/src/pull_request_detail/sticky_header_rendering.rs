@@ -4,14 +4,12 @@ use qd_github::PullRequest;
 use super::detail_mode::DetailMode;
 use super::pull_request_detail::PullRequestDetail;
 use crate::avatar_images::Avatar;
+use crate::controls::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState, SegmentedControl, view_option};
 use crate::display_date::short_date;
-use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::github_link::GitHubLink;
 use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
-use crate::segmented_control::SegmentedControl;
 use crate::theme;
-use crate::view_option::view_option;
 
 /// The tallest the expanded description gets before it scrolls on its own,
 /// so the diff always keeps most of the pane.

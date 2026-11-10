@@ -1,8 +1,7 @@
 use gpui::{AnyElement, ClickEvent, Context, IntoElement, div, prelude::*};
 
 use super::pull_request_detail::PullRequestDetail;
-use crate::button::Button;
-use crate::checkbox::{CheckState, Checkbox};
+use crate::controls::{Button, CheckState, Checkbox};
 use crate::facet_chips::{
     CHIP_HINT, ChipClick, CollapsedChipRow, FacetChip, most_common_values, render_chip_row,
     render_more_chip,

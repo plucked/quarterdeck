@@ -5,7 +5,7 @@ use qd_syntax::SyntaxKind;
 use super::settings_window::SettingsWindow;
 use super::theme_preview::render_theme_preview;
 use crate::app_settings::AppSettings;
-use crate::section_label::SectionLabel;
+use crate::controls::SectionLabel;
 use crate::theme::{self, colors_of, palette_of};
 
 /// Height of a theme card's color strip.

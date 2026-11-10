@@ -5,11 +5,8 @@ use qd_github::{PullRequestReviewState, ReviewEvent};
 use super::comment_card_rendering::element_id;
 use super::lines_label::note_lines_label;
 use super::pull_request_detail::PullRequestDetail;
-use crate::button::Button;
-use crate::section_label::SectionLabel;
-use crate::segmented_control::SegmentedControl;
+use crate::controls::{Button, SectionLabel, SegmentedControl, view_option};
 use crate::theme;
-use crate::view_option::view_option;
 
 impl PullRequestDetail {
     /// The review tab: where comments go, what the user wrote, and

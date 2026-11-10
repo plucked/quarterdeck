@@ -10,12 +10,9 @@ use super::removable_row::RemovableRow;
 use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
 use super::settings_window::{SettingsWindow, is_one_line_submit};
 use crate::app_settings::AppSettings;
-use crate::button::Button;
-use crate::section_label::SectionLabel;
-use crate::segmented_control::SegmentedControl;
+use crate::controls::{Button, SectionLabel, SegmentedControl, view_option};
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
-use crate::view_option::view_option;
 
 /// The Filters page's form: the field a branch pattern is typed into, the
 /// branch it will look at, and why the last one could not be added.

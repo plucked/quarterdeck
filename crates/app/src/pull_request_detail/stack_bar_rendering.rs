@@ -3,10 +3,8 @@ use qd_cache::StackReviewMode;
 
 use super::pull_request_detail::PullRequestDetail;
 use super::review_target::ReviewTarget;
-use crate::button::Button;
-use crate::segmented_control::SegmentedControl;
+use crate::controls::{Button, SegmentedControl, view_option};
 use crate::theme;
-use crate::view_option::view_option;
 
 impl PullRequestDetail {
     /// The header's stack line for a stacked pull request: which layer this

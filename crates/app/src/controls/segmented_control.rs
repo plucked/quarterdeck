@@ -37,7 +37,7 @@ struct SegmentOption {
 
 /// A bordered row of options of which one is selected; clicking an option
 /// calls its handler (the owner then re-renders with the new selection) and
-/// goes no further, like a [`Button`](crate::button::Button) click.
+/// goes no further, like a [`Button`](crate::controls::Button) click.
 #[derive(IntoElement)]
 pub struct SegmentedControl {
     id: ElementId,

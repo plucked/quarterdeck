@@ -8,8 +8,8 @@ use super::check_row::TreeDepth;
 use super::check_tally::CheckTally;
 use super::check_tree::CheckTree;
 use super::checks_panel::ChecksPanel;
+use crate::controls::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::display_date::{short_duration, unix_now, unix_seconds};
-use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::markdown_view::is_openable;
 use crate::theme;
 

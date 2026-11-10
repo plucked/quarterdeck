@@ -1,6 +1,6 @@
 use gpui::{AnyElement, Div, FontWeight, SharedString, Stateful, div, prelude::*, px};
 
-use crate::section_label::SectionLabel;
+use crate::controls::SectionLabel;
 use crate::theme;
 
 /// What a chip row says while no chip is set: how the chips work.

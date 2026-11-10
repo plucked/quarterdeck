@@ -7,8 +7,8 @@ use gpui::{
 
 use super::batch_progress::BatchProgress;
 use super::pull_request_detail::PullRequestDetail;
+use crate::controls::dot_pulse;
 use crate::count_as_f32::count_as_f32;
-use crate::pulsing_status::dot_pulse;
 use crate::theme;
 
 /// One sweep of the bar when the share done is unknown.

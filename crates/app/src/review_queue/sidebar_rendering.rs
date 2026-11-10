@@ -8,15 +8,13 @@ use super::queue_row::QueueRow;
 use super::refresh_status::RefreshStatus;
 use super::repo_group::RepoGroup;
 use super::stack_row_rendering::{on_layer_click, render_layer_row, render_stack_header};
+use crate::controls::{
+    FoldChevron, FoldState, PulsingStatus, RepoMonogram, ResizeEdge, ResizeHandle,
+    SegmentedControl, view_option,
+};
 use crate::display_date::unix_now;
-use crate::fold_chevron::{FoldChevron, FoldState};
-use crate::pulsing_status::PulsingStatus;
-use crate::repo_monogram::RepoMonogram;
-use crate::resize_handle::{ResizeEdge, ResizeHandle};
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
-use crate::segmented_control::SegmentedControl;
 use crate::theme;
-use crate::view_option::view_option;
 
 /// How narrow and how wide the sidebar can be dragged.
 const MIN_SIDEBAR_WIDTH: f32 = 240.;

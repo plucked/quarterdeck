@@ -11,8 +11,8 @@ use crate::brief_view::{
     render_brief_header, render_brief_page_row, render_brief_status, render_column_width_probe,
     render_page_tabs,
 };
+use crate::controls::SectionLabel;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
-use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// What the intro row says.

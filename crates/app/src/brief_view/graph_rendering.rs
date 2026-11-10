@@ -11,7 +11,7 @@ use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse};
 use super::edge_routing::EDGE_LABEL_PADDING;
 use super::graph_layout::{GROUP_LABEL_HEIGHT, GraphLayout, NODE_PADDING_X, NODE_PADDING_Y};
 use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
-use crate::section_label::SectionLabel;
+use crate::controls::SectionLabel;
 use crate::theme;
 
 /// Which parts of a graph a picture shows.

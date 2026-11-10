@@ -4,7 +4,7 @@ use qd_diff::{ChangeHighlight, WhitespaceMode};
 
 use super::setting_row::SettingRow;
 use crate::app_settings::AppSettings;
-use crate::segmented_control::SegmentedControl;
+use crate::controls::SegmentedControl;
 
 /// The File Diff page: layout, change highlighting, whitespace and long
 /// lines, each applied to every open diff as soon as it is chosen.

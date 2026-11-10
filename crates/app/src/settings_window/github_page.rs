@@ -6,9 +6,8 @@ use super::setting_row::SettingRow;
 use super::settings_window::SettingsWindow;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
-use crate::button::Button;
+use crate::controls::{Button, SegmentedControl};
 use crate::display_size::byte_size;
-use crate::segmented_control::SegmentedControl;
 use crate::theme;
 
 /// Width of a breakdown line's name column.

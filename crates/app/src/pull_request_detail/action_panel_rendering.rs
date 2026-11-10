@@ -4,8 +4,7 @@ use qd_github::{MergeMethod, MergeOptions, MergeQueueState, PullRequestState};
 use super::action_panel::{ActionPanel, ArmedAction, PanelAction};
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
-use crate::button::Button;
-use crate::checkbox::{CheckState, Checkbox};
+use crate::controls::{Button, CheckState, Checkbox};
 use crate::theme;
 
 /// Corner radius of a merge method's row.

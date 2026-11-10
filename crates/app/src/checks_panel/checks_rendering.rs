@@ -15,12 +15,9 @@ use super::check_tree::{CheckTree, TreeEntry};
 use super::checks_panel::ChecksPanel;
 use super::checks_summary::Summary;
 use super::shown_checks::ShownChecks;
-use crate::button::Button;
+use crate::controls::{Button, FoldState, PulsingStatus, SectionLabel};
 use crate::count_as_f32::count_as_f32;
-use crate::fold_chevron::FoldState;
-use crate::pulsing_status::PulsingStatus;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
-use crate::section_label::SectionLabel;
 use crate::theme;
 
 /// Diameter of the mark beside the verdict.

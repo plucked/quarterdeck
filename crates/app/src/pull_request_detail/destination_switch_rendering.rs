@@ -2,8 +2,7 @@ use gpui::Context;
 use qd_cache::NoteDestination;
 
 use super::pull_request_detail::PullRequestDetail;
-use crate::segmented_control::SegmentedControl;
-use crate::view_option::view_option;
+use crate::controls::{SegmentedControl, view_option};
 
 impl PullRequestDetail {
     /// The GitHub / Local switch of where new comments go on a single pull

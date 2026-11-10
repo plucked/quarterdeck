@@ -12,10 +12,8 @@ use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
 use super::settings_window::{SettingsWindow, is_one_line_submit};
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
-use crate::button::Button;
+use crate::controls::{Button, RepoMonogram, SectionLabel};
 use crate::distinct_repositories::distinct_repositories;
-use crate::repo_monogram::RepoMonogram;
-use crate::section_label::SectionLabel;
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
 

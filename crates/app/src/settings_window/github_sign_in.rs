@@ -6,7 +6,7 @@ use super::settings_window::SettingsWindow;
 use super::sign_in_status::SignInStatus;
 use crate::app_services::AppServices;
 use crate::app_update::restart_app;
-use crate::button::Button;
+use crate::controls::Button;
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
 

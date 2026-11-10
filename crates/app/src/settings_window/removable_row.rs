@@ -1,6 +1,6 @@
 use gpui::{AnyElement, App, ElementId, IntoElement, RenderOnce, Window, div, prelude::*};
 
-use crate::button::Button;
+use crate::controls::Button;
 use crate::theme;
 
 /// What a row's Remove button does.

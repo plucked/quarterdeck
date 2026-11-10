@@ -11,8 +11,8 @@
 //! - `avatar_images/`: `AvatarImages` and `Avatar`, people's GitHub avatars, loaded in the background.
 //! - `app_settings.rs`: `AppSettings`, the user's preferences shared by every window.
 //! - `app_services.rs`: `AppServices`, the GitHub client and cache handed to views.
+//! - `controls/`: small reusable components (buttons, checkboxes, option rows, fold chevrons, tooltips, labels) and the option handler helper.
 //! - `scrollbar/`: `VerticalScrollbar`, a draggable scrollbar for any scroll container.
-//! - `section_label.rs`: `SectionLabel`, the small uppercase subtle label heading a section.
 //! - `shared_cache.rs`: `SharedCache`, the cache shared between views and background tasks.
 //! - `fetch_stack.rs`: gets a stack's layers from the cache, and checks them with GitHub.
 //! - `word_range_at.rs`: the word around an offset, for double-click selection.
@@ -25,8 +25,6 @@
 //! - `diff_line_sides.rs`: a diff line's number on the old or new side, and a brief anchor's side as one.
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
-//! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
-//! - `button.rs`: `Button`, a small text button.
 //! - `display_date.rs`: `short_date`, a GitHub timestamp as `21 Oct 2026`; ages and durations.
 //! - `counted.rs`: `counted`, a count with its noun in the singular or plural.
 //! - `count_as_f32.rs`: `count_as_f32`, a small count as a float for layout arithmetic.
@@ -34,21 +32,14 @@
 //! - `distinct_repositories.rs`: `distinct_repositories`, repositories each once in the order first seen.
 //! - `short_sha.rs`: `short_sha`, a commit SHA's first seven characters.
 //! - `facet_chips/`: filter chips (pick with a click, hide with ⌥-click), shared by the file tree and the Others tab.
-//! - `repo_monogram.rs`: `RepoMonogram`, a repository's colored letter (sidebar, settings).
-//! - `fold_chevron.rs`: `FoldChevron`, the button folding a group.
-//! - `checkbox.rs`: `Checkbox`, a drawn checkbox (checked, unchecked or mixed).
-//! - `text_tooltip.rs`: `TextTooltip`, a short text shown over an element on hover.
 //! - `review_verdict_badge.rs`: `ReviewVerdictBadge`, the viewer's latest review verdict as a small round mark.
 //! - `panel_toggle.rs`: `PanelToggle`, the icon button showing or hiding a side panel.
-//! - `pulsing_status.rs`: `PulsingStatus`, an accent status that pulses while it lasts, and the shared dot pulse.
-//! - `resize_handle.rs`: `ResizeHandle`, a divider dragged to resize the panel beside it.
 //! - `text_area/`: `TextArea`, a multiline text editor (gpui has none).
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
 //! - `review_queue/`: the main view, the queue of pull requests awaiting review.
 //! - `pull_request_detail/`: `PullRequestDetail`, the selected pull request as a virtualized list.
 //! - `checks_panel/`: `ChecksPanel`, the side panel's Checks tab: the shown pull request's CI checks.
 //! - `ui_state/`: saves and restores what the UI showed across relaunches.
-//! - `view_option.rs`: `view_option`, an option's select handler passing its value to the view.
 
 mod app_commands;
 mod app_services;
@@ -59,9 +50,8 @@ mod brief_gallery;
 mod brief_view;
 mod bundled_fonts;
 mod bundled_icons;
-mod button;
-mod checkbox;
 mod checks_panel;
+mod controls;
 mod count_as_f32;
 mod counted;
 mod diff_line_sides;
@@ -72,31 +62,23 @@ mod distinct_repositories;
 mod facet_chips;
 mod fetch_stack;
 mod file_icon_svgs;
-mod fold_chevron;
 mod github_link;
 mod launch_app;
 mod main_window;
 mod markdown_view;
 mod panel_toggle;
 mod pull_request_detail;
-mod pulsing_status;
-mod repo_monogram;
-mod resize_handle;
 mod review_queue;
 mod review_verdict_badge;
 mod scrollbar;
-mod section_label;
-mod segmented_control;
 mod settings_window;
 mod shared_cache;
 mod short_sha;
 mod startup_splash;
 mod text_area;
-mod text_tooltip;
 mod theme;
 mod tree_locate_button;
 mod ui_state;
-mod view_option;
 mod word_range_at;
 
 fn main() {

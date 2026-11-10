@@ -2,10 +2,8 @@ use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
 
 use super::pull_request_detail::PullRequestDetail;
 use super::side_panel_tab::SidePanelTab;
-use crate::resize_handle::{ResizeEdge, ResizeHandle};
-use crate::segmented_control::SegmentedControl;
+use crate::controls::{ResizeEdge, ResizeHandle, SegmentedControl, view_option};
 use crate::theme;
-use crate::view_option::view_option;
 
 /// How narrow and how wide the side panel can be dragged.
 const MIN_PANEL_WIDTH: f32 = 220.;

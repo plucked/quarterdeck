@@ -3,7 +3,7 @@ use qd_cache::PanelVisibility;
 
 use super::ReviewQueue;
 use crate::app_update::AppUpdater;
-use crate::button::Button;
+use crate::controls::Button;
 use crate::panel_toggle::{PanelEdge, PanelToggle};
 use crate::pull_request_detail::PullRequestDetail;
 use crate::theme;

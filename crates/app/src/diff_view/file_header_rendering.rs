@@ -5,8 +5,7 @@ use qd_github::PullRequestFile;
 
 use super::FileDiffState;
 use super::file_status_badge::render_file_status_badge;
-use crate::checkbox::{CheckState, Checkbox};
-use crate::fold_chevron::{FoldChevron, FoldState};
+use crate::controls::{CheckState, Checkbox, FoldChevron, FoldState};
 use crate::theme;
 use crate::tree_locate_button::TreeLocateButton;
 
