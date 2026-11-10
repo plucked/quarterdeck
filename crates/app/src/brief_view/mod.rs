@@ -18,10 +18,12 @@
 //! - `brief_excerpt.rs`: `ExcerptLine` and `brief_excerpt`, the lines an anchor quotes, cut from its diff.
 //! - `brief_handlers.rs`: `BriefHandlers`, what the brief's links and buttons do.
 //! - `brief_widget_context.rs`: `BriefWidgetContext`, what drawing widgets needs from the view.
-//! - `diagram_geometry.rs`: `DiagramPoint`, `DiagramRect`, `CubicCurve`: where diagram parts go; the default width and margin of every diagram.
+//! - `diagram_geometry.rs`: `DiagramPoint`, `DiagramSize`, `DiagramRect`, `CubicCurve`: where diagram parts go; the default width and margin of every diagram.
 //! - `text_estimate.rs`: `TextMetrics`, text sizes estimated for laying diagrams out before drawing.
 //! - `graph_layout.rs`: `GraphLayout` and `lay_out_graph`: boxes placed in layers along the arrows and a band per boundary, borders around them.
 //! - `graph_direction.rs`: `GraphDirection`, which way a graph's arrows run, and positions along and across them.
+//! - `graph_bands.rs`: `GraphBands`, each box's band and each band's boundary.
+//! - `graph_cell.rs`: `GraphCell`, the boxes of one band in one layer, in drawing order.
 //! - `graph_ranking.rs`: each box's layer (cycle-closing arrows left out), band, and order within its cell.
 //! - `edge_routing.rs`: `EdgeRoute` and `route_edges`: each arrow's path by its course, labels kept apart.
 //! - `sequence_layout.rs`: `SequenceLayout` and `lay_out_sequence`: lanes, and messages top to bottom.
@@ -65,6 +67,8 @@ mod diagram_rendering;
 mod diagram_stroke;
 mod edge_routing;
 mod familiarity_picker;
+mod graph_bands;
+mod graph_cell;
 mod graph_direction;
 mod graph_layout;
 mod graph_ranking;

@@ -1,7 +1,8 @@
 use qd_studio::{GraphNode, StudioGraph};
 
-use super::diagram_geometry::{DIAGRAM_MARGIN, DiagramRect};
+use super::diagram_geometry::{DIAGRAM_MARGIN, DiagramRect, DiagramSize};
 use super::edge_routing::{EdgeRoute, Placement, route_edges, separate_labels};
+use super::graph_cell::GraphCell;
 use super::graph_direction::GraphDirection;
 use super::graph_ranking::{cycle_closing_edges, node_bands, node_layers, ordered_cells};
 use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
@@ -61,11 +62,11 @@ fn lay_out_graph_in(graph: &StudioGraph, direction: GraphDirection) -> GraphLayo
     let heights: Vec<f32> = graph.nodes.iter().map(node_height).collect();
     let backward = cycle_closing_edges(graph);
     let layers = node_layers(graph, &backward);
-    let (bands, band_groups) = node_bands(graph);
+    let bands = node_bands(graph);
 
     // Place the boxes, then the boundaries around them.
-    let cells = ordered_cells(graph, &layers, &bands, &backward);
-    let nodes = place_nodes(direction, &heights, &layers, &cells, &band_groups);
+    let cells = ordered_cells(graph, &layers, &bands.of_node, &backward);
+    let nodes = place_nodes(direction, &heights, &layers, &cells, &bands.groups);
     let groups: Vec<Option<DiagramRect>> = (0..graph.groups.len())
         .map(|group| group_border(graph, &nodes, group))
         .collect();
@@ -128,12 +129,17 @@ fn place_nodes(
     direction: GraphDirection,
     heights: &[f32],
     layers: &[usize],
-    cells: &[((usize, usize), Vec<usize>)],
+    cells: &[GraphCell],
     band_groups: &[Option<usize>],
 ) -> Vec<DiagramRect> {
     let sizes: Vec<(f32, f32)> = heights
         .iter()
-        .map(|height| direction.along_and_across((NODE_WIDTH, *height)))
+        .map(|height| {
+            direction.along_and_across(DiagramSize {
+                width: NODE_WIDTH,
+                height: *height,
+            })
+        })
         .collect();
 
     // Where each layer starts in the arrows' direction.
@@ -157,20 +163,16 @@ fn place_nodes(
     let mut nodes = vec![DiagramRect::default(); heights.len()];
     let mut band_start = 0.;
     for (band, group) in band_groups.iter().enumerate() {
-        let band_cells = || {
-            cells
-                .iter()
-                .filter(move |((cell_band, _), _)| *cell_band == band)
-        };
+        let band_cells = || cells.iter().filter(move |cell| cell.band == band);
         let extent = band_cells()
-            .map(|(_, members)| stack_extent(members))
+            .map(|cell| stack_extent(&cell.nodes))
             .fold(0., f32::max);
         let content_start = band_start + group.map_or(0., |_| direction.band_lead());
-        for ((_, layer), members) in band_cells() {
-            let mut across = content_start + (extent - stack_extent(members)) / 2.;
-            for &node in members {
+        for cell in band_cells() {
+            let mut across = content_start + (extent - stack_extent(&cell.nodes)) / 2.;
+            for &node in &cell.nodes {
                 let (along_size, across_size) = sizes[node];
-                let along = layer_start[*layer] + (thickness[*layer] - along_size) / 2.;
+                let along = layer_start[cell.layer] + (thickness[cell.layer] - along_size) / 2.;
                 nodes[node] = direction.rect(along, across, along_size, across_size);
                 across += across_size + direction.stack_gap();
             }

@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use qd_studio::{GraphEdge, StudioGraph};
 
-use super::diagram_geometry::{CubicCurve, DiagramPoint, DiagramRect};
+use super::diagram_geometry::{CubicCurve, DiagramPoint, DiagramRect, DiagramSize};
 use super::graph_direction::GraphDirection;
 use super::text_estimate::SMALL_TEXT;
 use crate::count_as_f32::count_as_f32;
@@ -21,6 +21,16 @@ const SELF_LOOP_REACH: f32 = 44.;
 const SAME_LAYER_REACH: f32 = 48.;
 /// Space kept between two arrow labels pushed apart.
 const LABEL_SPACING: f32 = 3.;
+/// How far a forward arrow's control points reach into the gap between
+/// layers, as a share of the gap: how straight the arrow leaves and arrives.
+const FORWARD_REACH_SHARE: f32 = 0.6;
+/// Where a self arrow leaves its box's right side, as a share of its height.
+const SELF_LOOP_START_SHARE: f32 = 0.3;
+/// Where a self arrow comes back into its box's right side, as a share of its height.
+const SELF_LOOP_END_SHARE: f32 = 0.7;
+/// How far right of its box a self arrow's label starts, as a share of the
+/// loop's reach: inside the loop's widest point, so the label meets the line.
+const SELF_LOOP_LABEL_SHARE: f32 = 0.8;
 
 /// An arrow's path and where its label sits.
 #[derive(Debug, Clone, Copy)]
@@ -146,7 +156,7 @@ fn forward_route(
     placement: Placement,
     forward: &[usize],
     index: usize,
-    label_size: (f32, f32),
+    label_size: DiagramSize,
 ) -> EdgeRoute {
     let Placement {
         graph,
@@ -179,7 +189,7 @@ fn forward_route(
     let end_along = direction.along_span(nodes[edge.to]).0;
     let start_across = port(edge.from, BoxSide::Outgoing);
     let end_across = port(edge.to, BoxSide::Incoming);
-    let reach = direction.layer_gap() * 0.6;
+    let reach = direction.layer_gap() * FORWARD_REACH_SHARE;
     let curve = CubicCurve {
         start: direction.point(start_along, start_across),
         control_start: direction.point(start_along + reach, start_across),
@@ -203,7 +213,7 @@ fn same_layer_route(
     direction: GraphDirection,
     from: DiagramRect,
     to: DiagramRect,
-    label_size: (f32, f32),
+    label_size: DiagramSize,
 ) -> EdgeRoute {
     let centre = |rect: DiagramRect| {
         let (start, end) = direction.across_span(rect);
@@ -237,7 +247,7 @@ fn backward_route(
     from: DiagramRect,
     to: DiagramRect,
     bend: f32,
-    label_size: (f32, f32),
+    label_size: DiagramSize,
 ) -> EdgeRoute {
     let side = |rect: DiagramRect| {
         let (start, end) = direction.along_span(rect);
@@ -257,14 +267,14 @@ fn backward_route(
 }
 
 /// An arrow from a box to itself: a loop on its right, the label beside it.
-fn self_loop_route(node: DiagramRect, label_size: (f32, f32)) -> EdgeRoute {
+fn self_loop_route(node: DiagramRect, label_size: DiagramSize) -> EdgeRoute {
     let start = DiagramPoint {
         x: node.right(),
-        y: node.y + node.height * 0.3,
+        y: node.y + node.height * SELF_LOOP_START_SHARE,
     };
     let end = DiagramPoint {
         x: node.right(),
-        y: node.y + node.height * 0.7,
+        y: node.y + node.height * SELF_LOOP_END_SHARE,
     };
     let curve = CubicCurve {
         start,
@@ -281,31 +291,31 @@ fn self_loop_route(node: DiagramRect, label_size: (f32, f32)) -> EdgeRoute {
     EdgeRoute {
         curve,
         label: DiagramRect {
-            x: node.right() + SELF_LOOP_REACH * 0.8,
-            y: node.center_y() - label_size.1 / 2.,
-            width: label_size.0,
-            height: label_size.1,
+            x: node.right() + SELF_LOOP_REACH * SELF_LOOP_LABEL_SHARE,
+            y: node.center_y() - label_size.height / 2.,
+            width: label_size.width,
+            height: label_size.height,
         },
     }
 }
 
 /// An arrow label's width and height: its text wrapped to the widest a
 /// label gets, with padding.
-fn edge_label_size(label: &str) -> (f32, f32) {
+fn edge_label_size(label: &str) -> DiagramSize {
     let width = SMALL_TEXT.width_of(label).min(EDGE_LABEL_MAX_WIDTH);
-    (
-        width + 2. * EDGE_LABEL_PADDING,
-        SMALL_TEXT.height_of(label, EDGE_LABEL_MAX_WIDTH) + EDGE_LABEL_PADDING,
-    )
+    DiagramSize {
+        width: width + 2. * EDGE_LABEL_PADDING,
+        height: SMALL_TEXT.height_of(label, EDGE_LABEL_MAX_WIDTH) + EDGE_LABEL_PADDING,
+    }
 }
 
 /// A rectangle of `size` centred on `point`.
-fn centred(point: DiagramPoint, size: (f32, f32)) -> DiagramRect {
+fn centred(point: DiagramPoint, size: DiagramSize) -> DiagramRect {
     DiagramRect {
-        x: point.x - size.0 / 2.,
-        y: point.y - size.1 / 2.,
-        width: size.0,
-        height: size.1,
+        x: point.x - size.width / 2.,
+        y: point.y - size.height / 2.,
+        width: size.width,
+        height: size.height,
     }
 }
 

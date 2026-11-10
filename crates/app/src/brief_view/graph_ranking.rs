@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use qd_studio::StudioGraph;
 
+use super::graph_bands::GraphBands;
+use super::graph_cell::GraphCell;
 use crate::count_as_f32::count_as_f32;
 
 /// Which edges close a cycle (and self loops), by edge index: a
@@ -74,9 +76,9 @@ pub(super) fn node_layers(graph: &StudioGraph, backward: &[bool]) -> Vec<usize> 
 
 /// Each node's band, and each band's group (`None` for the band of nodes
 /// in no group), in the order the bands' first nodes are listed.
-pub(super) fn node_bands(graph: &StudioGraph) -> (Vec<usize>, Vec<Option<usize>>) {
+pub(super) fn node_bands(graph: &StudioGraph) -> GraphBands {
     let mut band_groups: Vec<Option<usize>> = Vec::new();
-    let bands = graph
+    let of_node = graph
         .nodes
         .iter()
         .map(|node| {
@@ -89,7 +91,10 @@ pub(super) fn node_bands(graph: &StudioGraph) -> (Vec<usize>, Vec<Option<usize>>
                 })
         })
         .collect();
-    (bands, band_groups)
+    GraphBands {
+        of_node,
+        groups: band_groups,
+    }
 }
 
 /// The nodes of each (band, layer) cell, in drawing order: layer by layer,
@@ -100,7 +105,7 @@ pub(super) fn ordered_cells(
     layers: &[usize],
     bands: &[usize],
     backward: &[bool],
-) -> Vec<((usize, usize), Vec<usize>)> {
+) -> Vec<GraphCell> {
     // Gather the cells.
     let mut cells: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
     for node in 0..graph.nodes.len() {
@@ -115,6 +120,7 @@ pub(super) fn ordered_cells(
     // Sort each cell, earlier layers first, by where its sources sit.
     let mut place = vec![0_f32; graph.nodes.len()];
     for key in &keys {
+        let (band, _) = *key;
         let members = cells.get_mut(key).expect("a gathered cell");
         let source_place = |node: usize| {
             let sources: Vec<f32> = graph
@@ -130,7 +136,7 @@ pub(super) fn ordered_cells(
             .iter()
             .enumerate()
             .map(|(position, &node)| {
-                let fallback = count_as_f32(key.0)
+                let fallback = count_as_f32(band)
                     + count_as_f32(position + 1) / count_as_f32(members.len() + 1);
                 (source_place(node).unwrap_or(fallback), node)
             })
@@ -140,13 +146,14 @@ pub(super) fn ordered_cells(
         // A node's place: its band, then its position in the cell, as one number.
         for (position, &node) in members.iter().enumerate() {
             place[node] =
-                count_as_f32(key.0) + count_as_f32(position + 1) / count_as_f32(members.len() + 1);
+                count_as_f32(band) + count_as_f32(position + 1) / count_as_f32(members.len() + 1);
         }
     }
     keys.into_iter()
-        .map(|key| {
-            let members = cells.remove(&key).unwrap_or_default();
-            (key, members)
+        .map(|(band, layer)| GraphCell {
+            band,
+            layer,
+            nodes: cells.remove(&(band, layer)).unwrap_or_default(),
         })
         .collect()
 }

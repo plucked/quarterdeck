@@ -1,4 +1,4 @@
-use super::diagram_geometry::{DiagramPoint, DiagramRect};
+use super::diagram_geometry::{DiagramPoint, DiagramRect, DiagramSize};
 use super::graph_layout::{GROUP_LABEL_HEIGHT, GROUP_PADDING};
 
 /// Which way a graph's arrows run.
@@ -96,11 +96,11 @@ impl GraphDirection {
         }
     }
 
-    /// A size (width, height) as its length in the arrows' direction and across it.
-    pub(super) fn along_and_across(self, (width, height): (f32, f32)) -> (f32, f32) {
+    /// A size as its length in the arrows' direction and across it.
+    pub(super) fn along_and_across(self, size: DiagramSize) -> (f32, f32) {
         match self {
-            Self::LeftToRight => (width, height),
-            Self::TopToBottom => (height, width),
+            Self::LeftToRight => (size.width, size.height),
+            Self::TopToBottom => (size.height, size.width),
         }
     }
 

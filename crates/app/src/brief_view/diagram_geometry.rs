@@ -11,6 +11,13 @@ pub struct DiagramPoint {
     pub y: f32,
 }
 
+/// A width and height in a diagram, in pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DiagramSize {
+    pub width: f32,
+    pub height: f32,
+}
+
 /// A rectangle of a diagram, in pixels from its top left corner.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct DiagramRect {
