@@ -6,9 +6,7 @@ use super::detail_row::DetailRow;
 use super::local_review_export::{ReviewExportHeader, local_review_markdown};
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
-use super::review_target::ReviewTarget;
 use crate::display_date::unix_now;
-use crate::short_sha::short_sha;
 use crate::ui_state::{ReviewChange, UiStateRecorder};
 
 impl PullRequestDetail {
@@ -81,37 +79,7 @@ impl PullRequestDetail {
         let Some(pull_request) = self.pull_request() else {
             return;
         };
-        let header = match self.target() {
-            ReviewTarget::Combined(range) => {
-                let stack_number = pull_request
-                    .stack
-                    .as_ref()
-                    .map_or(0, |membership| membership.number);
-                ReviewExportHeader {
-                    repository: range.repo.full_name(),
-                    subject: format!(
-                        "stack #{stack_number}, layers {}–{} combined (#{} to #{})",
-                        range.first_index + 1,
-                        range.last_index + 1,
-                        range.first_number,
-                        range.last_number
-                    ),
-                    branches: format!(
-                        "base {} → head {}",
-                        short_sha(&range.base_sha),
-                        short_sha(&range.head_sha)
-                    ),
-                }
-            }
-            ReviewTarget::Layer | ReviewTarget::AwaitingStack => ReviewExportHeader {
-                repository: pull_request.repo.full_name(),
-                subject: format!(
-                    "pull request #{}: {}",
-                    pull_request.number, pull_request.title
-                ),
-                branches: pull_request.html_url.clone(),
-            },
-        };
+        let header = ReviewExportHeader::for_target(pull_request, self.target());
         let notes: Vec<&ReviewNote> = self
             .review()
             .comments

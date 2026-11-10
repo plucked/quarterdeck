@@ -2,11 +2,13 @@ use std::fmt::Write as _;
 
 use qd_cache::{NoteAnchor, ReviewNote};
 use qd_diff::DiffLineKind;
-use qd_github::LineSide;
+use qd_github::{LineSide, PullRequest};
 
 use super::lines_label::note_lines_label;
 use super::loaded_file::LoadedFile;
+use super::review_target::ReviewTarget;
 use crate::diff_line_sides::line_number_on;
+use crate::short_sha::short_sha;
 
 /// Lines of code shown above a note's first line.
 const CONTEXT_LINES: usize = 2;
@@ -19,6 +21,45 @@ pub struct ReviewExportHeader {
     pub subject: String,
     /// `feature → main`.
     pub branches: String,
+}
+
+impl ReviewExportHeader {
+    /// What the export of `pull_request`'s notes at `target` is of: a
+    /// combined range's stack, layers and commits, else the pull request
+    /// with its link.
+    pub fn for_target(pull_request: &PullRequest, target: &ReviewTarget) -> Self {
+        match target {
+            ReviewTarget::Combined(range) => {
+                let stack_number = pull_request
+                    .stack
+                    .as_ref()
+                    .map_or(0, |membership| membership.number);
+                Self {
+                    repository: range.repo.full_name(),
+                    subject: format!(
+                        "stack #{stack_number}, layers {}–{} combined (#{} to #{})",
+                        range.first_index + 1,
+                        range.last_index + 1,
+                        range.first_number,
+                        range.last_number
+                    ),
+                    branches: format!(
+                        "base {} → head {}",
+                        short_sha(&range.base_sha),
+                        short_sha(&range.head_sha)
+                    ),
+                }
+            }
+            ReviewTarget::Layer | ReviewTarget::AwaitingStack => Self {
+                repository: pull_request.repo.full_name(),
+                subject: format!(
+                    "pull request #{}: {}",
+                    pull_request.number, pull_request.title
+                ),
+                branches: pull_request.html_url.clone(),
+            },
+        }
+    }
 }
 
 /// The local notes as Markdown for an AI agent: what is reviewed, then per
