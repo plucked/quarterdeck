@@ -28,7 +28,10 @@
 //! - `checked_studio.rs`: `CheckedStudio`, a studio and the widgets left out of it.
 //! - `rejected_widget.rs`: `RejectedWidget`, a widget left out and why.
 //! - `parse_studio.rs`: reads an agent's structured output into a checked studio.
-//! - `parse_diagram.rs`: reads and checks a graph or sequence (ids to indexes, sizes, labels, anchors).
+//! - `wire_graph.rs`: `WireGraph`, a graph as the agent writes it, and its checks (ids to indexes, sizes, labels, anchors, arrows only where both boxes are).
+//! - `wire_sequence.rs`: `WireSequence`, a sequence as the agent writes it, and its checks.
+//! - `wire_role.rs`: `WireRole`, a box's or lane's role as the agent writes it.
+//! - `diagram_checks.rs`: checks both diagrams share: ids to indexes, labels written.
 //! - `wire_anchor.rs`: an anchor as the agent writes it, checked against the diff.
 //! - `studio_schema.rs` + `studio_schema.json`: the JSON Schema of that output.
 //! - `studio_guide.rs` + `studio_guide.md`: the instructions appended to the agent's system prompt.
@@ -77,6 +80,7 @@ mod code_access;
 mod code_anchor;
 mod code_side;
 mod diagram_change;
+mod diagram_checks;
 mod edge_style;
 mod file_listing;
 mod find_claude;
@@ -86,7 +90,6 @@ mod message_style;
 mod new_process_folder;
 mod node_role;
 mod output_lines;
-mod parse_diagram;
 mod parse_studio;
 mod prepare_workspace;
 mod reader_familiarity;
@@ -117,6 +120,9 @@ mod text_tail;
 mod tool_call;
 mod tour_step;
 mod wire_anchor;
+mod wire_graph;
+mod wire_role;
+mod wire_sequence;
 mod workspace_diff;
 mod workspace_error;
 mod workspace_progress;

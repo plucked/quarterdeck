@@ -204,7 +204,7 @@ fn report_text(
          - `crates/studio/src/studio_guide.md`: the authoring guide (system prompt).\n\
          - `crates/studio/src/studio_schema.json`: the answer's schema; `crates/studio/src/studio_widget.rs` and siblings: the widget types.\n\
          - `crates/studio/src/studio_prompt.rs`: the user message; `reader_brief` sets the onboarding per reader.\n\
-         - `crates/studio/src/parse_studio.rs`, `parse_diagram.rs`, `anchor_targets.rs`: the checks that leave widgets out.\n\
+         - `crates/studio/src/parse_studio.rs`, `wire_graph.rs`, `wire_sequence.rs`, `anchor_targets.rs`: the checks that leave widgets out.\n\
          - `crates/studio/src/run_claude.rs`: the Claude Code flags and confinement; `prepare_workspace.rs`: the checkout.\n\
          - `crates/app/src/brief_view/`: how the brief is drawn (layouts of diagrams in `graph_layout.rs`, `sequence_layout.rs`).\n\
          - `crates/app/src/pull_request_detail/brief_actions.rs`: what is sent and when.\n\

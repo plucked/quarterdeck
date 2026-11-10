@@ -5,7 +5,6 @@ use super::callout_tone::CalloutTone;
 use super::change_scope::ChangeScope;
 use super::checked_studio::CheckedStudio;
 use super::code_side::CodeSide;
-use super::parse_diagram::{WireGraph, WireSequence};
 use super::rejected_widget::RejectedWidget;
 use super::step_weight::StepWeight;
 use super::studio::Studio;
@@ -16,6 +15,8 @@ use super::studio_widget::StudioWidget;
 use super::table_role::TableRole;
 use super::tour_step::TourStep;
 use super::wire_anchor::WireAnchor;
+use super::wire_graph::WireGraph;
+use super::wire_sequence::WireSequence;
 
 /// The most rows a table may have; longer ones are cut, so one widget
 /// cannot fill the studio.
