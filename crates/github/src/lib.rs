@@ -4,7 +4,11 @@
 //! keeps a tokio runtime out of the process.
 //!
 //! Files:
-//! - `github_client.rs`: `GitHubClient`, the authenticated REST client.
+//! - `github_client.rs`: `GitHubClient`, the authenticated REST client: headers, GET, JSON and GraphQL requests.
+//! - `http_response.rs`: `HttpResponse`, one answer from GitHub read whole.
+//! - `response_reading.rs`: `GitHubClient::read_response`: counts the request, keeps the budget, reads the body and turns refusals into errors.
+//! - `search_requests.rs`: the queue's searches (authored, review requested, reviewed) and `GitHubClient::listed_details`.
+//! - `changed_file_requests.rs`: `GitHubClient::pull_request_files` (paged) and `compare_files` (one `git diff`).
 //! - `github_error.rs`: `GitHubError`, every way a call can fail.
 //! - `resolve_token.rs`: finds the token: the environment, the Keychain, then the `gh` CLI.
 //! - `resolved_token.rs`: `ResolvedToken`, a token and where it was found.
@@ -68,6 +72,7 @@
 //! - `workflow_job_requests.rs`: `GitHubClient::workflow_job_checks`, a commit's checks read through GitHub Actions.
 
 mod api_usage;
+mod changed_file_requests;
 mod check_outcome;
 mod conditional_response;
 mod download_avatar;
@@ -81,6 +86,7 @@ mod file_text_requests;
 mod github_client;
 mod github_error;
 mod graphql_response;
+mod http_response;
 mod keychain_token;
 mod label;
 mod layer_conflicts_query;
@@ -109,6 +115,7 @@ mod repo_ref;
 mod repository_request;
 mod resolve_token;
 mod resolved_token;
+mod response_reading;
 mod review_event;
 mod review_queries;
 mod review_requests;
@@ -116,6 +123,7 @@ mod review_submission;
 mod review_thread;
 mod revision_check;
 mod search_issue;
+mod search_requests;
 mod search_response;
 mod stack_layer;
 mod stack_membership;
@@ -131,6 +139,7 @@ mod workflow_job_requests;
 mod workflow_jobs_response;
 
 pub use api_usage::{ApiUsage, ApiUsageSnapshot};
+pub use changed_file_requests::MAX_LISTED_FILES;
 pub use check_outcome::CheckOutcome;
 pub use conditional_response::ConditionalResponse;
 pub use download_avatar::download_avatar;
@@ -138,7 +147,7 @@ pub use download_progress::DownloadProgress;
 pub use etag::ETag;
 pub use file_text::FileText;
 pub use file_text_location::FileTextLocation;
-pub use github_client::{GitHubClient, MAX_LISTED_FILES};
+pub use github_client::GitHubClient;
 pub use github_error::GitHubError;
 pub use keychain_token::{delete_stored_token, store_token};
 pub use label::Label;
