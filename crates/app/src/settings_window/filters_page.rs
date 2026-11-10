@@ -1,7 +1,10 @@
 use gpui::{AnyElement, App, Context, FontWeight, IntoElement, SharedString, div, prelude::*, px};
 use qd_cache::{BranchSide, HiddenBranchRule};
 
-use super::setting_row::SettingRow;
+use super::empty_list_note::EmptyListNote;
+use super::field_error::FieldError;
+use super::removable_row::RemovableRow;
+use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
 use super::settings_window::SettingsWindow;
 use crate::app_settings::AppSettings;
 use crate::button::Button;
@@ -9,9 +12,6 @@ use crate::section_label::SectionLabel;
 use crate::segmented_control::SegmentedControl;
 use crate::theme;
 use crate::view_option::view_option;
-
-/// Width of the field a branch pattern is typed into.
-const PATTERN_FIELD_WIDTH: f32 = 280.;
 
 impl SettingsWindow {
     /// The Filters page: rules hiding pull requests from every queue tab by
@@ -45,7 +45,7 @@ impl SettingsWindow {
                     .flex()
                     .flex_col()
                     .gap_1p5()
-                    .w(px(PATTERN_FIELD_WIDTH))
+                    .w(px(SETTING_FIELD_WIDTH))
                     .child(self.branch_pattern_input.clone())
                     .child(side_picker)
                     .child(
@@ -55,9 +55,7 @@ impl SettingsWindow {
                                 .on_click(cx.listener(|settings, _, _, cx| settings.add_typed_branch_rule(cx))),
                         ),
                     )
-                    .children(self.branch_rule_error.clone().map(|reason| {
-                        div().text_xs().text_color(theme::danger()).child(reason)
-                    })),
+                    .children(self.branch_rule_error.clone().map(FieldError::new)),
             ))
             .child(
                 div()
@@ -65,7 +63,7 @@ impl SettingsWindow {
                     .pb_1()
                     .child(SectionLabel::new(format!("Hidden branches · {}", rules.len())).weight(FontWeight::MEDIUM)),
             )
-            .child(render_rule_list(&rules, cx))
+            .child(render_rule_list(&rules))
             .into_any_element()
     }
 
@@ -122,51 +120,37 @@ fn side_description(side: BranchSide) -> &'static str {
 }
 
 /// The hidden branch rules, one row each with its pattern, side and a Remove.
-fn render_rule_list(rules: &[HiddenBranchRule], cx: &mut Context<SettingsWindow>) -> AnyElement {
+fn render_rule_list(rules: &[HiddenBranchRule]) -> AnyElement {
     if rules.is_empty() {
-        return div()
-            .py_3()
-            .text_xs()
-            .text_color(theme::muted())
-            .child("None yet. Every pull request shows.")
-            .into_any_element();
+        return EmptyListNote::new("None yet. Every pull request shows.").into_any_element();
     }
     div()
         .flex()
         .flex_col()
         .children(rules.iter().enumerate().map(|(index, rule)| {
             let removed = rule.clone();
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .py_1p5()
-                .border_b_1()
-                .border_color(theme::border())
-                .child(
-                    div()
-                        .px_2()
-                        .py_0p5()
-                        .rounded_full()
-                        .border_1()
-                        .border_color(theme::border())
-                        .bg(theme::surface())
-                        .text_xs()
-                        .text_color(theme::muted())
-                        .child(side_description(rule.side)),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .font_family(theme::MONO_FONT)
-                        .child(rule.pattern.clone()),
-                )
-                .child(
-                    Button::new(("remove-branch-rule", index), "Remove")
-                        .ghost()
-                        .on_click(cx.listener(move |_, _, _, cx| remove_branch_rule(&removed, cx))),
-                )
+            RemovableRow::new(("remove-branch-rule", index), move |cx| {
+                remove_branch_rule(&removed, cx);
+            })
+            .child(
+                div()
+                    .px_2()
+                    .py_0p5()
+                    .rounded_full()
+                    .border_1()
+                    .border_color(theme::border())
+                    .bg(theme::surface())
+                    .text_xs()
+                    .text_color(theme::muted())
+                    .child(side_description(rule.side)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .font_family(theme::MONO_FONT)
+                    .child(rule.pattern.clone()),
+            )
         }))
         .into_any_element()
 }

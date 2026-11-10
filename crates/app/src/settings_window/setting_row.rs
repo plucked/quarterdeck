@@ -2,6 +2,10 @@ use gpui::{AnyElement, App, IntoElement, RenderOnce, SharedString, Window, div, 
 
 use crate::theme;
 
+/// Width of the text field a setting's control holds (a token, a
+/// repository, a branch pattern), and of what lines up under it.
+pub const SETTING_FIELD_WIDTH: f32 = 280.;
+
 /// One setting on a settings page: its title and a short explanation on the
 /// left, the control that changes it on the right.
 #[derive(IntoElement)]

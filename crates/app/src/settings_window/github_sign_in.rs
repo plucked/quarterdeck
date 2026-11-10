@@ -1,7 +1,7 @@
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use qd_github::{GitHubClient, GitHubError, TokenSource, delete_stored_token, store_token};
 
-use super::setting_row::SettingRow;
+use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
 use super::settings_window::SettingsWindow;
 use super::sign_in_status::SignInStatus;
 use crate::app_services::AppServices;
@@ -14,8 +14,6 @@ use crate::theme;
 /// requests).
 const NEW_TOKEN_URL: &str =
     "https://github.com/settings/tokens/new?scopes=repo,read:org&description=Quarterdeck";
-/// Width of the token field.
-const TOKEN_FIELD_WIDTH: f32 = 280.;
 /// GitHub's answer to a token it does not accept.
 const UNAUTHORIZED: u16 = 401;
 
@@ -55,7 +53,7 @@ impl SettingsWindow {
                     .flex()
                     .flex_col()
                     .gap_1p5()
-                    .w(px(TOKEN_FIELD_WIDTH))
+                    .w(px(SETTING_FIELD_WIDTH))
                     .child(self.token_input.clone())
                     .child(
                         div()

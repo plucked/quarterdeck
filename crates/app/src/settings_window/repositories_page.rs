@@ -3,7 +3,10 @@ use qd_cache::PullRequestListKey;
 use qd_github::{GitHubError, RepoRef};
 
 use super::add_repository_status::AddRepositoryStatus;
-use super::setting_row::SettingRow;
+use super::empty_list_note::EmptyListNote;
+use super::field_error::FieldError;
+use super::removable_row::RemovableRow;
+use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
 use super::settings_window::SettingsWindow;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
@@ -13,8 +16,6 @@ use crate::repo_monogram::RepoMonogram;
 use crate::section_label::SectionLabel;
 use crate::theme;
 
-/// Width of the field a repository is typed into.
-const REPOSITORY_FIELD_WIDTH: f32 = 280.;
 /// GitHub's answer for a repository that does not exist or that the token cannot see.
 const NOT_FOUND: u16 = 404;
 
@@ -43,7 +44,7 @@ impl SettingsWindow {
                     .flex()
                     .flex_col()
                     .gap_1p5()
-                    .w(px(REPOSITORY_FIELD_WIDTH))
+                    .w(px(SETTING_FIELD_WIDTH))
                     .child(self.repository_input.clone())
                     .child(
                         div().flex().child(
@@ -54,12 +55,7 @@ impl SettingsWindow {
                         ),
                     )
                     .children(match &self.add_repository_status {
-                        AddRepositoryStatus::Failed(reason) => Some(
-                            div()
-                                .text_xs()
-                                .text_color(theme::danger())
-                                .child(reason.clone()),
-                        ),
+                        AddRepositoryStatus::Failed(reason) => Some(FieldError::new(reason.clone())),
                         AddRepositoryStatus::Idle | AddRepositoryStatus::Checking => None,
                     }),
             ))
@@ -72,7 +68,7 @@ impl SettingsWindow {
                         .flex_wrap()
                         .justify_end()
                         .gap_1()
-                        .max_w(px(REPOSITORY_FIELD_WIDTH))
+                        .max_w(px(SETTING_FIELD_WIDTH))
                         .children(suggestions.into_iter().enumerate().map(|(index, repo)| {
                             let label = repo.full_name();
                             div()
@@ -98,7 +94,7 @@ impl SettingsWindow {
                     .pb_1()
                     .child(SectionLabel::new(format!("Watched · {}", watched.len())).weight(FontWeight::MEDIUM)),
             )
-            .child(render_watched_list(&watched, cx))
+            .child(render_watched_list(&watched))
             .into_any_element()
     }
 
@@ -193,54 +189,41 @@ impl SettingsWindow {
 }
 
 /// The watched repositories, one row each with its monogram and a Remove.
-fn render_watched_list(watched: &[RepoRef], cx: &mut Context<SettingsWindow>) -> AnyElement {
+fn render_watched_list(watched: &[RepoRef]) -> AnyElement {
     if watched.is_empty() {
-        return div()
-            .py_3()
-            .text_xs()
-            .text_color(theme::muted())
-            .child("None yet. The Others tab stays empty until you add a repository.")
-            .into_any_element();
+        return EmptyListNote::new(
+            "None yet. The Others tab stays empty until you add a repository.",
+        )
+        .into_any_element();
     }
     div()
         .flex()
         .flex_col()
         .children(watched.iter().enumerate().map(|(index, repo)| {
             let removed = repo.clone();
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .py_1p5()
-                .border_b_1()
-                .border_color(theme::border())
-                .child(RepoMonogram::new(repo.name.clone()))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .items_baseline()
-                        .gap_1p5()
-                        .child(
-                            div()
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(repo.name.clone()),
-                        )
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(theme::subtle())
-                                .child(repo.owner.clone()),
-                        ),
-                )
-                .child(
-                    Button::new(("remove-repository", index), "Remove")
-                        .ghost()
-                        .on_click(
-                            cx.listener(move |_, _, _, cx| remove_watched_repository(&removed, cx)),
-                        ),
-                )
+            RemovableRow::new(("remove-repository", index), move |cx| {
+                remove_watched_repository(&removed, cx);
+            })
+            .child(RepoMonogram::new(repo.name.clone()))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_baseline()
+                    .gap_1p5()
+                    .child(
+                        div()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(repo.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(theme::subtle())
+                            .child(repo.owner.clone()),
+                    ),
+            )
         }))
         .into_any_element()
 }
