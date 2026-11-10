@@ -30,6 +30,7 @@ use super::review_pane::ReviewPane;
 use super::review_target::ReviewTarget;
 use super::scroll_anchor::ScrollAnchor;
 use super::show_change::ShowChange;
+use super::stack_state::StackState;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::avatar_images::{AvatarImages, AvatarLoaded};
@@ -95,23 +96,16 @@ pub struct PullRequestDetail {
     is_description_expanded: bool,
     /// The scroll of the description inside the expanded header.
     description_scroll: ScrollHandle,
-    /// Whether stacked pull requests show one layer or combined layers.
+    /// Whether stacked pull requests show one layer or combined layers: the
+    /// reader's preference, restored at launch and kept when nothing shows.
     pub(super) review_mode: StackReviewMode,
     /// What the shown (or loading) files are of.
     pub(super) target: ReviewTarget,
     /// Whose viewed marks the shown files use.
     pub(super) viewed_scope: Option<ReviewScope>,
-    /// The shown pull request's stack with its layers, once loaded.
-    pub(super) stack: Option<PullRequestStack>,
-    /// Whether the stack is being read or checked with GitHub.
-    pub(super) is_stack_loading: bool,
-    /// Why the stack could not be checked with GitHub, if it could not.
-    pub(super) stack_error: Option<SharedString>,
-    /// The first layer of a combined review (a pull request number), when
-    /// chosen; else the lowest unmerged layer.
-    pub(super) combined_start: Option<u64>,
-    /// The stack being loaded; replacing it cancels the previous one.
-    pub(super) stack_task: Option<Task<()>>,
+    /// The shown pull request's stack: its layers, their load and the
+    /// combined range's start.
+    pub(super) stack: StackState,
     /// Syntax batches colored of all started, while highlighting runs.
     pub(super) highlight_progress: Option<BatchProgress>,
     /// The side panel's width, as dragged (and saved).
@@ -193,11 +187,7 @@ impl PullRequestDetail {
             review_mode: layout.stack_review,
             target: ReviewTarget::Layer,
             viewed_scope: None,
-            stack: None,
-            is_stack_loading: false,
-            stack_error: None,
-            combined_start: None,
-            stack_task: None,
+            stack: StackState::default(),
             highlight_progress: None,
             row_tops: ListRowTops::from_heights([]),
             row_tops_width: None,
@@ -323,7 +313,7 @@ impl PullRequestDetail {
     }
 
     pub(super) fn stack(&self) -> Option<&PullRequestStack> {
-        self.stack.as_ref()
+        self.stack.loaded.as_ref()
     }
 
     pub(super) fn side_panel_width(&self) -> f32 {
@@ -338,17 +328,18 @@ impl PullRequestDetail {
     }
 
     pub(super) fn is_stack_loading(&self) -> bool {
-        self.is_stack_loading
+        self.stack.is_loading
     }
 
     pub(super) fn stack_error(&self) -> Option<&SharedString> {
-        self.stack_error.as_ref()
+        self.stack.error.as_ref()
     }
 
     /// The position of the shown pull request in its loaded stack.
     pub(super) fn current_layer_index(&self) -> Option<usize> {
         let number = self.pull_request.as_ref()?.number;
         self.stack
+            .loaded
             .as_ref()?
             .layers
             .iter()
@@ -439,9 +430,8 @@ impl PullRequestDetail {
             self.changed_files = None;
             self.files_task = None;
             self.pending_scroll = None;
-            self.stack = None;
-            self.stack_task = None;
-            self.is_stack_loading = false;
+            // A new stack state also cancels the stack's load.
+            self.stack = StackState::default();
             self.rebuild_rows(ScrollAnchor::Top);
             self.follow_checks(cx);
             cx.notify();
@@ -453,7 +443,7 @@ impl PullRequestDetail {
         // Decide by what was shown before, then carry it out.
         let change = ShowChange::decide(
             self.pull_request.as_ref(),
-            self.stack.as_ref(),
+            self.stack.loaded.as_ref(),
             &pull_request,
         );
         match change {
@@ -470,7 +460,7 @@ impl PullRequestDetail {
                 // A reload keeps the reader's place.
                 self.pending_scroll = restore.or_else(|| Some(self.scroll_position()));
                 if is_other_stack {
-                    self.drop_stack_layers();
+                    self.stack.drop_layers();
                 }
                 self.show_new_version(pull_request, cx);
             }
@@ -482,18 +472,11 @@ impl PullRequestDetail {
                 self.description_scroll
                     .set_offset(gpui::point(px(0.), px(0.)));
                 if is_other_stack {
-                    self.drop_stack_layers();
+                    self.stack.drop_layers();
                 }
                 self.show_new_version(pull_request, cx);
             }
         }
-    }
-
-    /// Forgets the loaded stack's layers and the combined range's start:
-    /// another stack's do not apply (the same stack's stay while checked).
-    fn drop_stack_layers(&mut self) {
-        self.stack = None;
-        self.combined_start = None;
     }
 
     /// Shows a version of `pull_request` not shown before: the header and

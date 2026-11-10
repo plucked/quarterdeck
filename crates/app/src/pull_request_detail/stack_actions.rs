@@ -17,7 +17,8 @@ impl PullRequestDetail {
     /// shown layer, with the open layers below it once the stack is
     /// known), or at nothing.
     pub(super) fn follow_checks(&mut self, cx: &mut Context<Self>) {
-        let layers_below: Vec<u64> = match (self.stack.as_ref(), self.current_layer_index()) {
+        let layers_below: Vec<u64> = match (self.stack.loaded.as_ref(), self.current_layer_index())
+        {
             (Some(stack), Some(current)) => stack.layers[..current]
                 .iter()
                 .filter(|layer| layer.is_open)
@@ -56,8 +57,8 @@ impl PullRequestDetail {
                 ReviewTarget::decide(
                     self.review_mode,
                     pull_request,
-                    self.stack.as_ref(),
-                    self.combined_start,
+                    self.stack.loaded.as_ref(),
+                    self.stack.combined_start,
                 )
             })
     }
@@ -84,16 +85,15 @@ impl PullRequestDetail {
                 pull_request.stack.as_ref()?.number,
             ))
         }) else {
-            self.stack_task = None;
-            self.is_stack_loading = false;
+            self.stack.stop_loading();
             return;
         };
         let cache = self.services.cache.clone();
         let client = self.services.github.clone();
-        self.is_stack_loading = true;
-        self.stack_error = None;
+        self.stack.is_loading = true;
+        self.stack.error = None;
         cx.notify();
-        self.stack_task = Some(cx.spawn(async move |detail, cx| {
+        self.stack.task = Some(cx.spawn(async move |detail, cx| {
             // The cached layers first, so a combined review starts at once.
             let read_cache = cache.clone();
             let read_repo = repo.clone();
@@ -117,11 +117,11 @@ impl PullRequestDetail {
                 .await;
             detail
                 .update(cx, |detail, cx| {
-                    detail.is_stack_loading = false;
+                    detail.stack.is_loading = false;
                     match refreshed {
                         Ok(stack) => detail.apply_stack(stack, cx),
                         Err(error) => {
-                            detail.stack_error = Some(format!("{error:#}").into());
+                            detail.stack.error = Some(format!("{error:#}").into());
                             // Without layers a combined review cannot start; show the layer.
                             if detail.target == ReviewTarget::AwaitingStack {
                                 detail.review_mode = StackReviewMode::Layer;
@@ -144,10 +144,10 @@ impl PullRequestDetail {
                     .as_ref()
                     .is_some_and(|membership| membership.number == stack.number)
         });
-        if !belongs || self.stack.as_ref() == Some(&stack) {
+        if !belongs || self.stack.loaded.as_ref() == Some(&stack) {
             return;
         }
-        self.stack = Some(stack);
+        self.stack.loaded = Some(stack);
         self.retarget(cx);
         // The layers below tell the Checks tab where a conflict may hold its workflows up.
         self.follow_checks(cx);
@@ -180,7 +180,7 @@ impl PullRequestDetail {
     /// Sets the combined review from the lowest unmerged layer without
     /// reloading, for a pull request about to be shown, and saves the mode.
     pub fn prepare_combined_stack_review(&mut self, cx: &mut Context<Self>) {
-        self.combined_start = None;
+        self.stack.combined_start = None;
         if self.review_mode != StackReviewMode::Combined {
             self.review_mode = StackReviewMode::Combined;
             UiStateRecorder::record_review_layout(cx, self.review_layout());
@@ -213,6 +213,7 @@ impl PullRequestDetail {
     ) -> bool {
         let index = self
             .stack
+            .loaded
             .as_ref()
             .filter(|stack| stack.repo == *repo)
             .and_then(|stack| stack.layers.iter().position(|layer| layer.number == number));
@@ -228,6 +229,7 @@ impl PullRequestDetail {
     fn set_combined_start(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(number) = self
             .stack
+            .loaded
             .as_ref()
             .and_then(|stack| stack.layers.get(index))
             .map(|layer| layer.number)
@@ -240,7 +242,7 @@ impl PullRequestDetail {
         {
             return;
         }
-        self.combined_start = Some(number);
+        self.stack.combined_start = Some(number);
         if self.review_mode == StackReviewMode::Layer {
             self.review_mode = StackReviewMode::Combined;
             UiStateRecorder::record_review_layout(cx, self.review_layout());
@@ -253,6 +255,7 @@ impl PullRequestDetail {
     pub(super) fn open_layer(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(request) = self
             .stack
+            .loaded
             .as_ref()
             .and_then(|stack| LayerRequest::of_layer(stack, index))
         else {

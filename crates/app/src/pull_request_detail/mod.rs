@@ -17,6 +17,7 @@
 //! - `row_rebuilding.rs`: building the rows again (all, or one file's) and keeping the scroll position.
 //! - `scroll_anchor.rs`: `ScrollAnchor`, where the list scrolls after a rebuild.
 //! - `stack_actions.rs`: the stack: loading its layers, the review mode, the combined range, moving between layers, the Checks tab's target.
+//! - `stack_state.rs`: `StackState`, the shown pull request's stack: its layers, their load and error, the combined range's start.
 //! - `file_navigation.rs`: the current file, moving between files, collapsing and marking them viewed, sideways scrolling.
 //! - `file_direction.rs`: `FileDirection`, next or previous (file or stack layer).
 //! - `file_tree_actions.rs`: the side panel and its file tree: showing it, the filter, folders, showing a file in it.
@@ -182,6 +183,7 @@ mod side_panel_rendering;
 mod side_panel_tab;
 mod stack_actions;
 mod stack_bar_rendering;
+mod stack_state;
 mod sticky_header_rendering;
 mod studio_request;
 mod syntax_highlighting;
