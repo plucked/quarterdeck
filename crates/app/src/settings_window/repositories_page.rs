@@ -1,4 +1,6 @@
-use gpui::{AnyElement, Context, FontWeight, IntoElement, div, prelude::*, px};
+use gpui::{
+    AnyElement, Context, Entity, FontWeight, IntoElement, Subscription, Task, div, prelude::*, px,
+};
 use qd_cache::PullRequestListKey;
 use qd_github::{GitHubError, RepoRef};
 
@@ -7,17 +9,55 @@ use super::empty_list_note::EmptyListNote;
 use super::field_error::FieldError;
 use super::removable_row::RemovableRow;
 use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
-use super::settings_window::SettingsWindow;
+use super::settings_window::{SettingsWindow, is_one_line_submit};
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::button::Button;
 use crate::distinct_repositories::distinct_repositories;
 use crate::repo_monogram::RepoMonogram;
 use crate::section_label::SectionLabel;
+use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
 
 /// GitHub's answer for a repository that does not exist or that the token cannot see.
 const NOT_FOUND: u16 = 404;
+
+/// The Repositories page's form: the field a repository is typed into,
+/// where adding it stands, and the repositories of the queue offered as
+/// quick picks.
+pub struct RepositoryAdder {
+    /// Where a repository to watch is typed.
+    input: Entity<TextArea>,
+    status: AddRepositoryStatus,
+    /// The check of a typed repository in flight.
+    task: Option<Task<()>>,
+    /// The repositories of the queue's own lists, offered as quick picks.
+    queue_repositories: Vec<RepoRef>,
+    /// The read of `queue_repositories` in flight.
+    queue_repositories_task: Option<Task<()>>,
+    /// Keeps the field's submit (return or cmd-enter) observed.
+    _subscription: Subscription,
+}
+
+impl RepositoryAdder {
+    /// An empty field; it is one line, so return (or cmd-enter) adds the repository.
+    pub fn new(cx: &mut Context<SettingsWindow>) -> Self {
+        let input = cx.new(|cx| TextArea::new("owner/name or a GitHub link", cx));
+        let subscription = cx.subscribe(&input, |settings, input, event: &TextAreaEvent, cx| {
+            if is_one_line_submit(&input, *event, cx) {
+                settings.add_typed_repository(cx);
+            }
+        });
+        Self {
+            input,
+            status: AddRepositoryStatus::default(),
+            task: None,
+            queue_repositories: Vec::new(),
+            queue_repositories_task: None,
+            _subscription: subscription,
+        }
+    }
+}
 
 impl SettingsWindow {
     /// The Repositories page: the repositories whose other open pull
@@ -27,12 +67,13 @@ impl SettingsWindow {
     pub(super) fn render_repositories_page(&self, cx: &mut Context<Self>) -> AnyElement {
         let watched = AppSettings::watched_repositories(cx).to_vec();
         let suggestions: Vec<RepoRef> = self
+            .repository_adder()
             .queue_repositories
             .iter()
             .filter(|repo| !watched.contains(repo))
             .cloned()
             .collect();
-        let is_checking = self.add_repository_status == AddRepositoryStatus::Checking;
+        let is_checking = self.repository_adder().status == AddRepositoryStatus::Checking;
 
         div()
             .flex()
@@ -45,7 +86,7 @@ impl SettingsWindow {
                     .flex_col()
                     .gap_1p5()
                     .w(px(SETTING_FIELD_WIDTH))
-                    .child(self.repository_input.clone())
+                    .child(self.repository_adder().input.clone())
                     .child(
                         div().flex().child(
                             Button::new("add-repository", if is_checking { "Checking…" } else { "Add" })
@@ -54,7 +95,7 @@ impl SettingsWindow {
                                 .on_click(cx.listener(|settings, _, _, cx| settings.add_typed_repository(cx))),
                         ),
                     )
-                    .children(match &self.add_repository_status {
+                    .children(match &self.repository_adder().status {
                         AddRepositoryStatus::Failed(reason) => Some(FieldError::new(reason.clone())),
                         AddRepositoryStatus::Idle | AddRepositoryStatus::Checking => None,
                     }),
@@ -100,9 +141,9 @@ impl SettingsWindow {
 
     /// Adds the repository typed into the field: read, checked with GitHub
     /// (one request, which also gives its current spelling), then saved.
-    pub(super) fn add_typed_repository(&mut self, cx: &mut Context<Self>) {
+    fn add_typed_repository(&mut self, cx: &mut Context<Self>) {
         // Read what was typed; refuse what is not a repository or is listed already.
-        let text = self.repository_input.read(cx).text().to_owned();
+        let text = self.repository_adder().input.read(cx).text().to_owned();
         let Some(repo) = RepoRef::parse_input(&text) else {
             self.fail_to_add(
                 "Type owner/name, like zed-industries/zed, or paste a GitHub link.",
@@ -120,9 +161,9 @@ impl SettingsWindow {
         };
 
         // Check it off the main thread, then add it as GitHub spells it.
-        self.add_repository_status = AddRepositoryStatus::Checking;
+        self.repository_adder_mut().status = AddRepositoryStatus::Checking;
         cx.notify();
-        self.add_repository_task = Some(cx.spawn(async move |settings, cx| {
+        self.repository_adder_mut().task = Some(cx.spawn(async move |settings, cx| {
             let checked = cx
                 .background_executor()
                 .spawn(async move { client.repository(&repo) })
@@ -130,9 +171,10 @@ impl SettingsWindow {
             settings
                 .update(cx, |settings, cx| match checked {
                     Ok(repo) => {
-                        settings.add_repository_status = AddRepositoryStatus::Idle;
+                        settings.repository_adder_mut().status = AddRepositoryStatus::Idle;
                         settings
-                            .repository_input
+                            .repository_adder()
+                            .input
                             .update(cx, |input, cx| input.set_text("", cx));
                         add_watched_repository(repo, cx);
                         cx.notify();
@@ -147,43 +189,44 @@ impl SettingsWindow {
     /// reviewed pull requests from the cache, off the main thread, as quick picks.
     pub(super) fn read_queue_repositories(&mut self, cx: &mut Context<Self>) {
         let cache = cx.global::<AppServices>().cache.clone();
-        self.queue_repositories_task = Some(cx.spawn(async move |settings, cx| {
-            let repositories = cx
-                .background_executor()
-                .spawn(async move {
-                    let cache = cache.lock();
-                    let mut pull_requests = Vec::new();
-                    for key in [
-                        PullRequestListKey::REVIEW_REQUESTED,
-                        PullRequestListKey::REVIEWED,
-                        PullRequestListKey::AUTHORED,
-                    ] {
-                        pull_requests.extend(cache.list(key)?);
-                    }
-                    let repositories: Vec<RepoRef> = distinct_repositories(
-                        pull_requests.iter().map(|pull_request| &pull_request.repo),
-                    )
-                    .into_iter()
-                    .cloned()
-                    .collect();
-                    anyhow::Ok(repositories)
-                })
-                .await;
-            settings
-                .update(cx, |settings, cx| {
-                    settings.queue_repositories = repositories
-                        .inspect_err(|error| {
-                            eprintln!("cannot read the queue's repositories: {error:#}");
-                        })
-                        .unwrap_or_default();
-                    cx.notify();
-                })
-                .ok();
-        }));
+        self.repository_adder_mut().queue_repositories_task =
+            Some(cx.spawn(async move |settings, cx| {
+                let repositories = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let cache = cache.lock();
+                        let mut pull_requests = Vec::new();
+                        for key in [
+                            PullRequestListKey::REVIEW_REQUESTED,
+                            PullRequestListKey::REVIEWED,
+                            PullRequestListKey::AUTHORED,
+                        ] {
+                            pull_requests.extend(cache.list(key)?);
+                        }
+                        let repositories: Vec<RepoRef> = distinct_repositories(
+                            pull_requests.iter().map(|pull_request| &pull_request.repo),
+                        )
+                        .into_iter()
+                        .cloned()
+                        .collect();
+                        anyhow::Ok(repositories)
+                    })
+                    .await;
+                settings
+                    .update(cx, |settings, cx| {
+                        settings.repository_adder_mut().queue_repositories = repositories
+                            .inspect_err(|error| {
+                                eprintln!("cannot read the queue's repositories: {error:#}");
+                            })
+                            .unwrap_or_default();
+                        cx.notify();
+                    })
+                    .ok();
+            }));
     }
 
     fn fail_to_add(&mut self, reason: &str, cx: &mut Context<Self>) {
-        self.add_repository_status = AddRepositoryStatus::Failed(reason.to_owned().into());
+        self.repository_adder_mut().status = AddRepositoryStatus::Failed(reason.to_owned().into());
         cx.notify();
     }
 }

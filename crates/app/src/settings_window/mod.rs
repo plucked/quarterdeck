@@ -13,12 +13,12 @@
 //! - `appearance_page.rs`: the Appearance category: the color theme cards and the preview.
 //! - `theme_preview.rs`: a small pull request diff drawn in any theme's colors.
 //! - `file_diff_page.rs`: the File Diff category's settings.
-//! - `github_page.rs`: the GitHub category: cache TTL, clearing the cache, API usage.
-//! - `github_sign_in.rs`: the GitHub category's account rows: signing in with a token, signing out.
+//! - `github_page.rs`: the GitHub category: the account rows, cache TTL, clearing the cache, API usage.
+//! - `github_sign_in.rs`: `TokenSignIn`, the token field and its state; the GitHub category's account rows: signing in with a token, signing out.
 //! - `sign_in_status.rs`: `SignInStatus`, where signing in with a token stands.
-//! - `repositories_page.rs`: the Repositories category: the repositories the Others tab lists, adding (checked with GitHub) and removing.
+//! - `repositories_page.rs`: the Repositories category: the repositories the Others tab lists, adding (checked with GitHub; `RepositoryAdder`, the field, its check and the quick picks) and removing.
 //! - `add_repository_status.rs`: `AddRepositoryStatus`, where adding a typed repository stands.
-//! - `filters_page.rs`: the Filters category: the rules hiding pull requests from every queue tab by branch.
+//! - `filters_page.rs`: the Filters category: the rules hiding pull requests from every queue tab by branch; `BranchRuleForm`, the pattern field, side and error.
 //! - `updates_page.rs`: the Updates category: the version, update status, release notes, restart.
 
 mod add_repository_status;

@@ -1,8 +1,9 @@
-use gpui::{App, IntoElement, SharedString, div, prelude::*};
+use gpui::{Context, IntoElement, SharedString, div, prelude::*};
 use qd_cache::{CacheTtl, CacheUsage, CachedData};
 use qd_github::{ApiUsageSnapshot, RateLimit};
 
 use super::setting_row::SettingRow;
+use super::settings_window::SettingsWindow;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::button::Button;
@@ -13,60 +14,58 @@ use crate::theme;
 /// Width of a breakdown line's name column.
 const BREAKDOWN_NAME_WIDTH: f32 = 160.;
 
-/// The GitHub page: the account (`account_rows`), how long cached data is
-/// kept, what the cache holds and clearing it, and how much of the API
-/// this session used.
-pub fn render_github_page(
-    account_rows: impl IntoElement,
-    has_cleared_cache: bool,
-    cache_usage: Option<CacheUsage>,
-    on_clear_cache: impl Fn(&mut gpui::Window, &mut App) + 'static,
-    cx: &App,
-) -> impl IntoElement {
-    let ttl = AppSettings::cache_ttl(cx);
-    let usage = cx
-        .global::<AppServices>()
-        .github
-        .as_ref()
-        .ok()
-        .map(|client| client.usage().snapshot());
+impl SettingsWindow {
+    /// The GitHub page: the account, how long cached data is kept, what the
+    /// cache holds and clearing it, and how much of the API this session used.
+    pub(super) fn render_github_page(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let account_rows = self.render_account_rows(cx);
+        let has_cleared_cache = self.has_cleared_cache();
+        let cache_usage = self.cache_usage();
+        let ttl = AppSettings::cache_ttl(cx);
+        let usage = cx
+            .global::<AppServices>()
+            .github
+            .as_ref()
+            .ok()
+            .map(|client| client.usage().snapshot());
 
-    div()
-        .flex()
-        .flex_col()
-        .child(account_rows)
-        .child(SettingRow::new(
-            "Keep cached data for",
-            "Pull requests and files not used for this long are removed from the local cache.",
-            CacheTtl::ALL.into_iter().fold(
-                SegmentedControl::new("cache-ttl"),
-                |control, option| {
-                    control.option(ttl_label(option), option == ttl, move |_, cx| {
-                        AppSettings::set_cache_ttl(cx, option);
-                    })
-                },
-            ),
-        ))
-        .child(SettingRow::new(
-            "Cached data",
-            describe_disk_use(cache_usage),
-            Button::new(
-                "clear-cache",
-                if has_cleared_cache {
-                    "Cleared"
-                } else {
-                    "Clear cache"
-                },
-            )
-            .disabled(has_cleared_cache)
-            .on_click(move |_, window, cx| on_clear_cache(window, cx)),
-        ))
-        .children(cache_usage.map(render_cache_breakdown))
-        .child(SettingRow::new(
-            "API usage",
-            usage.map_or_else(|| "Not connected to GitHub.".to_owned(), describe_usage),
-            div().text_color(theme::muted()).child("since launch"),
-        ))
+        div()
+            .flex()
+            .flex_col()
+            .child(account_rows)
+            .child(SettingRow::new(
+                "Keep cached data for",
+                "Pull requests and files not used for this long are removed from the local cache.",
+                CacheTtl::ALL.into_iter().fold(
+                    SegmentedControl::new("cache-ttl"),
+                    |control, option| {
+                        control.option(ttl_label(option), option == ttl, move |_, cx| {
+                            AppSettings::set_cache_ttl(cx, option);
+                        })
+                    },
+                ),
+            ))
+            .child(SettingRow::new(
+                "Cached data",
+                describe_disk_use(cache_usage),
+                Button::new(
+                    "clear-cache",
+                    if has_cleared_cache {
+                        "Cleared"
+                    } else {
+                        "Clear cache"
+                    },
+                )
+                .disabled(has_cleared_cache)
+                .on_click(cx.listener(|_, _, _, cx| Self::clear_cache(cx))),
+            ))
+            .children(cache_usage.map(render_cache_breakdown))
+            .child(SettingRow::new(
+                "API usage",
+                usage.map_or_else(|| "Not connected to GitHub.".to_owned(), describe_usage),
+                div().text_color(theme::muted()).child("since launch"),
+            ))
+    }
 }
 
 /// The database's size on disk and what clearing does.

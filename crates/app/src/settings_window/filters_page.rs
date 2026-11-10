@@ -1,17 +1,52 @@
-use gpui::{AnyElement, App, Context, FontWeight, IntoElement, SharedString, div, prelude::*, px};
+use gpui::{
+    AnyElement, App, Context, Entity, FontWeight, IntoElement, SharedString, Subscription, div,
+    prelude::*, px,
+};
 use qd_cache::{BranchSide, HiddenBranchRule};
 
 use super::empty_list_note::EmptyListNote;
 use super::field_error::FieldError;
 use super::removable_row::RemovableRow;
 use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
-use super::settings_window::SettingsWindow;
+use super::settings_window::{SettingsWindow, is_one_line_submit};
 use crate::app_settings::AppSettings;
 use crate::button::Button;
 use crate::section_label::SectionLabel;
 use crate::segmented_control::SegmentedControl;
+use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
 use crate::view_option::view_option;
+
+/// The Filters page's form: the field a branch pattern is typed into, the
+/// branch it will look at, and why the last one could not be added.
+pub struct BranchRuleForm {
+    /// Where a branch pattern to hide is typed.
+    input: Entity<TextArea>,
+    /// Which branch the next added pattern looks at.
+    side: BranchSide,
+    /// Why the typed pattern could not be added, when it could not.
+    error: Option<SharedString>,
+    /// Keeps the field's submit (return or cmd-enter) observed.
+    _subscription: Subscription,
+}
+
+impl BranchRuleForm {
+    /// An empty field; it is one line, so return (or cmd-enter) adds the pattern.
+    pub fn new(cx: &mut Context<SettingsWindow>) -> Self {
+        let input = cx.new(|cx| TextArea::new("feat/something*", cx));
+        let subscription = cx.subscribe(&input, |settings, input, event: &TextAreaEvent, cx| {
+            if is_one_line_submit(&input, *event, cx) {
+                settings.add_typed_branch_rule(cx);
+            }
+        });
+        Self {
+            input,
+            side: BranchSide::default(),
+            error: None,
+            _subscription: subscription,
+        }
+    }
+}
 
 impl SettingsWindow {
     /// The Filters page: rules hiding pull requests from every queue tab by
@@ -19,7 +54,7 @@ impl SettingsWindow {
     /// field to add one and the list with a Remove each.
     pub(super) fn render_filters_page(&self, cx: &mut Context<Self>) -> AnyElement {
         let rules = AppSettings::hidden_branch_rules(cx).to_vec();
-        let picked_side = self.branch_rule_side;
+        let picked_side = self.branch_rule_form().side;
         let settings = cx.entity().downgrade();
         let side_picker = BranchSide::ALL.iter().fold(
             SegmentedControl::new("branch-rule-side").fill_width(),
@@ -28,7 +63,7 @@ impl SettingsWindow {
                     side_label(side),
                     side == picked_side,
                     view_option(&settings, side, |settings, side, cx| {
-                        settings.branch_rule_side = side;
+                        settings.branch_rule_form_mut().side = side;
                         cx.notify();
                     }),
                 )
@@ -46,7 +81,7 @@ impl SettingsWindow {
                     .flex_col()
                     .gap_1p5()
                     .w(px(SETTING_FIELD_WIDTH))
-                    .child(self.branch_pattern_input.clone())
+                    .child(self.branch_rule_form().input.clone())
                     .child(side_picker)
                     .child(
                         div().flex().child(
@@ -55,7 +90,7 @@ impl SettingsWindow {
                                 .on_click(cx.listener(|settings, _, _, cx| settings.add_typed_branch_rule(cx))),
                         ),
                     )
-                    .children(self.branch_rule_error.clone().map(FieldError::new)),
+                    .children(self.branch_rule_form().error.clone().map(FieldError::new)),
             ))
             .child(
                 div()
@@ -69,16 +104,22 @@ impl SettingsWindow {
 
     /// Adds the pattern typed into the field, for the picked side; refuses
     /// an empty one and one listed already for that side.
-    pub(super) fn add_typed_branch_rule(&mut self, cx: &mut Context<Self>) {
+    fn add_typed_branch_rule(&mut self, cx: &mut Context<Self>) {
         // Read what was typed, trimmed.
-        let pattern = self.branch_pattern_input.read(cx).text().trim().to_owned();
+        let pattern = self
+            .branch_rule_form()
+            .input
+            .read(cx)
+            .text()
+            .trim()
+            .to_owned();
         if pattern.is_empty() {
             self.fail_to_add_branch_rule("Type a branch name or pattern, like feat/legacy-*.", cx);
             return;
         }
         let rule = HiddenBranchRule {
             pattern,
-            side: self.branch_rule_side,
+            side: self.branch_rule_form().side,
         };
         let mut rules = AppSettings::hidden_branch_rules(cx).to_vec();
         if rules.contains(&rule) {
@@ -89,14 +130,15 @@ impl SettingsWindow {
         // Save it, and empty the field for the next one.
         rules.push(rule);
         AppSettings::set_hidden_branch_rules(cx, rules);
-        self.branch_rule_error = None;
-        self.branch_pattern_input
+        self.branch_rule_form_mut().error = None;
+        self.branch_rule_form()
+            .input
             .update(cx, |input, cx| input.set_text("", cx));
         cx.notify();
     }
 
     fn fail_to_add_branch_rule(&mut self, reason: &'static str, cx: &mut Context<Self>) {
-        self.branch_rule_error = Some(SharedString::new_static(reason));
+        self.branch_rule_form_mut().error = Some(SharedString::new_static(reason));
         cx.notify();
     }
 }

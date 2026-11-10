@@ -1,14 +1,14 @@
 use gpui::{
-    App, Context, Entity, FocusHandle, FontWeight, IntoElement, Render, SharedString, Subscription,
-    Task, Window, div, prelude::*, px,
+    Context, Entity, FocusHandle, FontWeight, IntoElement, Render, Subscription, Task, Window, div,
+    prelude::*, px,
 };
-use qd_cache::{BranchSide, CacheUsage, ColorTheme};
+use qd_cache::{CacheUsage, ColorTheme};
 
-use super::add_repository_status::AddRepositoryStatus;
 use super::file_diff_page::render_file_diff_page;
-use super::github_page::render_github_page;
+use super::filters_page::BranchRuleForm;
+use super::github_sign_in::TokenSignIn;
+use super::repositories_page::RepositoryAdder;
 use super::settings_category::SettingsCategory;
-use super::sign_in_status::SignInStatus;
 use super::updates_page::render_updates_page;
 use crate::app_commands::CloseWindow;
 use crate::app_services::AppServices;
@@ -35,29 +35,15 @@ pub struct SettingsWindow {
     usage_task: Option<Task<()>>,
     /// The theme card under the pointer, previewed instead of the active theme.
     previewed_theme: Option<ColorTheme>,
-    /// Where a GitHub token is pasted to sign in.
-    pub(super) token_input: Entity<TextArea>,
-    pub(super) sign_in_status: SignInStatus,
-    /// The token check or sign-out in flight.
-    pub(super) sign_in_task: Option<Task<()>>,
-    /// Where a repository to watch is typed.
-    pub(super) repository_input: Entity<TextArea>,
-    pub(super) add_repository_status: AddRepositoryStatus,
-    /// The check of a typed repository in flight.
-    pub(super) add_repository_task: Option<Task<()>>,
-    /// The repositories of the queue's own lists, offered as quick picks.
-    pub(super) queue_repositories: Vec<qd_github::RepoRef>,
-    /// The read of `queue_repositories` in flight.
-    pub(super) queue_repositories_task: Option<Task<()>>,
-    /// Where a branch pattern to hide is typed.
-    pub(super) branch_pattern_input: Entity<TextArea>,
-    /// Which branch the next added pattern looks at.
-    pub(super) branch_rule_side: BranchSide,
-    /// Why the typed pattern could not be added, when it could not.
-    pub(super) branch_rule_error: Option<SharedString>,
-    /// Keep the observers of [`AppSettings`], the updater and the text
-    /// fields registered for the view's lifetime.
-    _subscriptions: [Subscription; 5],
+    /// The GitHub page's token field and sign-in.
+    token_sign_in: TokenSignIn,
+    /// The Repositories page's field, its check and the quick picks.
+    repository_adder: RepositoryAdder,
+    /// The Filters page's pattern field, branch side and error.
+    branch_rule_form: BranchRuleForm,
+    /// Keep the observers of [`AppSettings`] and the updater registered
+    /// for the view's lifetime.
+    _subscriptions: [Subscription; 2],
 }
 
 impl SettingsWindow {
@@ -66,36 +52,10 @@ impl SettingsWindow {
         let focus = cx.focus_handle();
         window.focus(&focus);
 
-        // cmd-enter in the token field signs in, like the button.
-        let token_input = cx.new(|cx| TextArea::new("ghp_…", cx));
-        let repository_input = cx.new(|cx| TextArea::new("owner/name or a GitHub link", cx));
-        let branch_pattern_input = cx.new(|cx| TextArea::new("feat/something*", cx));
+        // Every page redraws when a preference or the update status changes.
         let subscriptions = [
             cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
             cx.observe(&AppUpdater::global(cx), |_, _, cx| cx.notify()),
-            cx.subscribe(&token_input, |settings, _, event: &TextAreaEvent, cx| {
-                if *event == TextAreaEvent::Submit {
-                    settings.sign_in(cx);
-                }
-            }),
-            // The field is one line: return (or cmd-enter) adds the repository.
-            cx.subscribe(
-                &repository_input,
-                |settings, input, event: &TextAreaEvent, cx| {
-                    if is_one_line_submit(&input, *event, cx) {
-                        settings.add_typed_repository(cx);
-                    }
-                },
-            ),
-            // The same for the branch pattern field: return adds the pattern.
-            cx.subscribe(
-                &branch_pattern_input,
-                |settings, input, event: &TextAreaEvent, cx| {
-                    if is_one_line_submit(&input, *event, cx) {
-                        settings.add_typed_branch_rule(cx);
-                    }
-                },
-            ),
         ];
         let mut settings = Self {
             focus,
@@ -104,17 +64,9 @@ impl SettingsWindow {
             cache_usage: None,
             usage_task: None,
             previewed_theme: None,
-            token_input,
-            sign_in_status: SignInStatus::default(),
-            sign_in_task: None,
-            repository_input,
-            add_repository_status: AddRepositoryStatus::default(),
-            add_repository_task: None,
-            queue_repositories: Vec::new(),
-            queue_repositories_task: None,
-            branch_pattern_input,
-            branch_rule_side: BranchSide::default(),
-            branch_rule_error: None,
+            token_sign_in: TokenSignIn::new(cx),
+            repository_adder: RepositoryAdder::new(cx),
+            branch_rule_form: BranchRuleForm::new(cx),
             _subscriptions: subscriptions,
         };
         settings.read_cache_usage(cx);
@@ -140,6 +92,40 @@ impl SettingsWindow {
                 })
                 .ok();
         }));
+    }
+
+    pub(super) fn token_sign_in(&self) -> &TokenSignIn {
+        &self.token_sign_in
+    }
+
+    pub(super) fn token_sign_in_mut(&mut self) -> &mut TokenSignIn {
+        &mut self.token_sign_in
+    }
+
+    pub(super) fn repository_adder(&self) -> &RepositoryAdder {
+        &self.repository_adder
+    }
+
+    pub(super) fn repository_adder_mut(&mut self) -> &mut RepositoryAdder {
+        &mut self.repository_adder
+    }
+
+    pub(super) fn branch_rule_form(&self) -> &BranchRuleForm {
+        &self.branch_rule_form
+    }
+
+    pub(super) fn branch_rule_form_mut(&mut self) -> &mut BranchRuleForm {
+        &mut self.branch_rule_form
+    }
+
+    /// Whether the cache was cleared since the window opened.
+    pub(super) fn has_cleared_cache(&self) -> bool {
+        self.has_cleared_cache
+    }
+
+    /// What the cache holds, once read.
+    pub(super) fn cache_usage(&self) -> Option<CacheUsage> {
+        self.cache_usage
     }
 
     /// The theme to preview in place of the active one, while its card is hovered.
@@ -169,7 +155,7 @@ impl SettingsWindow {
     }
 
     /// Clears the cache off the main thread, then shows that it did.
-    fn clear_cache(cx: &mut Context<Self>) {
+    pub(super) fn clear_cache(cx: &mut Context<Self>) {
         let cache = cx.global::<AppServices>().cache.clone();
         cx.spawn(async move |settings, cx| {
             let cleared = cx
@@ -236,21 +222,7 @@ impl Render for SettingsWindow {
             SettingsCategory::FileDiff => {
                 render_file_diff_page(AppSettings::diff_view(cx)).into_any_element()
             }
-            SettingsCategory::GitHub => {
-                let settings = cx.entity().downgrade();
-                let clear_cache = move |_: &mut Window, cx: &mut App| {
-                    settings.update(cx, |_, cx| Self::clear_cache(cx)).ok();
-                };
-                let account_rows = self.render_account_rows(cx);
-                render_github_page(
-                    account_rows,
-                    self.has_cleared_cache,
-                    self.cache_usage,
-                    clear_cache,
-                    cx,
-                )
-                .into_any_element()
-            }
+            SettingsCategory::GitHub => self.render_github_page(cx).into_any_element(),
             SettingsCategory::Repositories => self.render_repositories_page(cx),
             SettingsCategory::Filters => self.render_filters_page(cx),
             SettingsCategory::Updates => render_updates_page(cx).into_any_element(),
@@ -289,7 +261,7 @@ impl Render for SettingsWindow {
 
 /// Whether `event` of the one-line field `input` submits it: return or
 /// cmd-enter. A newline typed into it is taken out and counts as the submit.
-fn is_one_line_submit(
+pub(super) fn is_one_line_submit(
     input: &Entity<TextArea>,
     event: TextAreaEvent,
     cx: &mut Context<SettingsWindow>,

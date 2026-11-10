@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
+use gpui::{AnyElement, Context, Entity, IntoElement, Subscription, Task, div, prelude::*, px};
 use qd_github::{GitHubClient, GitHubError, TokenSource, delete_stored_token, store_token};
 
 use super::setting_row::{SETTING_FIELD_WIDTH, SettingRow};
@@ -7,6 +7,7 @@ use super::sign_in_status::SignInStatus;
 use crate::app_services::AppServices;
 use crate::app_update::restart_app;
 use crate::button::Button;
+use crate::text_area::{TextArea, TextAreaEvent};
 use crate::theme;
 
 /// Where a classic token with the scopes the app needs is created: `repo`
@@ -16,6 +17,36 @@ const NEW_TOKEN_URL: &str =
     "https://github.com/settings/tokens/new?scopes=repo,read:org&description=Quarterdeck";
 /// GitHub's answer to a token it does not accept.
 const UNAUTHORIZED: u16 = 401;
+
+/// The GitHub page's sign-in: the field a token is pasted into, where
+/// signing in stands, and the check or sign-out in flight.
+pub struct TokenSignIn {
+    /// Where a GitHub token is pasted to sign in.
+    input: Entity<TextArea>,
+    status: SignInStatus,
+    /// The token check or sign-out in flight.
+    task: Option<Task<()>>,
+    /// Keeps the field's submit (cmd-enter) observed.
+    _subscription: Subscription,
+}
+
+impl TokenSignIn {
+    /// An empty token field; cmd-enter in it signs in, like the button.
+    pub fn new(cx: &mut Context<SettingsWindow>) -> Self {
+        let input = cx.new(|cx| TextArea::new("ghp_…", cx));
+        let subscription = cx.subscribe(&input, |settings, _, event: &TextAreaEvent, cx| {
+            if *event == TextAreaEvent::Submit {
+                settings.sign_in(cx);
+            }
+        });
+        Self {
+            input,
+            status: SignInStatus::default(),
+            task: None,
+            _subscription: subscription,
+        }
+    }
+}
 
 impl SettingsWindow {
     /// The account rows of the GitHub page: where the token comes from
@@ -29,7 +60,7 @@ impl SettingsWindow {
             |source| format!("Signed in with {}.", source.describe()),
         );
         let is_busy = matches!(
-            self.sign_in_status,
+            self.token_sign_in().status,
             SignInStatus::Checking | SignInStatus::SignedIn(_)
         );
 
@@ -54,7 +85,7 @@ impl SettingsWindow {
                     .flex_col()
                     .gap_1p5()
                     .w(px(SETTING_FIELD_WIDTH))
-                    .child(self.token_input.clone())
+                    .child(self.token_sign_in().input.clone())
                     .child(
                         div()
                             .flex()
@@ -73,8 +104,8 @@ impl SettingsWindow {
                                     .on_click(|_, _, cx| cx.open_url(NEW_TOKEN_URL)),
                             ),
                     )
-                    .children(self.sign_in_status.describe().map(|line| {
-                        let color = match self.sign_in_status {
+                    .children(self.token_sign_in().status.describe().map(|line| {
+                        let color = match self.token_sign_in().status {
                             SignInStatus::Failed(_) => theme::danger(),
                             _ => theme::muted(),
                         };
@@ -86,14 +117,14 @@ impl SettingsWindow {
 
     /// Checks the pasted token with GitHub (one request), saves it in the
     /// Keychain and restarts the app to use it.
-    pub(super) fn sign_in(&mut self, cx: &mut Context<Self>) {
-        let token = self.token_input.read(cx).text().trim().to_owned();
+    fn sign_in(&mut self, cx: &mut Context<Self>) {
+        let token = self.token_sign_in().input.read(cx).text().trim().to_owned();
         if token.is_empty() {
             return;
         }
-        self.sign_in_status = SignInStatus::Checking;
+        self.token_sign_in_mut().status = SignInStatus::Checking;
         cx.notify();
-        self.sign_in_task = Some(cx.spawn(async move |settings, cx| {
+        self.token_sign_in_mut().task = Some(cx.spawn(async move |settings, cx| {
             // Whose token it is, then save it: both block, so off the main thread.
             let signed_in = cx
                 .background_executor()
@@ -107,12 +138,12 @@ impl SettingsWindow {
             // Restart with the saved token, or say what went wrong.
             settings
                 .update(cx, |settings, cx| {
-                    settings.sign_in_status = match signed_in {
+                    settings.token_sign_in_mut().status = match signed_in {
                         Ok(login) => SignInStatus::SignedIn(login.into()),
                         Err(error) => SignInStatus::Failed(describe_sign_in_error(&error).into()),
                     };
                     cx.notify();
-                    if matches!(settings.sign_in_status, SignInStatus::SignedIn(_)) {
+                    if matches!(settings.token_sign_in().status, SignInStatus::SignedIn(_)) {
                         restart_for_token(cx);
                     }
                 })
@@ -123,7 +154,7 @@ impl SettingsWindow {
     /// Removes the saved token and restarts; the app then falls back to
     /// the `gh` CLI, if it is logged in.
     fn sign_out(&mut self, cx: &mut Context<Self>) {
-        self.sign_in_task = Some(cx.spawn(async move |settings, cx| {
+        self.token_sign_in_mut().task = Some(cx.spawn(async move |settings, cx| {
             let deleted = cx
                 .background_executor()
                 .spawn(async move { delete_stored_token() })
@@ -132,7 +163,8 @@ impl SettingsWindow {
                 .update(cx, |settings, cx| match deleted {
                     Ok(()) => restart_for_token(cx),
                     Err(error) => {
-                        settings.sign_in_status = SignInStatus::Failed(error.to_string().into());
+                        settings.token_sign_in_mut().status =
+                            SignInStatus::Failed(error.to_string().into());
                         cx.notify();
                     }
                 })
