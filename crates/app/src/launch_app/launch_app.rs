@@ -1,12 +1,9 @@
-use std::path::PathBuf;
-use std::process::Command;
-
-use gpui::{
-    App, Application, Bounds, DisplayId, Pixels, Size, TitlebarOptions, WindowBackgroundAppearance,
-    WindowBounds, WindowOptions, point, prelude::*, px, size,
-};
-
+use gpui::{App, Application, TitlebarOptions, WindowOptions, point, prelude::*, px, size};
 use qd_studio::{clean_orphan_workspaces, workspace_root};
+
+use super::restore_window::restore_window;
+use super::show_startup_failure::show_startup_failure;
+use super::startup_mode::StartupMode;
 
 use crate::app_commands::install_app_commands;
 use crate::app_services::AppServices;
@@ -16,13 +13,11 @@ use crate::avatar_images::AvatarImages;
 use crate::brief_gallery::open_brief_gallery;
 use crate::bundled_fonts::load_bundled_fonts;
 use crate::bundled_icons::BundledIcons;
-use crate::main_window::{MainWindow, MainWindowReveal};
-use crate::startup_splash::{StartupSplash, startup_video_path};
-use crate::ui_state::{UiStateRecorder, window_bounds_from_placement};
+use crate::main_window::MainWindow;
+use crate::startup_splash::StartupSplash;
+use crate::ui_state::UiStateRecorder;
 
 const WINDOW_TITLE: &str = "Quarterdeck";
-const WINDOW_WIDTH: f32 = 1200.;
-const WINDOW_HEIGHT: f32 = 800.;
 const WINDOW_MIN_WIDTH: f32 = 720.;
 const WINDOW_MIN_HEIGHT: f32 = 480.;
 /// Set (to anything) at launch, the brief gallery opens too; `bacon
@@ -31,41 +26,6 @@ const OPEN_BRIEF_GALLERY_VARIABLE: &str = "QUARTERDECK_BRIEF_GALLERY";
 /// Where the traffic lights sit: centered in the top bar's 40 px.
 const TRAFFIC_LIGHTS_X: f32 = 14.;
 const TRAFFIC_LIGHTS_Y: f32 = 13.;
-
-/// How the main window comes up.
-enum StartupMode {
-    /// Behind the startup splash playing this movie: opened hidden and
-    /// see-through, revealed when the movie ends.
-    Splash(PathBuf),
-    /// At once (the movie is missing).
-    Direct,
-}
-
-impl StartupMode {
-    /// The splash when its movie is there.
-    fn detect() -> Self {
-        startup_video_path().map_or(Self::Direct, Self::Splash)
-    }
-
-    fn shows_main_window_at_once(&self) -> bool {
-        matches!(self, Self::Direct)
-    }
-
-    /// See-through while hidden behind the splash, so it can fade in.
-    fn main_window_background(&self) -> WindowBackgroundAppearance {
-        match self {
-            Self::Splash(_) => WindowBackgroundAppearance::Transparent,
-            Self::Direct => WindowBackgroundAppearance::Opaque,
-        }
-    }
-
-    fn main_window_reveal(&self) -> MainWindowReveal {
-        match self {
-            Self::Splash(_) => MainWindowReveal::AfterSplash,
-            Self::Direct => MainWindowReveal::Shown,
-        }
-    }
-}
 
 /// Initializes the services, starts gpui and opens the main window where it
 /// was last placed, on the display it was on, behind the startup splash when
@@ -145,67 +105,4 @@ pub fn launch_app() {
                 open_brief_gallery(cx);
             }
         });
-}
-
-/// Where the main window opens.
-struct RestoredWindow {
-    bounds: WindowBounds,
-    /// The display the bounds are relative to; `None` for the main display.
-    display_id: Option<DisplayId>,
-}
-
-/// The saved placement on the display it was saved on, when that display
-/// is connected and the window still fits it. A missing display falls back
-/// to the main one with the same placement if it fits there; a placement
-/// that fits nowhere opens centered at the default size.
-fn restore_window(recorder: &UiStateRecorder, min_size: Size<Pixels>, cx: &App) -> RestoredWindow {
-    let placement = recorder.saved_window_placement();
-
-    // The saved display by its stable UUID, or else the main display.
-    let saved_display = placement.as_ref().and_then(|placement| {
-        let uuid = placement.display.as_ref()?;
-        cx.displays().into_iter().find(|display| {
-            display
-                .uuid()
-                .is_ok_and(|candidate| candidate.to_string() == uuid.as_str())
-        })
-    });
-    let display = saved_display.or_else(|| cx.primary_display());
-    let display_id = display.as_ref().map(|display| display.id());
-
-    // The saved bounds if they fit that display, else centered on it.
-    let bounds = placement
-        .zip(display)
-        .and_then(|(placement, display)| {
-            window_bounds_from_placement(&placement, min_size, display.bounds().size)
-        })
-        .unwrap_or_else(|| {
-            WindowBounds::Windowed(Bounds::centered(
-                display_id,
-                size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)),
-                cx,
-            ))
-        });
-    RestoredWindow { bounds, display_id }
-}
-
-/// Tells the user why the app cannot start, in a system alert: an app
-/// started from Finder has no terminal for the error. Runs before gpui, so
-/// the alert comes from `osascript`; `reason` is passed as an argument, never
-/// as script text.
-fn show_startup_failure(reason: &str) {
-    let shown = Command::new("/usr/bin/osascript")
-        .args([
-            "-e",
-            "on run arguments",
-            "-e",
-            "display alert \"Quarterdeck cannot start\" message (item 1 of arguments) as critical",
-            "-e",
-            "end run",
-            reason,
-        ])
-        .output();
-    if let Err(error) = shown {
-        eprintln!("cannot show the startup failure: {error}");
-    }
 }

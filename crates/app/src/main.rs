@@ -1,7 +1,7 @@
 //! Quarterdeck: a macOS desktop app for reviewing GitHub pull requests.
 //!
 //! Files:
-//! - `launch_app.rs`: starts gpui and opens the main window where it was last placed.
+//! - `launch_app/`: starts gpui and opens the main window where it was last placed.
 //! - `main_window.rs`: `MainWindow`, the root view; records the window placement; fades in after the splash.
 //! - `startup_splash/`: `StartupSplash`, the intro movie at launch, played while the main window loads.
 //! - `app_commands.rs`: app-level actions with their key bindings and menus.
