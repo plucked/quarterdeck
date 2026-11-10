@@ -5,7 +5,7 @@
 //!
 //! Files:
 //! - `open_brief_gallery.rs`: opens the window, or brings the open one to the front.
-//! - `brief_gallery.rs`: `BriefGallery`, the window's view: the sample, its rows, folded reasoning.
+//! - `brief_gallery.rs`: `BriefGallery`, the window's view: the sample, its rows, the shown page and the report.
 //! - `gallery_rendering.rs`: the gallery's rows, each part under a label naming it.
 //! - `gallery_row.rs`: `GalleryRow`, one row of the gallery's list.
 //! - `sample_brief.rs`: `SampleBrief`, the status cards and a checked, prepared sample brief.
