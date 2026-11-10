@@ -1,6 +1,8 @@
-use gpui::{AnyElement, Context, FontWeight, SharedString, div, prelude::*, px};
+use gpui::{
+    AnyElement, App, ClickEvent, Context, FontWeight, SharedString, Window, div, prelude::*, px,
+};
 use qd_cache::QueueTab;
-use qd_github::{StackLayer, ViewerReview};
+use qd_github::{PullRequest, RepoRef, StackLayer, ViewerReview};
 
 use super::ReviewQueue;
 use super::pull_request_row_rendering::{VERDICT_BADGE_ID, render_brief_mark};
@@ -20,6 +22,78 @@ const LAYER_RAIL_HEIGHT: f32 = 16.;
 const STACK_GLYPH_SQUARE_SIZE: f32 = STACK_GLYPH_SIZE - 5.;
 /// Corner radius of the stack glyph's squares.
 const STACK_GLYPH_CORNER_RADIUS: f32 = 3.;
+
+impl ReviewQueue {
+    /// What the row of a stack layer the shown list has (at `list_index`)
+    /// shows; `selected_id` is the selected pull request's.
+    pub(super) fn listed_layer_row(
+        &self,
+        pull_request: &PullRequest,
+        list_index: usize,
+        selected_id: Option<u64>,
+    ) -> LayerRow {
+        let draft_marker = if pull_request.draft { " · draft" } else { "" };
+        LayerRow {
+            id: ("stack-layer", list_index).into(),
+            position: pull_request
+                .stack
+                .as_ref()
+                .map_or(0, |membership| membership.position),
+            title: pull_request.title.clone().into(),
+            meta: format!("#{}{draft_marker}", pull_request.number).into(),
+            is_listed: true,
+            marks: LayerMarks {
+                needs_review: self.needs_review(&pull_request.repo, pull_request.number),
+                has_brief: self.has_brief(&pull_request.repo, pull_request.number),
+                viewer_review: pull_request.viewer_review,
+            },
+            is_selected: selected_id == Some(pull_request.id),
+        }
+    }
+
+    /// What the row (sidebar row `row_index`) of `stack_layer`, layer
+    /// `layer` of a stack in `repo` that the shown list lacks, shows.
+    pub(super) fn other_layer_row(
+        &self,
+        row_index: usize,
+        repo: &RepoRef,
+        layer: usize,
+        stack_layer: &StackLayer,
+    ) -> LayerRow {
+        LayerRow {
+            id: ("other-layer", row_index).into(),
+            position: u64::try_from(layer + 1).unwrap_or(u64::MAX),
+            title: stack_layer.title.clone().into(),
+            meta: format!("#{}{}", stack_layer.number, layer_state_marker(stack_layer)).into(),
+            is_listed: false,
+            marks: LayerMarks {
+                needs_review: self.needs_review(repo, stack_layer.number),
+                has_brief: self.has_brief(repo, stack_layer.number),
+                viewer_review: self
+                    .lists()
+                    .find_by_number(repo, stack_layer.number)
+                    .and_then(|listed| listed.viewer_review),
+            },
+            is_selected: self.is_selected(repo, stack_layer.number),
+        }
+    }
+}
+
+/// The click on the row of layer `number` of a stack in `repo`: ⇧-click
+/// starts the shown stack's combined review there; a plain click, or a
+/// ⇧-click on a stack not shown, runs `open`.
+pub(super) fn on_layer_click(
+    repo: RepoRef,
+    number: u64,
+    open: impl Fn(&mut ReviewQueue, &mut Context<ReviewQueue>) + 'static,
+    cx: &mut Context<ReviewQueue>,
+) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    cx.listener(move |queue, event: &ClickEvent, _, cx| {
+        if !(event.modifiers().shift && queue.start_combined_at(&repo, number, cx)) {
+            open(queue, cx);
+        }
+    })
+}
 
 /// The header of a stack's group: a stack glyph, its number and trunk,
 /// how many layers it has and how many of them this list has, and a
@@ -117,25 +191,25 @@ fn render_stack_glyph() -> impl IntoElement {
 
 /// What one layer row under a stack's header shows.
 pub(super) struct LayerRow {
-    pub(super) id: gpui::ElementId,
+    id: gpui::ElementId,
     /// 1 for the layer on the trunk.
-    pub(super) position: u64,
-    pub(super) title: SharedString,
-    pub(super) meta: SharedString,
+    position: u64,
+    title: SharedString,
+    meta: SharedString,
     /// Whether the shown list has it; other layers show muted.
-    pub(super) is_listed: bool,
-    pub(super) marks: LayerMarks,
-    pub(super) is_selected: bool,
+    is_listed: bool,
+    marks: LayerMarks,
+    is_selected: bool,
 }
 
 /// What a layer row marks beside its title.
-pub(super) struct LayerMarks {
+struct LayerMarks {
     /// It asks for the viewer's review (a badge says so).
-    pub(super) needs_review: bool,
+    needs_review: bool,
     /// It has a stored brief (a star says so).
-    pub(super) has_brief: bool,
+    has_brief: bool,
     /// The viewer's latest review (a badge says which), when known.
-    pub(super) viewer_review: Option<ViewerReview>,
+    viewer_review: Option<ViewerReview>,
 }
 
 /// One layer of a stack, under its header, on a single line so long stacks
@@ -220,7 +294,7 @@ fn render_review_badge() -> impl IntoElement {
 }
 
 /// ` · merged`, ` · closed` or ` · draft` for a layer not simply open.
-pub(super) fn layer_state_marker(layer: &StackLayer) -> &'static str {
+fn layer_state_marker(layer: &StackLayer) -> &'static str {
     match (layer.is_merged, layer.is_open, layer.is_draft) {
         (true, _, _) => " · merged",
         (false, false, _) => " · closed",

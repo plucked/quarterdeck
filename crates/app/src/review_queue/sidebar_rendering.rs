@@ -7,9 +7,7 @@ use super::pull_request_row_rendering::render_pull_request_row;
 use super::queue_row::QueueRow;
 use super::refresh_status::RefreshStatus;
 use super::repo_group::RepoGroup;
-use super::stack_row_rendering::{
-    LayerMarks, LayerRow, layer_state_marker, render_layer_row, render_stack_header,
-};
+use super::stack_row_rendering::{on_layer_click, render_layer_row, render_stack_header};
 use crate::display_date::unix_now;
 use crate::fold_chevron::{FoldChevron, FoldState};
 use crate::pulsing_status::PulsingStatus;
@@ -183,66 +181,28 @@ impl ReviewQueue {
                 )
             }
             QueueRow::StackLayer(list_index) => {
-                let pull_request = self.shown_list().get(*list_index)?;
                 let list_index = *list_index;
-                let (repo, number) = (pull_request.repo.clone(), pull_request.number);
-                let draft_marker = if pull_request.draft { " · draft" } else { "" };
-                render_layer_row(
-                    LayerRow {
-                        id: ("stack-layer", list_index).into(),
-                        position: pull_request
-                            .stack
-                            .as_ref()
-                            .map_or(0, |membership| membership.position),
-                        title: pull_request.title.clone().into(),
-                        meta: format!("#{}{draft_marker}", pull_request.number).into(),
-                        is_listed: true,
-                        marks: LayerMarks {
-                            needs_review: self
-                                .needs_review(&pull_request.repo, pull_request.number),
-                            has_brief: self.has_brief(&pull_request.repo, pull_request.number),
-                            viewer_review: pull_request.viewer_review,
-                        },
-                        is_selected: selected_id == Some(pull_request.id),
-                    },
-                    cx.listener(move |queue, event: &gpui::ClickEvent, _, cx| {
-                        if !(event.modifiers().shift && queue.start_combined_at(&repo, number, cx))
-                        {
-                            queue.select(list_index, cx);
-                        }
-                    }),
-                )
+                let pull_request = self.shown_list().get(list_index)?;
+                let row = self.listed_layer_row(pull_request, list_index, selected_id);
+                let on_click = on_layer_click(
+                    pull_request.repo.clone(),
+                    pull_request.number,
+                    move |queue, cx| queue.select(list_index, cx),
+                    cx,
+                );
+                render_layer_row(row, on_click)
             }
             QueueRow::OtherLayer { key, layer } => {
                 let stack_layer = self.stack(key)?.layers.get(*layer)?;
-                let (key, layer) = (key.clone(), *layer);
-                let number = stack_layer.number;
-                render_layer_row(
-                    LayerRow {
-                        id: ("other-layer", index).into(),
-                        position: u64::try_from(layer + 1).unwrap_or(u64::MAX),
-                        title: stack_layer.title.clone().into(),
-                        meta: format!("#{}{}", stack_layer.number, layer_state_marker(stack_layer))
-                            .into(),
-                        is_listed: false,
-                        marks: LayerMarks {
-                            needs_review: self.needs_review(&key.repo, stack_layer.number),
-                            has_brief: self.has_brief(&key.repo, stack_layer.number),
-                            viewer_review: self
-                                .lists()
-                                .find_by_number(&key.repo, stack_layer.number)
-                                .and_then(|listed| listed.viewer_review),
-                        },
-                        is_selected: self.is_selected(&key.repo, stack_layer.number),
-                    },
-                    cx.listener(move |queue, event: &gpui::ClickEvent, _, cx| {
-                        if !(event.modifiers().shift
-                            && queue.start_combined_at(&key.repo, number, cx))
-                        {
-                            queue.open_other_layer(&key, layer, cx);
-                        }
-                    }),
-                )
+                let row = self.other_layer_row(index, &key.repo, *layer, stack_layer);
+                let (open_key, layer) = (key.clone(), *layer);
+                let on_click = on_layer_click(
+                    key.repo.clone(),
+                    stack_layer.number,
+                    move |queue, cx| queue.open_other_layer(&open_key, layer, cx),
+                    cx,
+                );
+                render_layer_row(row, on_click)
             }
             QueueRow::StackHeader(group) => {
                 let is_reviewed = self.is_stack_reviewed(&group.key, cx);
