@@ -1,7 +1,7 @@
 use gpui::{SharedString, Task};
 use qd_github::{MergeMethod, MergeOptions};
 
-/// Which action the panel under the header prepares.
+/// Which action the Actions tab's panel prepares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelAction {
     Merge,
@@ -29,7 +29,7 @@ pub enum ActionProgress {
     Failed(SharedString),
 }
 
-/// The merge or close panel under the header: GitHub's options for the
+/// The merge or close panel in the side panel's Actions tab: GitHub's options for the
 /// pull request (read when the panel opens), the user's choices, the
 /// action waiting for confirmation, and how it is going.
 pub struct ActionPanel {

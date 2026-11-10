@@ -374,10 +374,7 @@ impl PullRequestDetail {
             detail.toggle_file_collapsed(file, cx);
         }))
     }
-}
 
-/// A one-line status (loading, failure) below the description.
-impl PullRequestDetail {
     /// A diff line with the `+` that comments on it, shown left of the line
     /// while the line or the `+` is hovered (shift-clicking it stretches the
     /// open comment); a double click on the line opens a comment too. The
@@ -495,6 +492,7 @@ impl RowLines {
     }
 }
 
+/// A one-line status (a failure, every file hidden) in place of the files.
 fn render_status_line(message: impl Into<gpui::SharedString>, color: gpui::Rgba) -> AnyElement {
     div()
         .pb_3()

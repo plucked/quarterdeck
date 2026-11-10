@@ -3,14 +3,17 @@
 //! one-line change as for a hundred files. For a stacked pull request it
 //! shows one layer or several layers combined. Owns
 //! loading the files (with progress), building and coloring their diffs, the
-//! diff settings and each file's viewed and collapsed state.
+//! diff settings and each file's viewed and collapsed state; the review
+//! (GitHub's conversations and the user's comments under their lines, and
+//! submitting or copying them); the AI-written brief in place of the diff;
+//! and the side panel's Files, Review, Actions (merge, close) and Checks tabs.
 //!
 //! Files:
 //! - `pull_request_detail.rs`: `PullRequestDetail`, the view's state, loading and actions.
 //! - `row_rendering.rs`: renders the pane's layout and each diff row.
 //! - `row_height_estimate.rs`: where each row starts, estimated without layout, for the scrollbar.
 //! - `sticky_header_rendering.rs`: the header above the diff: title, metadata, description.
-//! - `file_tree_rendering.rs`: the file tree panel: progress, folders and files.
+//! - `file_tree_rendering.rs`: the side panel: its tabs and divider, and the Files tab's progress, folders and files.
 //! - `filter_rendering.rs`: the filter: viewed switch, kind and type chip rows, summary.
 //! - `detail_row.rs`: `DetailRow`, one row of the list.
 //! - `detail_row_list.rs`: `DetailRowList`, the rows in order and each file's row range.
@@ -48,7 +51,7 @@
 //! - `review_panel_rendering.rs`: the side panel's review tab.
 //! - `action_panel.rs`: `ActionPanel`, the merge or close panel's options, choices and progress.
 //! - `pull_request_actions.rs`: merging (also as admin), closing and deleting the branch on GitHub.
-//! - `action_panel_rendering.rs`: the merge or close panel under the header.
+//! - `action_panel_rendering.rs`: the side panel's Actions tab: Merge… and Close…, and the open panel.
 //! - `activity_rendering.rs`: the loading indicators: header pill, progress line, loading card.
 //! - `context_expansion.rs`: revealing unchanged lines around hunks: fetching the file's text, rebuilding its rows.
 //! - `fetch_file_text.rs`: gets a file's text after the change from the cache by blob SHA, else from GitHub.

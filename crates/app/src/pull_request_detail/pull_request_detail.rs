@@ -114,9 +114,11 @@ pub(super) struct HighlightedDiff {
 
 /// The right pane: a sticky header with the shown pull request's title (and
 /// its description when expanded), the changed files as one virtualized
-/// list of rows, and the file tree panel beside them. Only rows in view are
-/// rendered, so its cost does not grow with the pull request. The tree and
-/// the diff share one file order and one filter.
+/// list of rows (or the AI-written brief in their place), and the side
+/// panel beside them with its Files, Review, Actions and Checks tabs. Only
+/// rows in view are rendered, so its cost does not grow with the pull
+/// request. The tree and the diff share one file order and one filter; the
+/// review's comment cards sit under their lines in the diff.
 ///
 /// Files are read from the cache when current for the pull request's
 /// `updated_at`, otherwise fetched and cached; diffs are built and colored
@@ -191,7 +193,7 @@ pub struct PullRequestDetail {
     row_tops_width: Option<f32>,
     /// Review comments, the comment being written, and the review tab.
     review: ReviewPane,
-    /// The merge or close panel under the header, while open.
+    /// The merge or close panel in the Actions tab, while open.
     action_panel: Option<ActionPanel>,
     /// The AI-written brief: diff or brief mode, briefs written, the run in flight.
     brief: BriefPane,
@@ -1225,7 +1227,6 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Collapses or expands a folder of the tree.
     /// Collapses every folder of the tree while one is expanded, else expands them all.
     pub(super) fn toggle_all_folders(&mut self, cx: &mut Context<Self>) {
         if self.file_tree.has_expanded_folder() {
@@ -1237,6 +1238,7 @@ impl PullRequestDetail {
         cx.notify();
     }
 
+    /// Collapses or expands the folder at `path` in the tree.
     pub(super) fn toggle_folder(&mut self, path: &str, cx: &mut Context<Self>) {
         self.file_tree.toggle_folder(path);
         self.refresh_tree_rows();
