@@ -42,7 +42,7 @@ use super::review_target::ReviewTarget;
 use super::row_height_estimate::estimate_row_tops;
 use super::selected_diff_text::{row_code_text, selected_diff_text};
 use super::side_panel_tab::SidePanelTab;
-use super::viewed_toggle::ViewedToggle;
+
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::avatar_images::{AvatarImages, AvatarLoaded};
@@ -110,6 +110,16 @@ struct FetchedChanges {
 pub(super) struct HighlightedDiff {
     pub diff: Arc<FileDiff>,
     pub syntax: Option<Arc<DiffSyntax>>,
+}
+
+impl HighlightedDiff {
+    /// Colors `loaded`'s diff by its language. Slow: background executor.
+    pub fn of(loaded: LoadedFile) -> Self {
+        Self {
+            syntax: loaded.highlight_syntax(),
+            diff: loaded.diff,
+        }
+    }
 }
 
 /// The right pane: a sticky header with the shown pull request's title (and
@@ -1257,14 +1267,8 @@ impl PullRequestDetail {
             .folder_viewed_state(folder, &files, &self.file_review)
             != FolderViewedState::All;
         for file in self.file_tree.folder_files(folder, &files) {
-            match self.file_review.set_viewed(&files[file], mark_viewed) {
-                Some(ViewedToggle::Marked(mark)) => {
-                    UiStateRecorder::record_file_viewed(cx, scope.clone(), mark);
-                }
-                Some(ViewedToggle::Unmarked(filename)) => {
-                    UiStateRecorder::record_file_unviewed(cx, scope.clone(), filename);
-                }
-                None => {}
+            if let Some(toggle) = self.file_review.set_viewed(&files[file], mark_viewed) {
+                toggle.record(scope.clone(), cx);
             }
         }
         self.rebuild_rows(self.anchor_at_top());
@@ -1474,14 +1478,7 @@ impl PullRequestDetail {
         let Some(loaded) = self.loaded_files().get(file).cloned() else {
             return;
         };
-        match self.file_review.toggle_viewed(&loaded) {
-            ViewedToggle::Marked(mark) => {
-                UiStateRecorder::record_file_viewed(cx, scope, mark);
-            }
-            ViewedToggle::Unmarked(filename) => {
-                UiStateRecorder::record_file_unviewed(cx, scope, filename);
-            }
-        }
+        self.file_review.toggle_viewed(&loaded).record(scope, cx);
         self.rebuild_file_rows(file);
         cx.notify();
     }
@@ -1658,8 +1655,7 @@ impl PullRequestDetail {
         }
         // A summary editor opened while loading holds no saved summary; it
         // is made again with the loaded one, so typing never overwrites it.
-        self.review.summary_editor = None;
-        self.review.summary_subscription = None;
+        self.review.drop_summary_editor();
         if self.review.tab == SidePanelTab::Review {
             self.show_side_panel_tab(SidePanelTab::Review, cx);
         }
@@ -1687,15 +1683,7 @@ impl PullRequestDetail {
             .chunks(batch_size)
             .map(|batch| {
                 let batch = batch.to_vec();
-                executor.spawn(async move {
-                    batch
-                        .into_iter()
-                        .map(|loaded| HighlightedDiff {
-                            syntax: loaded.highlight_syntax(),
-                            diff: loaded.diff,
-                        })
-                        .collect()
-                })
+                executor.spawn(async move { batch.into_iter().map(HighlightedDiff::of).collect() })
             })
             .collect();
 

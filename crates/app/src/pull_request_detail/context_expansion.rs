@@ -136,12 +136,7 @@ impl PullRequestDetail {
         let task = cx.spawn(async move |detail, cx| {
             let highlighted = cx
                 .background_executor()
-                .spawn(async move {
-                    HighlightedDiff {
-                        syntax: loaded.highlight_syntax(),
-                        diff: loaded.diff,
-                    }
-                })
+                .spawn(async move { HighlightedDiff::of(loaded) })
                 .await;
             detail
                 .update(cx, |detail, cx| {

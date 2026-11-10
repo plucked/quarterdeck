@@ -72,8 +72,7 @@ impl PullRequestDetail {
         review.load_task = None;
         review.action_task = None;
         review.status = ReviewStatus::Idle;
-        review.summary_editor = None;
-        review.summary_subscription = None;
+        review.drop_summary_editor();
     }
 
     /// Reads GitHub's conversations and the viewer's pending review for the
@@ -481,11 +480,7 @@ impl PullRequestDetail {
             .comments
             .note(id)
             .and_then(|note| self.file_of_path(&note.path));
-        self.review_mut()
-            .comments
-            .notes
-            .retain(|note| note.id != id);
-        UiStateRecorder::record_review_change(cx, ReviewChange::DeleteNote(id));
+        self.forget_note(id, cx);
         self.refresh_comment_files(&[file]);
         cx.notify();
     }
@@ -499,14 +494,20 @@ impl PullRequestDetail {
             .map(|note| note.id)
             .collect();
         for id in ids {
-            self.review_mut()
-                .comments
-                .notes
-                .retain(|note| note.id != id);
-            UiStateRecorder::record_review_change(cx, ReviewChange::DeleteNote(id));
+            self.forget_note(id, cx);
         }
         self.rebuild_rows_in_place();
         cx.notify();
+    }
+
+    /// Removes note `id` from the shown notes and from storage; the caller
+    /// lays the rows out again.
+    fn forget_note(&mut self, id: NoteId, cx: &mut Context<Self>) {
+        self.review_mut()
+            .comments
+            .notes
+            .retain(|note| note.id != id);
+        UiStateRecorder::record_review_change(cx, ReviewChange::DeleteNote(id));
     }
 
     /// Deletes a GitHub comment the viewer may delete (at once).
@@ -670,12 +671,7 @@ impl PullRequestDetail {
                 };
                 let dropped = detail.update(cx, |detail, cx| {
                     if let Some(id) = id {
-                        detail
-                            .review_mut()
-                            .comments
-                            .notes
-                            .retain(|note| note.id != id);
-                        UiStateRecorder::record_review_change(cx, ReviewChange::DeleteNote(id));
+                        detail.forget_note(id, cx);
                     }
                 });
                 if dropped.is_err() {

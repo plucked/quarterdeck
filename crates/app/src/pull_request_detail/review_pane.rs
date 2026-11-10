@@ -35,6 +35,15 @@ pub struct ReviewPane {
     pub submission: Option<Task<()>>,
 }
 
+impl ReviewPane {
+    /// Drops the summary's editor and its observer; the review tab makes
+    /// them again from the summary held then.
+    pub fn drop_summary_editor(&mut self) {
+        self.summary_editor = None;
+        self.summary_subscription = None;
+    }
+}
+
 impl Default for ReviewPane {
     fn default() -> Self {
         Self {
