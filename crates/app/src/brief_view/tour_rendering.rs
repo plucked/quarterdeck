@@ -2,7 +2,8 @@ use gpui::{AnyElement, FontWeight, IntoElement, SharedString, div, prelude::*, p
 use qd_studio::StepWeight;
 
 use super::brief_handlers::BriefHandlers;
-use super::brief_rendering::{caption_line, markdown, render_anchor_link};
+use super::brief_text_rendering::{caption_line, markdown};
+use super::code_excerpt_rendering::render_anchor_link;
 use super::prepared_step::PreparedStep;
 use crate::theme;
 

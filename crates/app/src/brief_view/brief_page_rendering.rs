@@ -1,9 +1,8 @@
 use gpui::{AnyElement, IntoElement, div, prelude::*};
 
+use super::brief_footer_rendering::{render_brief_footer, render_rejected};
 use super::brief_page_row::BriefPageRow;
-use super::brief_rendering::{
-    render_brief_footer, render_brief_widget, render_lead, render_rejected,
-};
+use super::brief_rendering::{render_brief_widget, render_lead};
 use super::brief_widget_context::BriefWidgetContext;
 use super::page_rendering::{render_page_intro, render_page_navigation};
 use super::prepared_brief::PreparedBrief;

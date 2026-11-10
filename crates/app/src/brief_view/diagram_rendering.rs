@@ -8,7 +8,7 @@ use qd_studio::{
 };
 
 use super::brief_handlers::BriefHandlers;
-use super::brief_rendering::caption_line;
+use super::brief_text_rendering::caption_line;
 use super::diagram_geometry::{DiagramPoint, DiagramRect};
 use super::diagram_stroke::{ArrowHead, DiagramStroke, StrokeCourse, paint_strokes};
 use super::graph_layout::{

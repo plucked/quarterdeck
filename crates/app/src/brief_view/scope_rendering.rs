@@ -3,7 +3,7 @@ use std::sync::Arc;
 use gpui::{AnyElement, IntoElement, div, prelude::*, px};
 use qd_markdown::MarkdownDocument;
 
-use super::brief_rendering::markdown;
+use super::brief_text_rendering::markdown;
 use crate::section_label::SectionLabel;
 use crate::theme;
 

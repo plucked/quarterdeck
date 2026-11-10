@@ -30,17 +30,26 @@
 //! - `report_rendering.rs`: the report panel under the version line: text field, saved path.
 //! - `version_rendering.rs`: the line above a brief: the commit it was written for, against the shown head, and the Report button.
 //! - `column_width_probe.rs`: `render_column_width_probe`, measures the brief's column so diagrams are laid out for it.
-//! - `brief_rendering.rs`: the column, the status card, lead, widgets, left-out list and footer.
+//! - `brief_rendering.rs`: the column and the bar over it, each widget by kind, the lead and callouts.
+//! - `brief_status_rendering.rs`: the status card: no brief yet, one being written (how far), or a failed run.
+//! - `brief_text_rendering.rs`: the brief's Markdown prose and the caption above code.
+//! - `code_excerpt_rendering.rs`: quoted lines under their anchor link, in the diff's look, with gap rows.
+//! - `table_rendering.rs`: tables of Markdown cells; a trace numbers its rows.
+//! - `brief_footer_rendering.rs`: the footer (what the brief was written from, Write again) and the left-out list.
 
 mod brief_diffs;
 mod brief_excerpt;
+mod brief_footer_rendering;
 mod brief_handlers;
 mod brief_page_rendering;
 mod brief_page_row;
 mod brief_rendering;
 mod brief_report;
 mod brief_state;
+mod brief_status_rendering;
+mod brief_text_rendering;
 mod brief_widget_context;
+mod code_excerpt_rendering;
 mod column_width_probe;
 mod diagram_geometry;
 mod diagram_rendering;
@@ -56,6 +65,7 @@ mod report_rendering;
 mod report_state;
 mod scope_rendering;
 mod sequence_layout;
+mod table_rendering;
 mod text_estimate;
 mod tour_rendering;
 mod version_rendering;
@@ -64,9 +74,10 @@ pub use brief_diffs::BriefDiffs;
 pub use brief_handlers::{BriefHandlers, view_action, view_handler};
 pub use brief_page_rendering::render_brief_page_row;
 pub use brief_page_row::BriefPageRow;
-pub use brief_rendering::{render_brief_bar, render_brief_column, render_brief_status};
+pub use brief_rendering::{render_brief_bar, render_brief_column};
 pub use brief_report::{BriefReport, ReportHost};
 pub use brief_state::BriefState;
+pub use brief_status_rendering::render_brief_status;
 pub use brief_widget_context::BriefWidgetContext;
 pub use column_width_probe::render_column_width_probe;
 pub use diagram_geometry::DEFAULT_DIAGRAM_WIDTH;
