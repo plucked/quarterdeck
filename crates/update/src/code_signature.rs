@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::UpdateError;
+use crate::run_system_tool::{ToolRefusal, run_system_tool};
 
 /// What a Quarterdeck release's signature must satisfy: the app's bundle
 /// identifier, signed with a Developer ID certificate issued by Apple to
@@ -18,20 +19,23 @@ const RELEASE_REQUIREMENT: &str = concat!(
 /// and Gatekeeper accepts it (it is notarized).
 pub(crate) fn verify_release_signature(app: &Path) -> Result<(), UpdateError> {
     // The signature covers the whole bundle and names the right signer.
-    run_check(
+    run_system_tool(
         "codesign",
         Command::new("/usr/bin/codesign")
             .args(["--verify", "--deep", "--strict"])
             .arg(format!("-R{RELEASE_REQUIREMENT}"))
             .arg(app),
+        ToolRefusal::SignatureRejected,
     )?;
     // Gatekeeper would open it: notarized, not revoked.
-    run_check(
+    run_system_tool(
         "spctl",
         Command::new("/usr/sbin/spctl")
             .args(["--assess", "--type", "execute"])
             .arg(app),
-    )
+        ToolRefusal::SignatureRejected,
+    )?;
+    Ok(())
 }
 
 /// Whether the bundle at `app` is signed as a release (Developer ID of the
@@ -43,19 +47,4 @@ pub(crate) fn is_release_signed(app: &Path) -> bool {
         .arg(app)
         .output()
         .is_ok_and(|output| output.status.success())
-}
-
-/// Runs `command`; a failure carries what it printed.
-fn run_check(tool: &'static str, command: &mut Command) -> Result<(), UpdateError> {
-    let output = command.output().map_err(|error| UpdateError::Tool {
-        tool,
-        message: error.to_string(),
-    })?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(UpdateError::Signature(
-            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        ))
-    }
 }

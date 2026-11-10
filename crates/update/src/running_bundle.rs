@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::code_signature::{is_release_signed, verify_release_signature};
+use crate::run_system_tool::{ToolRefusal, run_system_tool};
 use crate::{AppVersion, ReleaseManifest, StagedUpdate, UpdateBlocker, UpdateError};
 
 /// The folder macOS runs quarantined apps from when they were not moved
@@ -61,12 +62,13 @@ impl RunningBundle {
             .map_err(|error| UpdateError::file("cannot create", &staging, error))?;
 
         // Unpack with ditto, which keeps the bundle's signature and attributes intact.
-        run_tool(
+        run_system_tool(
             "ditto",
             Command::new("/usr/bin/ditto")
                 .args(["-x", "-k"])
                 .arg(zip)
                 .arg(&staging),
+            ToolRefusal::Failed,
         )?;
         let app = staging.join(ZIPPED_APP_NAME);
 
@@ -151,11 +153,12 @@ pub(crate) fn bundle_of(executable: &Path) -> Option<PathBuf> {
 /// The bundle's `CFBundleShortVersionString`.
 fn bundle_version(app: &Path) -> Result<AppVersion, UpdateError> {
     let info = app.join("Contents/Info.plist");
-    let output = run_tool(
+    let output = run_system_tool(
         "plutil",
         Command::new("/usr/bin/plutil")
             .args(["-extract", "CFBundleShortVersionString", "raw", "-o", "-"])
             .arg(&info),
+        ToolRefusal::Failed,
     )?;
     AppVersion::parse(&output)
 }
@@ -166,22 +169,6 @@ fn remove_directory(directory: &Path) -> Result<(), UpdateError> {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(UpdateError::file("cannot remove", directory, error)),
-    }
-}
-
-/// Runs a system tool and returns what it printed; a failure carries its error output.
-fn run_tool(tool: &'static str, command: &mut Command) -> Result<String, UpdateError> {
-    let output = command.output().map_err(|error| UpdateError::Tool {
-        tool,
-        message: error.to_string(),
-    })?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-    } else {
-        Err(UpdateError::Tool {
-            tool,
-            message: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        })
     }
 }
 

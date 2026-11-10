@@ -8,6 +8,7 @@
 | `update_downloads` | `update_download_directory()`: `~/Library/Caches/de.plucked.quarterdeck/updates` |
 | `code_signature` | `RELEASE_REQUIREMENT` (designated requirement of a Developer ID app of team `97ZZEC8R43`, id `de.plucked.quarterdeck`); `verify_release_signature` (`codesign --verify --deep --strict -R` + `spctl --assess`), `is_release_signed` (both crate-private, used by `running_bundle`) |
 | `running_bundle` / `staged_update` / `update_blocker` | `RunningBundle::locate()` (from `current_exe`, refusing `UpdateBlocker`s: not a bundle, not release-signed, translocated, folder not writable), `stage_release` (`ditto -x -k` into `.<name>.app-update` beside the bundle, signature + version checks) → `StagedUpdate`, `install` (bundle → `previous.app`, staged → bundle, rolled back on failure), `remove_leftovers` |
+| `run_system_tool` | `run_system_tool` (+ `ToolRefusal`): runs a system tool, returns its trimmed stdout; a refusal is `UpdateError::Tool` or, for signature checks, `UpdateError::Signature`, with its stderr |
 | `relaunch_after_exit` | detached `/bin/sh` that waits for this pid to exit, then `open`s the bundle (or runs the bare executable) |
 | `update_error` | `UpdateError` |
 

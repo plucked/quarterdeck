@@ -15,6 +15,7 @@
 //! - `staged_update.rs`: `StagedUpdate`, a verified release unpacked beside the bundle.
 //! - `update_blocker.rs`: `UpdateBlocker`, why the running app cannot update itself.
 //! - `relaunch_after_exit.rs`: starts the app again once this process has exited.
+//! - `run_system_tool.rs`: runs a macOS tool (`ditto`, `plutil`, `codesign`, `spctl`) and reads its output or error.
 //! - `update_error.rs`: `UpdateError`, every way an update can fail.
 
 mod app_version;
@@ -22,6 +23,7 @@ mod code_signature;
 mod download_release;
 mod relaunch_after_exit;
 mod release_manifest;
+mod run_system_tool;
 mod running_bundle;
 mod staged_update;
 mod update_blocker;
