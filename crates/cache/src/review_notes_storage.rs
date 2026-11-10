@@ -23,20 +23,12 @@ impl UiStateStore {
         let columns = ScopeColumns::of(scope)?;
         let mut statement = self.connection().prepare(&format!(
             "SELECT {NOTE_COLUMNS} FROM review_notes
-             WHERE destination = ?1
-               AND pr_id IS ?2 AND repo_owner IS ?3 AND repo_name IS ?4
-               AND first_number IS ?5 AND last_number IS ?6
+             WHERE pr_id IS ?1 AND repo_owner IS ?2 AND repo_name IS ?3
+               AND first_number IS ?4 AND last_number IS ?5 AND destination = ?6
              ORDER BY path, line, created_at, id"
         ))?;
         let rows = statement.query_map(
-            params![
-                destination.as_sql_text(),
-                columns.pr_id,
-                columns.repo_owner,
-                columns.repo_name,
-                columns.first_number,
-                columns.last_number
-            ],
+            columns.as_params_followed_by(params![destination.as_sql_text()]),
             note_from_row,
         )?;
         rows.collect::<rusqlite::Result<Vec<Result<ReviewNote>>>>()?
@@ -56,18 +48,13 @@ impl UiStateStore {
             NoteAnchor::Reply { thread_id } => (None, None, None, Some(thread_id.as_str())),
         };
         self.connection().execute(
-            "INSERT INTO review_notes (id, destination, pr_id, repo_owner, repo_name, first_number,
-                last_number, path, side, line, start_line, reply_to_thread, body, created_at, updated_at)
+            "INSERT INTO review_notes (pr_id, repo_owner, repo_name, first_number, last_number,
+                id, destination, path, side, line, start_line, reply_to_thread, body, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT (id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at",
-            params![
+            columns.as_params_followed_by(params![
                 note.id.as_sql_integer(),
                 note.destination.as_sql_text(),
-                columns.pr_id,
-                columns.repo_owner,
-                columns.repo_name,
-                columns.first_number,
-                columns.last_number,
                 note.path,
                 side,
                 line,
@@ -76,7 +63,7 @@ impl UiStateStore {
                 note.body,
                 note.created_at,
                 note.updated_at
-            ],
+            ]),
         )?;
         Ok(())
     }

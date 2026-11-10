@@ -52,13 +52,7 @@ impl UiStateStore {
         execute_cached(
             &transaction,
             &format!("DELETE FROM briefs WHERE {SCOPE_MATCH}"),
-            params![
-                columns.pr_id,
-                columns.repo_owner,
-                columns.repo_name,
-                columns.first_number,
-                columns.last_number
-            ],
+            columns.as_params(),
         )?;
 
         // The brief's own row: its scope and the record of the run.
@@ -72,12 +66,7 @@ impl UiStateStore {
                 diff_only_reason, prompt, lead, cost_usd, session_id, model, duration_ms, written_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
                 ?18, ?19, ?20)",
-            params![
-                columns.pr_id,
-                columns.repo_owner,
-                columns.repo_name,
-                columns.first_number,
-                columns.last_number,
+            columns.as_params_followed_by(params![
                 record.repository,
                 sql_integer(record.number)?,
                 record.url,
@@ -93,7 +82,7 @@ impl UiStateStore {
                 record.model,
                 i64::try_from(record.duration.as_millis()).unwrap_or(i64::MAX),
                 sql_integer(record.written_at)?,
-            ],
+            ]),
         )?;
         let brief_id = transaction.last_insert_rowid();
 
@@ -158,13 +147,7 @@ impl UiStateStore {
                         written_at
                      FROM briefs WHERE {SCOPE_MATCH}"
                 ),
-                params![
-                    columns.pr_id,
-                    columns.repo_owner,
-                    columns.repo_name,
-                    columns.first_number,
-                    columns.last_number
-                ],
+                columns.as_params(),
                 |row| {
                     Ok(BriefRow {
                         id: row.get(0)?,
