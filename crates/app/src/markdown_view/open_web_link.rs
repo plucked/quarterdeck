@@ -12,7 +12,8 @@ pub fn open_web_link(url: &str, cx: &App) {
 }
 
 /// Whether a link may be opened: absolute web URLs only, in any letter case.
-fn is_openable(url: &str) -> bool {
+/// Also for other URLs from GitHub's data (a check's details link).
+pub fn is_openable(url: &str) -> bool {
     OPENABLE_URL_PREFIXES.iter().any(|prefix| {
         url.get(..prefix.len())
             .is_some_and(|start| start.eq_ignore_ascii_case(prefix))

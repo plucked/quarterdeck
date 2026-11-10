@@ -6,6 +6,7 @@ use qd_syntax::SyntaxSpan;
 use super::code_highlights::code_highlights;
 use super::file_card_rendering::frame_file_row;
 use super::{CodeCells, CodeSegment, DiffRowStyle, DiffSide};
+use crate::count_as_f32::count_as_f32;
 use crate::theme;
 
 /// Height of one unwrapped diff row.
@@ -22,7 +23,7 @@ const MARKER_WIDTH: f32 = 14.;
 /// The width of a line-number gutter for numbers up to `max_line_number`.
 pub fn gutter_width(max_line_number: u32) -> f32 {
     let digits = max_line_number.max(1).ilog10() + 1;
-    f32::from(u16::try_from(digits).unwrap_or(u16::MAX)) * DIGIT_WIDTH + GUTTER_PADDING
+    count_as_f32(digits) * DIGIT_WIDTH + GUTTER_PADDING
 }
 
 /// A right-aligned line number, or an empty gutter.

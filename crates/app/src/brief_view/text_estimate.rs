@@ -1,3 +1,5 @@
+use crate::count_as_f32::count_as_f32;
+
 /// A font size's average character width and the line height the diagram
 /// draws it at. Diagrams are laid out before anything is drawn, so text is
 /// measured by estimate; the widths are on the generous side, so text fits
@@ -66,11 +68,6 @@ impl TextMetrics {
     pub fn height_of(self, text: &str, max_width: f32) -> f32 {
         self.line_height * count_as_f32(self.line_count(text, max_width))
     }
-}
-
-/// A count as a float; counts here are small (characters of a label).
-pub(super) fn count_as_f32(count: usize) -> f32 {
-    u16::try_from(count).map_or(f32::from(u16::MAX), f32::from)
 }
 
 #[cfg(test)]

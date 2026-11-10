@@ -14,7 +14,7 @@
 //! - `selected_text.rs`: the text of a selection, as copied.
 //! - `highlight_span.rs`: `HighlightSpan`, cuts styled runs at the selection's edges.
 //! - `inline_highlight.rs`: the gpui highlight for a style and selection state.
-//! - `open_web_link.rs`: opens a clicked link when it is a web URL.
+//! - `open_web_link.rs`: opens a clicked link when it is a web URL; `is_openable` says which are.
 
 mod block_rendering;
 mod document_index_at;
@@ -29,3 +29,4 @@ mod text_segment;
 mod text_selection;
 
 pub use markdown_view::MarkdownView;
+pub use open_web_link::is_openable;

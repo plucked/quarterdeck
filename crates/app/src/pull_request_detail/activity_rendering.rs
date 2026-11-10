@@ -6,6 +6,7 @@ use gpui::{
 };
 
 use super::pull_request_detail::PullRequestDetail;
+use crate::count_as_f32::count_as_f32;
 use crate::pulsing_status::dot_pulse;
 use crate::theme;
 
@@ -179,7 +180,5 @@ fn render_bar(id: &'static str, fraction: Option<f32>, height: f32) -> AnyElemen
 
 /// `done / total` as a fraction for a small count of batches.
 fn share(done: usize, total: usize) -> f32 {
-    let done = u16::try_from(done).unwrap_or(u16::MAX);
-    let total = u16::try_from(total).unwrap_or(u16::MAX).max(1);
-    f32::from(done) / f32::from(total)
+    count_as_f32(done) / count_as_f32(total).max(1.)
 }

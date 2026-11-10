@@ -21,6 +21,7 @@ use super::prepared_widget::PreparedWidget;
 use super::scope_rendering::render_scope;
 use super::tour_rendering::render_tour;
 use crate::button::Button;
+use crate::counted::counted;
 use crate::diff_view::DIFF_ROW_HEIGHT;
 use crate::markdown_view::MarkdownView;
 use crate::section_label::SectionLabel;
@@ -356,10 +357,10 @@ fn progress_text(progress: Option<AgentProgress>) -> String {
         Some(AgentProgress::UnpackingCode) => "Unpacking the code…".to_owned(),
         Some(AgentProgress::Started) => "Claude is reading the change…".to_owned(),
         Some(AgentProgress::Thinking) => "Claude is working through the change…".to_owned(),
-        Some(AgentProgress::Exploring { tool_calls }) => {
-            let noun = if tool_calls == 1 { "look" } else { "looks" };
-            format!("Claude is reading the code… {tool_calls} {noun} so far")
-        }
+        Some(AgentProgress::Exploring { tool_calls }) => format!(
+            "Claude is reading the code… {} so far",
+            counted(tool_calls, "look", "looks")
+        ),
         Some(AgentProgress::Writing { characters }) => {
             let thousands =
                 f64::from(u32::try_from(characters).unwrap_or(u32::MAX)) / CHARACTERS_PER_THOUSAND;
@@ -481,7 +482,6 @@ fn render_code_line(line: &ExcerptLine) -> AnyElement {
 
 /// The row standing for `hidden` lines between two hunks.
 fn render_gap_row(hidden: u32) -> AnyElement {
-    let noun = if hidden == 1 { "line" } else { "lines" };
     code_row()
         .bg(theme::hunk_background())
         .text_color(theme::subtle())
@@ -493,7 +493,10 @@ fn render_gap_row(hidden: u32) -> AnyElement {
                 .text_right()
                 .child("⋯"),
         )
-        .child(format!("{hidden} {noun} not in the diff"))
+        .child(format!(
+            "{} not in the diff",
+            counted(hidden, "line", "lines")
+        ))
         .into_any_element()
 }
 
@@ -598,9 +601,8 @@ pub fn render_rejected(rejected: &[RejectedWidget]) -> AnyElement {
         .text_xs()
         .text_color(theme::subtle())
         .child(format!(
-            "Left out: {} part{} of the brief pointed at lines outside the diff or was malformed.",
-            rejected.len(),
-            if rejected.len() == 1 { "" } else { "s" }
+            "Left out: {} of the brief pointed at lines outside the diff or was malformed.",
+            counted(rejected.len(), "part", "parts")
         ))
         .children(
             rejected

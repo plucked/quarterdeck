@@ -5,10 +5,10 @@ use std::time::Duration;
 use gpui::{App, AppContext as _, Context, Entity, Global, Subscription, Task};
 use qd_markdown::MarkdownDocument;
 use qd_update::{
-    AppVersion, ReleaseManifest, RunningBundle, UpdateFeed, relaunch_after_exit,
-    update_download_directory,
+    AppVersion, ReleaseManifest, RunningBundle, UpdateFeed, update_download_directory,
 };
 
+use super::restart_app::restart_app;
 use super::update_decision::{UpdateDecision, decide_update};
 use super::update_status::{ReadyUpdate, UpdateStatus};
 
@@ -97,19 +97,21 @@ impl AppUpdater {
                 .spawn(async move { bundle.install(&ready.staged) })
                 .await;
 
-            // Installed: start the new version once this process is gone.
-            let relaunched = installed
-                .map_err(|error| error.to_string())
-                .and_then(|()| relaunch_after_exit().map_err(|error| error.to_string()));
-            match relaunched {
-                Ok(()) => cx.update(|cx| cx.quit()).ok(),
-                Err(reason) => updater
+            // Installed: quit, and start the new version once this process
+            // is gone (an app already gone has nothing left to restart).
+            let restarted = installed.map_err(|error| error.to_string()).and_then(|()| {
+                cx.update(restart_app).map_or(Ok(()), |restarted| {
+                    restarted.map_err(|error| error.to_string())
+                })
+            });
+            if let Err(reason) = restarted {
+                updater
                     .update(cx, |updater, cx| {
                         updater.status = UpdateStatus::Failed(reason.into());
                         cx.notify();
                     })
-                    .ok(),
-            };
+                    .ok();
+            }
         }));
     }
 

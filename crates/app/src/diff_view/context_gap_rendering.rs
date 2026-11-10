@@ -6,6 +6,7 @@ use qd_diff::{ContextGap, GapPlace};
 use super::diff_cell_rendering::render_row;
 use super::file_card_rendering::frame_file_row;
 use super::{CONTEXT_STEP, FileTextLoad, GapPart};
+use crate::counted::counted;
 use crate::theme;
 
 /// The most buttons a gap bar shows; ids of a row's buttons are spaced by it.
@@ -93,7 +94,7 @@ fn gap_buttons(gap: &ContextGap) -> Vec<GapButton> {
         (_, Some(count)) if count <= step => {
             vec![button(
                 GapPart::All,
-                format!("Show {count} hidden {}", lines_word(count)),
+                format!("Show {}", counted(count, "hidden line", "hidden lines")),
             )]
         }
         (GapPlace::AboveHunk(0), Some(count)) => vec![
@@ -115,11 +116,6 @@ fn gap_buttons(gap: &ContextGap) -> Vec<GapButton> {
             button(GapPart::All, "Show the rest of the file".to_owned()),
         ],
     }
-}
-
-/// "line" or "lines" for `count`.
-fn lines_word(count: u32) -> &'static str {
-    if count == 1 { "line" } else { "lines" }
 }
 
 #[cfg(test)]

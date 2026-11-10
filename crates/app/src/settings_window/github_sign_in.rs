@@ -1,11 +1,11 @@
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use qd_github::{GitHubClient, GitHubError, TokenSource, delete_stored_token, store_token};
-use qd_update::relaunch_after_exit;
 
 use super::setting_row::SettingRow;
 use super::settings_window::SettingsWindow;
 use super::sign_in_status::SignInStatus;
 use crate::app_services::AppServices;
+use crate::app_update::restart_app;
 use crate::button::Button;
 use crate::theme;
 
@@ -115,7 +115,7 @@ impl SettingsWindow {
                     };
                     cx.notify();
                     if matches!(settings.sign_in_status, SignInStatus::SignedIn(_)) {
-                        restart_app(cx);
+                        restart_for_token(cx);
                     }
                 })
                 .ok();
@@ -132,7 +132,7 @@ impl SettingsWindow {
                 .await;
             settings
                 .update(cx, |settings, cx| match deleted {
-                    Ok(()) => restart_app(cx),
+                    Ok(()) => restart_for_token(cx),
                     Err(error) => {
                         settings.sign_in_status = SignInStatus::Failed(error.to_string().into());
                         cx.notify();
@@ -155,9 +155,8 @@ fn describe_sign_in_error(error: &GitHubError) -> String {
 }
 
 /// Quits and starts the app again, so it picks up the new token.
-fn restart_app(cx: &mut gpui::App) {
-    match relaunch_after_exit() {
-        Ok(()) => cx.quit(),
-        Err(error) => eprintln!("cannot restart Quarterdeck: {error}"),
+fn restart_for_token(cx: &mut gpui::App) {
+    if let Err(error) = restart_app(cx) {
+        eprintln!("cannot restart Quarterdeck: {error}");
     }
 }

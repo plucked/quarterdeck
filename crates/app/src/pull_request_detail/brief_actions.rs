@@ -11,6 +11,7 @@ use qd_studio::{
     CodeAccess, CodeAnchor, CodeSide, FileListing, ReaderFamiliarity, RequestLayer, StudioRequest,
     StudioRequestFile, find_claude,
 };
+use qd_update::AppVersion;
 
 use super::brief_job::BriefJob;
 use super::brief_pane::ShownBrief;
@@ -373,11 +374,11 @@ impl ReportHost for PullRequestDetail {
 /// This build's version for a report: the package version, marked as a
 /// development build when it is one.
 fn app_version() -> String {
-    let version = env!("CARGO_PKG_VERSION");
+    let version = AppVersion::current();
     if cfg!(debug_assertions) {
         format!("{version} (development build)")
     } else {
-        version.to_owned()
+        version.to_string()
     }
 }
 

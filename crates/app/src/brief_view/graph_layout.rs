@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use qd_studio::{GraphEdge, GraphNode, StudioGraph};
 
 use super::diagram_geometry::{CubicCurve, DiagramPoint, DiagramRect};
-use super::text_estimate::{LABEL_TEXT, SMALL_TEXT, count_as_f32};
+use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
+use crate::count_as_f32::count_as_f32;
 
 /// Width of every box.
 pub const NODE_WIDTH: f32 = 168.;

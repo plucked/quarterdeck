@@ -1,5 +1,3 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::{AppContext as _, ClipboardItem, Context, Window};
@@ -18,6 +16,7 @@ use super::review_status::ReviewStatus;
 use super::review_target::ReviewTarget;
 use super::side_panel_tab::SidePanelTab;
 use crate::avatar_images::AvatarImages;
+use crate::display_date::unix_now;
 use crate::short_sha::short_sha;
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::ui_state::{ReviewChange, UiStateRecorder};
@@ -396,7 +395,7 @@ impl PullRequestDetail {
             cx.notify();
             return;
         }
-        let now = unix_seconds();
+        let now = unix_now();
         match editor.target {
             EditorTarget::NewComment {
                 path,
@@ -460,7 +459,7 @@ impl PullRequestDetail {
         let Some(scope) = self.review_scope().cloned() else {
             return;
         };
-        let now = unix_seconds();
+        let now = unix_now();
         let note = ReviewNote {
             id: NoteId::generate(),
             destination,
@@ -846,13 +845,4 @@ impl PullRequestDetail {
             self.scroll_to_row(row.saturating_sub(2));
         }
     }
-}
-
-/// The current time as stored on notes.
-fn unix_seconds() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |since| {
-            i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
-        })
 }

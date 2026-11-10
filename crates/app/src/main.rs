@@ -26,7 +26,9 @@
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
 //! - `button.rs`: `Button`, a small text button.
-//! - `display_date.rs`: `short_date`, a GitHub timestamp as `21 Oct 2026`.
+//! - `display_date.rs`: `short_date`, a GitHub timestamp as `21 Oct 2026`; ages and durations.
+//! - `counted.rs`: `counted`, a count with its noun in the singular or plural.
+//! - `count_as_f32.rs`: `count_as_f32`, a small count as a float for layout arithmetic.
 //! - `display_size.rs`: `byte_size`, a byte count as `151.7 MB`.
 //! - `short_sha.rs`: `short_sha`, a commit SHA's first seven characters.
 //! - `facet_chips/`: filter chips (pick with a click, hide with ⌥-click), shared by the file tree and the Others tab.
@@ -57,6 +59,8 @@ mod bundled_icons;
 mod button;
 mod checkbox;
 mod checks_panel;
+mod count_as_f32;
+mod counted;
 mod diff_view;
 mod display_date;
 mod display_size;

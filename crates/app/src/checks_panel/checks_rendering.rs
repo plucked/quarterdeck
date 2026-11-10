@@ -10,8 +10,11 @@ use super::check_tally::CheckTally;
 use super::check_tree::{CheckTree, TreeEntry};
 use super::checks_panel::{CheckContent, CheckOrigin, ChecksPanel, ShownChecks};
 use crate::button::Button;
-use crate::display_date::{time_ago, unix_now, unix_seconds};
+use crate::count_as_f32::count_as_f32;
+use crate::counted::counted;
+use crate::display_date::{short_duration, time_ago, unix_now, unix_seconds};
 use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
+use crate::markdown_view::is_openable;
 use crate::pulsing_status::PulsingStatus;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::section_label::SectionLabel;
@@ -35,9 +38,6 @@ const HEADING_TEXT_SIZE: f32 = 10.;
 /// Height of a section heading's line, so headings with and without the
 /// skipped switch take the same room.
 const HEADING_ROW_HEIGHT: f32 = 22.;
-/// Seconds in a minute and an hour, for durations.
-const MINUTE: i64 = 60;
-const HOUR: i64 = 60 * MINUTE;
 
 impl Render for ChecksPanel {
     /// The verdict over the checks, then the checks: what failed and what
@@ -567,11 +567,7 @@ fn with_details_link(
     check: &StatusCheck,
     cx: &mut Context<ChecksPanel>,
 ) -> Stateful<Div> {
-    let Some(url) = check
-        .details_url
-        .clone()
-        .filter(|url| url.starts_with("https://") || url.starts_with("http://"))
-    else {
+    let Some(url) = check.details_url.clone().filter(|url| is_openable(url)) else {
         return row.cursor_default();
     };
     row.cursor_pointer()
@@ -752,27 +748,9 @@ fn timing(check: &StatusCheck, now: i64) -> String {
     match (check.outcome, started, completed) {
         (CheckOutcome::Queued, _, _) => "queued".to_owned(),
         (CheckOutcome::Skipped, _, _) => String::new(),
-        (CheckOutcome::Running, Some(started), _) => duration(now - started),
-        (_, Some(started), Some(completed)) => duration(completed - started),
+        (CheckOutcome::Running, Some(started), _) => short_duration(now - started),
+        (_, Some(started), Some(completed)) => short_duration(completed - started),
         _ => String::new(),
-    }
-}
-
-/// `45s`, `3m 12s`, `1h 4m`.
-fn duration(seconds: i64) -> String {
-    let seconds = seconds.max(0);
-    match seconds {
-        0..MINUTE => format!("{seconds}s"),
-        MINUTE..HOUR => format!("{}m {}s", seconds / MINUTE, seconds % MINUTE),
-        _ => format!("{}h {}m", seconds / HOUR, seconds % HOUR / MINUTE),
-    }
-}
-
-/// `1 check failed` or `3 checks failed`.
-fn counted(count: usize, one: &str, many: &str) -> String {
-    match count {
-        1 => format!("1 {one}"),
-        _ => format!("{count} {many}"),
     }
 }
 
@@ -805,10 +783,9 @@ fn bar_color(outcome: CheckOutcome) -> Rgba {
 
 /// `part` of `whole` as a fraction (0 for nothing of nothing).
 fn share(part: usize, whole: usize) -> f32 {
-    let as_float = |count: usize| f32::from(u16::try_from(count).unwrap_or(u16::MAX));
     match whole {
         0 => 0.,
-        _ => as_float(part) / as_float(whole),
+        _ => count_as_f32(part) / count_as_f32(whole),
     }
 }
 
@@ -857,13 +834,5 @@ mod tests {
         );
         let summary = Summary::of_tree(&tree).with_conflict(Some(&conflict));
         assert_eq!(summary.verdict, "No checks: merge conflict");
-    }
-
-    /// Durations read in the largest two units.
-    #[test]
-    fn durations_read_shortly() {
-        assert_eq!(duration(45), "45s");
-        assert_eq!(duration(192), "3m 12s");
-        assert_eq!(duration(3840), "1h 4m");
     }
 }

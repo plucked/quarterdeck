@@ -1,7 +1,7 @@
 //! `short_date` and `relative_age` (with `unix_now`): GitHub's ISO 8601
 //! timestamps as people read them; `unix_seconds` reads one as a time;
 //! `age_since` an age between two Unix times, `time_ago` the same as a
-//! phrase.
+//! phrase; `short_duration` a span of seconds.
 
 /// Month names, January first.
 const MONTHS: [&str; 12] = [
@@ -49,6 +49,17 @@ pub fn time_ago(then: i64, now: i64) -> String {
     match age_since(then, now).as_str() {
         "now" => "just now".to_owned(),
         age => format!("{age} ago"),
+    }
+}
+
+/// A span of `seconds` in its largest two units: `45s`, `3m 12s`, `1h 4m`
+/// (how long a check ran); negative spans read as `0s`.
+pub fn short_duration(seconds: i64) -> String {
+    let seconds = seconds.max(0);
+    match seconds {
+        0..MINUTE => format!("{seconds}s"),
+        MINUTE..HOUR => format!("{}m {}s", seconds / MINUTE, seconds % MINUTE),
+        _ => format!("{}h {}m", seconds / HOUR, seconds % HOUR / MINUTE),
     }
 }
 
@@ -131,6 +142,14 @@ mod tests {
         assert_eq!(relative_age(then, at + 2 * DAY), "2d");
         assert_eq!(relative_age(then, at + 3 * WEEK), "3w");
         assert_eq!(relative_age(then, at + 9 * WEEK), "5 Nov 2026");
+    }
+
+    /// Durations read in the largest two units.
+    #[test]
+    fn durations_read_shortly() {
+        assert_eq!(short_duration(45), "45s");
+        assert_eq!(short_duration(192), "3m 12s");
+        assert_eq!(short_duration(3840), "1h 4m");
     }
 
     /// Under a minute reads `just now`, never `now ago`; older ages end in `ago`.

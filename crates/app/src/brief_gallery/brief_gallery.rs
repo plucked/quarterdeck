@@ -5,6 +5,7 @@ use gpui::{Context, FocusHandle, ListAlignment, ListOffset, ListState, Subscript
 use super::gallery_row::GalleryRow;
 use super::sample_brief::SampleBrief;
 use qd_studio::ReaderFamiliarity;
+use qd_update::AppVersion;
 
 use crate::app_settings::AppSettings;
 use crate::brief_view::{
@@ -115,7 +116,7 @@ impl BriefGallery {
         if let Ok(sample) = &self.sample {
             let record = sample.brief.record.clone();
             let shown_page = sample.brief.shown_page(self.page);
-            let version = format!("{} (gallery sample)", env!("CARGO_PKG_VERSION"));
+            let version = format!("{} (gallery sample)", AppVersion::current());
             self.save_report(record, shown_page, version, cx);
         }
     }

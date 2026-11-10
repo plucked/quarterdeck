@@ -1,7 +1,8 @@
 use qd_studio::StudioSequence;
 
 use super::diagram_geometry::DiagramRect;
-use super::text_estimate::{LABEL_TEXT, SMALL_TEXT, count_as_f32};
+use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
+use crate::count_as_f32::count_as_f32;
 
 /// The least distance between two lanes' lifelines.
 const MIN_LANE_SPACING: f32 = 150.;
