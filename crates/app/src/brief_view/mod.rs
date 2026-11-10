@@ -18,7 +18,7 @@
 //! - `brief_excerpt.rs`: `ExcerptLine` and `brief_excerpt`, the lines an anchor quotes, cut from its diff.
 //! - `brief_handlers.rs`: `BriefHandlers`, what the brief's links and buttons do.
 //! - `brief_widget_context.rs`: `BriefWidgetContext`, what drawing widgets needs from the view.
-//! - `diagram_geometry.rs`: `DiagramPoint`, `DiagramRect`, `CubicCurve`: where diagram parts go.
+//! - `diagram_geometry.rs`: `DiagramPoint`, `DiagramRect`, `CubicCurve`: where diagram parts go; the default width and margin of every diagram.
 //! - `text_estimate.rs`: `TextMetrics`, text sizes estimated for laying diagrams out before drawing.
 //! - `graph_layout.rs`: `GraphLayout` and `lay_out_graph`: columns along the arrows, a band per boundary, routed arrows, labels kept apart.
 //! - `sequence_layout.rs`: `SequenceLayout` and `lay_out_sequence`: lanes, and messages top to bottom.
@@ -69,7 +69,7 @@ pub use brief_report::{BriefReport, ReportHost};
 pub use brief_state::BriefState;
 pub use brief_widget_context::BriefWidgetContext;
 pub use column_width_probe::render_column_width_probe;
-pub use graph_layout::DEFAULT_DIAGRAM_WIDTH;
+pub use diagram_geometry::DEFAULT_DIAGRAM_WIDTH;
 pub use page_rendering::render_page_tabs;
 pub use prepared_brief::PreparedBrief;
 pub use prepared_widget::PreparedWidget;

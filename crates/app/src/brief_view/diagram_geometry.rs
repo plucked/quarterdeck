@@ -1,3 +1,9 @@
+/// The width diagrams are laid out for until the brief's column has been
+/// measured (the first frame); then they are laid out for the column.
+pub const DEFAULT_DIAGRAM_WIDTH: f32 = 832.;
+/// Space around a whole diagram, graph or sequence.
+pub const DIAGRAM_MARGIN: f32 = 6.;
+
 /// A point of a diagram, in pixels from its top left corner.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DiagramPoint {

@@ -3,7 +3,8 @@ use std::sync::Arc;
 use qd_markdown::MarkdownDocument;
 use qd_studio::{BriefRecord, ShownPage, Studio, StudioWidget};
 
-use super::graph_layout::{DEFAULT_DIAGRAM_WIDTH, lay_out_graph};
+use super::diagram_geometry::DEFAULT_DIAGRAM_WIDTH;
+use super::graph_layout::lay_out_graph;
 use super::prepared_page::PreparedPage;
 use super::prepared_step::PreparedStep;
 use super::prepared_widget::PreparedWidget;

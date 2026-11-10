@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use qd_studio::{GraphEdge, GraphNode, StudioGraph};
 
-use super::diagram_geometry::{CubicCurve, DiagramPoint, DiagramRect};
+use super::diagram_geometry::{CubicCurve, DIAGRAM_MARGIN, DiagramPoint, DiagramRect};
 use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
 use crate::count_as_f32::count_as_f32;
 
@@ -19,11 +19,6 @@ const GROUP_PADDING: f32 = 12.;
 pub const GROUP_LABEL_HEIGHT: f32 = 22.;
 /// Space between two bands (boundaries).
 const BAND_GAP: f32 = 28.;
-/// Space around the whole diagram.
-const MARGIN: f32 = 6.;
-/// The width diagrams are laid out for until the brief's column has been
-/// measured (the first frame); then they are laid out for the column.
-pub const DEFAULT_DIAGRAM_WIDTH: f32 = 832.;
 /// The widest an arrow's label gets before it wraps.
 const EDGE_LABEL_MAX_WIDTH: f32 = 112.;
 /// Space between an arrow label's text and its background's edge.
@@ -283,10 +278,10 @@ fn lay_out_graph_in(graph: &StudioGraph, direction: GraphDirection) -> GraphLayo
             },
         );
     let (min_x, min_y, max_x, max_y) = extent;
-    let (shift_x, shift_y) = (MARGIN - min_x, MARGIN - min_y);
+    let (shift_x, shift_y) = (DIAGRAM_MARGIN - min_x, DIAGRAM_MARGIN - min_y);
     GraphLayout {
-        width: max_x - min_x + 2. * MARGIN,
-        height: max_y - min_y + 2. * MARGIN,
+        width: max_x - min_x + 2. * DIAGRAM_MARGIN,
+        height: max_y - min_y + 2. * DIAGRAM_MARGIN,
         nodes: nodes
             .iter()
             .map(|rect| rect.moved(shift_x, shift_y))
@@ -810,6 +805,7 @@ fn separate_labels(edges: &mut [EdgeRoute]) {
 mod tests {
     use qd_studio::{DiagramChange, EdgeStyle, NodeRole};
 
+    use super::super::diagram_geometry::DEFAULT_DIAGRAM_WIDTH;
     use super::*;
 
     fn graph(node_groups: &[Option<usize>], edges: &[(usize, usize)]) -> StudioGraph {

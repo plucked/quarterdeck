@@ -1,6 +1,6 @@
 use qd_studio::StudioSequence;
 
-use super::diagram_geometry::DiagramRect;
+use super::diagram_geometry::{DIAGRAM_MARGIN, DiagramRect};
 use super::text_estimate::{LABEL_TEXT, SMALL_TEXT};
 use crate::count_as_f32::count_as_f32;
 
@@ -26,8 +26,6 @@ pub const SELF_LOOP_WIDTH: f32 = 34.;
 pub const SELF_LOOP_HEIGHT: f32 = 16.;
 /// Space below the last message before the lifelines end.
 const LIFELINE_TAIL: f32 = 14.;
-/// Space around the whole diagram.
-const MARGIN: f32 = 6.;
 
 /// Where every part of a sequence goes: lane headers and lifelines, and
 /// each message's arrow, label and note. Computed when the brief is prepared.
@@ -64,7 +62,8 @@ pub struct MessagePlace {
 pub fn lay_out_sequence(sequence: &StudioSequence, width: f32) -> SequenceLayout {
     // Lane spacing from the labels (a label spanning several lanes shares
     // their space), at most what fits the column; longer labels wrap.
-    let fitting_spacing = (width - 2. * MARGIN + HEADER_GAP) / count_as_f32(sequence.lanes.len());
+    let fitting_spacing =
+        (width - 2. * DIAGRAM_MARGIN + HEADER_GAP) / count_as_f32(sequence.lanes.len());
     let spacing = sequence
         .messages
         .iter()
@@ -85,11 +84,11 @@ pub fn lay_out_sequence(sequence: &StudioSequence, width: f32) -> SequenceLayout
         .map(|lane| LABEL_TEXT.height_of(&lane.label, header_text_width))
         .fold(0., f32::max)
         + 2. * HEADER_PADDING;
-    let lane_x = |lane: usize| MARGIN + header_width / 2. + count_as_f32(lane) * spacing;
+    let lane_x = |lane: usize| DIAGRAM_MARGIN + header_width / 2. + count_as_f32(lane) * spacing;
     let headers: Vec<DiagramRect> = (0..sequence.lanes.len())
         .map(|lane| DiagramRect {
             x: lane_x(lane) - header_width / 2.,
-            y: MARGIN,
+            y: DIAGRAM_MARGIN,
             width: header_width,
             height: header_height,
         })
@@ -97,7 +96,7 @@ pub fn lay_out_sequence(sequence: &StudioSequence, width: f32) -> SequenceLayout
 
     // Messages top to bottom, each label centred over its arrow (beside
     // the lifeline for a self message).
-    let mut y = MARGIN + header_height + FIRST_MESSAGE_GAP;
+    let mut y = DIAGRAM_MARGIN + header_height + FIRST_MESSAGE_GAP;
     let mut right = headers.last().map_or(0., DiagramRect::right);
     let messages = sequence
         .messages
@@ -150,8 +149,8 @@ pub fn lay_out_sequence(sequence: &StudioSequence, width: f32) -> SequenceLayout
 
     let lifeline_bottom = y - MESSAGE_GAP + LIFELINE_TAIL;
     SequenceLayout {
-        width: right + MARGIN,
-        height: lifeline_bottom + MARGIN,
+        width: right + DIAGRAM_MARGIN,
+        height: lifeline_bottom + DIAGRAM_MARGIN,
         headers,
         lifeline_bottom,
         messages,
@@ -162,7 +161,7 @@ pub fn lay_out_sequence(sequence: &StudioSequence, width: f32) -> SequenceLayout
 mod tests {
     use qd_studio::{MessageStyle, NodeRole, SequenceLane, SequenceMessage};
 
-    use super::super::graph_layout::DEFAULT_DIAGRAM_WIDTH;
+    use super::super::diagram_geometry::DEFAULT_DIAGRAM_WIDTH;
     use super::*;
 
     /// Messages go down in order, and each arrow sits below its own label.
