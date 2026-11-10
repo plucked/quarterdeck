@@ -90,6 +90,15 @@ impl FromIterator<CheckOutcome> for CheckTally {
 mod tests {
     use super::*;
 
+    /// Every outcome sits at the index of its attention rank, so counts and
+    /// the attention order agree.
+    #[test]
+    fn outcomes_follow_the_attention_rank() {
+        for (index, outcome) in OUTCOMES.into_iter().enumerate() {
+            assert_eq!(usize::from(outcome.attention_rank()), index, "{outcome:?}");
+        }
+    }
+
     /// One failure outweighs any number of passes.
     #[test]
     fn a_failure_decides_the_outcome() {
