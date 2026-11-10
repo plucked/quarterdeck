@@ -6,7 +6,13 @@
 //! detail scroll as UI state to restore them after a relaunch.
 //!
 //! Files:
-//! - `review_queue.rs`: `ReviewQueue`, the queue, selection, refresh and restore, and `Render`.
+//! - `review_queue.rs`: `ReviewQueue`, its state, the tabs and rows, and `Render`.
+//! - `queue_refresh.rs`: the refresh: fetching, showing the lists, scheduling the next one.
+//! - `fetch_queue_lists.rs`: the blocking reads behind a refresh: the cached lists, the viewer's own, others', their details.
+//! - `queue_selection.rs`: selecting a pull request, restoring the saved selection, recording the view state.
+//! - `queue_stacks.rs`: the listed stacks' layers (cached, checked with GitHub), opening a stack's combined review.
+//! - `layer_opening.rs`: opening a stack layer the detail asks for, fetched when it is in no list.
+//! - `queue_actions.rs`: the queue's action handlers (tabs, files, layers, panels).
 //! - `sidebar_rendering.rs`: renders the queue list, its tabs, its status line and repository headers.
 //! - `pull_request_row_rendering.rs`: renders a standalone pull request's sidebar row.
 //! - `stack_row_rendering.rs`: renders a stack's header and its layer rows in the sidebar.
@@ -38,7 +44,9 @@
 mod activation_refresh;
 mod chip_marks;
 mod collapsed_groups;
+mod fetch_queue_lists;
 mod hidden_branches;
+mod layer_opening;
 mod open_filter_chips;
 mod others_facet;
 mod others_filter_rendering;
@@ -48,8 +56,12 @@ mod others_repository;
 mod others_tab;
 mod others_tab_actions;
 mod pull_request_row_rendering;
+mod queue_actions;
 mod queue_lists;
+mod queue_refresh;
 mod queue_row;
+mod queue_selection;
+mod queue_stacks;
 mod refresh_schedule;
 mod refresh_status;
 mod repo_group;
