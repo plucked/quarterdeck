@@ -35,6 +35,14 @@ const ROW_AVATAR_SIZE: f32 = 14.;
 const VERDICT_BADGE_ID: &str = "review-verdict";
 /// Height of the rail mark beside a layer's position.
 const LAYER_RAIL_HEIGHT: f32 = 16.;
+/// Space above the state ring, so it sits level with the title's first line.
+const STATE_RING_TOP: f32 = 4.;
+/// Text size of the Draft pill.
+const DRAFT_PILL_TEXT_SIZE: f32 = 10.;
+/// Edge length of each of the stack glyph's two squares (they overlap).
+const STACK_GLYPH_SQUARE_SIZE: f32 = STACK_GLYPH_SIZE - 5.;
+/// Corner radius of the stack glyph's squares.
+const STACK_GLYPH_CORNER_RADIUS: f32 = 3.;
 
 impl ReviewQueue {
     /// The left column: the tabs, refresh button and state, then the rows.
@@ -367,7 +375,7 @@ fn render_pull_request_row(
         .gap_2p5()
         .on_click(cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)))
         .child(
-            div().flex_none().pt(px(4.)).child(
+            div().flex_none().pt(px(STATE_RING_TOP)).child(
                 div()
                     .size(px(STATE_RING_SIZE))
                     .rounded_full()
@@ -465,7 +473,7 @@ fn render_draft_pill() -> impl IntoElement {
         .rounded_full()
         .border_1()
         .border_color(theme::border_strong())
-        .text_size(px(10.))
+        .text_size(px(DRAFT_PILL_TEXT_SIZE))
         .text_color(theme::muted())
         .child("Draft")
 }
@@ -629,8 +637,8 @@ fn render_stack_glyph() -> impl IntoElement {
                 .absolute()
                 .top_0()
                 .left_0()
-                .size(px(STACK_GLYPH_SIZE - 5.))
-                .rounded(px(3.))
+                .size(px(STACK_GLYPH_SQUARE_SIZE))
+                .rounded(px(STACK_GLYPH_CORNER_RADIUS))
                 .border_1()
                 .border_color(theme::accent()),
         )
@@ -639,8 +647,8 @@ fn render_stack_glyph() -> impl IntoElement {
                 .absolute()
                 .bottom_0()
                 .right_0()
-                .size(px(STACK_GLYPH_SIZE - 5.))
-                .rounded(px(3.))
+                .size(px(STACK_GLYPH_SQUARE_SIZE))
+                .rounded(px(STACK_GLYPH_CORNER_RADIUS))
                 .bg(theme::accent()),
         )
 }

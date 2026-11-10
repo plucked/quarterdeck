@@ -35,8 +35,8 @@ pub fn colors_of(theme: ColorTheme) -> &'static ThemeColors {
 }
 
 /// Every theme's colors, worked out on first use.
-fn all_colors() -> &'static [ThemeColors; 8] {
-    static ALL_COLORS: OnceLock<[ThemeColors; 8]> = OnceLock::new();
+fn all_colors() -> &'static [ThemeColors; ColorTheme::ALL.len()] {
+    static ALL_COLORS: OnceLock<[ThemeColors; ColorTheme::ALL.len()]> = OnceLock::new();
     ALL_COLORS
         .get_or_init(|| ColorTheme::ALL.map(|theme| ThemeColors::from_palette(palette_of(theme))))
 }

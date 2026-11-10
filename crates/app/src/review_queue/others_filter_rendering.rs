@@ -19,6 +19,8 @@ const FILTER_BUTTON_SIZE: f32 = 24.;
 /// The filter glyph: three bars, each shorter, centered.
 const FILTER_GLYPH_BAR_WIDTHS: [f32; 3] = [12., 8., 4.];
 const FILTER_GLYPH_BAR_HEIGHT: f32 = 1.5;
+/// Space between the filter glyph's bars.
+const FILTER_GLYPH_BAR_GAP: f32 = 2.;
 
 impl ReviewQueue {
     /// A repository's filter, open under its header in the Others tab: two
@@ -373,7 +375,7 @@ pub(super) fn render_filter_button(
         .flex_col()
         .items_center()
         .justify_center()
-        .gap(px(2.))
+        .gap(px(FILTER_GLYPH_BAR_GAP))
         .rounded_md()
         .cursor_pointer()
         .when(is_open, |button| button.bg(theme::selected()))

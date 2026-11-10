@@ -7,6 +7,10 @@ use crate::theme;
 
 /// Edge length of the box.
 const BOX_SIZE: f32 = 14.;
+/// Corner radius of the box.
+const BOX_CORNER_RADIUS: f32 = 3.;
+/// Text size of the tick or dash in the box.
+const MARK_TEXT_SIZE: f32 = 10.;
 
 /// Whether a checkbox is ticked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,9 +57,9 @@ impl RenderOnce for Checkbox {
             .flex()
             .items_center()
             .justify_center()
-            .rounded(px(3.))
+            .rounded(px(BOX_CORNER_RADIUS))
             .border_1()
-            .text_size(px(10.))
+            .text_size(px(MARK_TEXT_SIZE))
             .line_height(px(BOX_SIZE))
             .when(mark.is_some(), |checkbox| {
                 checkbox

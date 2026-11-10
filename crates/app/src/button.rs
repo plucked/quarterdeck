@@ -8,6 +8,11 @@ use gpui::{
 
 use crate::theme;
 
+/// Opacity of a primary button under the pointer (it has no hover color).
+const PRIMARY_HOVER_OPACITY: f32 = 0.88;
+/// Opacity of a disabled button (or one that does nothing).
+const DISABLED_OPACITY: f32 = 0.4;
+
 /// What a button does when clicked.
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -135,13 +140,13 @@ impl RenderOnce for Button {
                 .hover(move |style| match kind {
                     ButtonKind::Ghost => style.bg(theme::hover()).text_color(theme::text()),
                     ButtonKind::Plain | ButtonKind::Danger => style.bg(theme::hover()),
-                    ButtonKind::Primary => style.opacity(0.88),
+                    ButtonKind::Primary => style.opacity(PRIMARY_HOVER_OPACITY),
                 })
                 .on_click(move |event, window, cx| {
                     cx.stop_propagation();
                     handler(event, window, cx);
                 }),
-            (true, _) | (false, None) => button.opacity(0.4),
+            (true, _) | (false, None) => button.opacity(DISABLED_OPACITY),
         }
     }
 }
