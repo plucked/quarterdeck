@@ -9,7 +9,7 @@ use super::check_row::{CheckRow, CheckSection, SkippedChecks, TreeDepth};
 use super::check_tally::CheckTally;
 use super::check_tree::{CheckTree, TreeEntry};
 use super::checks_panel::ChecksPanel;
-use super::shown_checks::{CheckContent, CheckOrigin, ShownChecks};
+use super::shown_checks::{CheckContent, ShownChecks};
 use crate::button::Button;
 use crate::count_as_f32::count_as_f32;
 use crate::counted::counted;
@@ -85,9 +85,9 @@ impl ChecksPanel {
     /// The verdict with its mark, the counts, the outcome bar, the required
     /// checks, the commit and when it was read, and Refresh.
     fn render_summary(&self, shown: &ShownChecks, cx: &mut Context<Self>) -> impl IntoElement {
-        let summary = match &shown.content {
-            CheckContent::Tree(tree) => Summary::of_tree(tree),
-            CheckContent::NotPermitted => Summary::of_rollup(shown),
+        let summary = match shown.content.tree() {
+            Some(tree) => Summary::of_tree(tree),
+            None => Summary::of_rollup(shown),
         }
         .with_conflict(shown.conflict.as_ref());
         div()
@@ -165,9 +165,7 @@ impl ChecksPanel {
     /// The rows under the summary in a list with its scrollbar; nothing
     /// when there are no single checks to show.
     fn render_check_list(&self, shown: &ShownChecks, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let CheckContent::Tree(tree) = &shown.content else {
-            return None;
-        };
+        let tree = shown.content.tree()?;
         if tree.tally().total() == 0 {
             return None;
         }
@@ -194,7 +192,7 @@ impl ChecksPanel {
 
     /// Row `index` of the list.
     fn render_check_row(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
-        let Some(CheckContent::Tree(tree)) = self.shown().map(|shown| &shown.content) else {
+        let Some(tree) = self.shown().and_then(|shown| shown.content.tree()) else {
             return div().into_any_element();
         };
         let Some(row) = self.rows().get(index).copied() else {
@@ -694,9 +692,9 @@ fn conflict_sentence(conflict: &MergeConflict) -> String {
 /// which pull request conflicts too (the summary says so only without).
 fn conflict_note(shown: &ShownChecks) -> Option<String> {
     let conflict = shown.conflict.as_ref()?;
-    let has_checks = match &shown.content {
-        CheckContent::Tree(tree) => tree.tally().total() > tree.expected().len(),
-        CheckContent::NotPermitted => shown.rollup.is_some(),
+    let has_checks = match shown.content.tree() {
+        Some(tree) => tree.tally().total() > tree.expected().len(),
+        None => shown.rollup.is_some(),
     };
     let fix = match conflict.location {
         ConflictLocation::Shown => "Resolve it".to_owned(),
@@ -719,16 +717,16 @@ fn conflict_note(shown: &ShownChecks) -> Option<String> {
 
 /// What the token's access leaves out, when it leaves something out.
 fn access_note(shown: &ShownChecks) -> Option<&'static str> {
-    match (&shown.content, shown.origin) {
-        (CheckContent::NotPermitted, _) => Some(
+    match shown.content {
+        CheckContent::NotPermitted => Some(
             "This GitHub token may read only the overall state. To list the checks, \
              give it read access to Actions and Commit statuses.",
         ),
-        (CheckContent::Tree(_), CheckOrigin::ActionsJobs) => Some(
+        CheckContent::FromActions(_) => Some(
             "Read from GitHub Actions: this token may not read check runs, so \
              other apps' checks are missing and required checks are matched by name.",
         ),
-        (CheckContent::Tree(_), CheckOrigin::Rollup) => None,
+        CheckContent::Listed(_) => None,
     }
 }
 

@@ -5,7 +5,7 @@ use qd_github::CheckOutcome;
 
 use super::check_row::{CheckRow, SkippedChecks};
 use super::checks_target::ChecksTarget;
-use super::shown_checks::{CheckContent, ShownChecks};
+use super::shown_checks::ShownChecks;
 use super::unfolded_checks::UnfoldedChecks;
 use crate::app_services::AppServices;
 use crate::display_date::unix_now;
@@ -216,11 +216,9 @@ impl ChecksPanel {
 
     /// Lays the rows out again from the shown checks, folds and skip choice.
     fn rebuild_rows(&mut self) {
-        self.rows = match self.shown.as_ref().map(|shown| &shown.content) {
-            Some(CheckContent::Tree(tree)) => {
-                CheckRow::build_all(tree, &self.unfolded, self.skipped)
-            }
-            Some(CheckContent::NotPermitted) | None => Vec::new(),
+        self.rows = match self.shown.as_ref().and_then(|shown| shown.content.tree()) {
+            Some(tree) => CheckRow::build_all(tree, &self.unfolded, self.skipped),
+            None => Vec::new(),
         };
         self.list.reset(self.rows.len());
     }
