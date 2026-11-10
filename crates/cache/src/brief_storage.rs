@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow};
 use qd_studio::{BriefRecord, CodeAccess, RejectedWidget, RequestLayer, Studio, ToolCall};
 use rusqlite::{OptionalExtension, Transaction, params};
 
-use crate::brief_sql_text::{reader_from_sql_text, reader_sql_text};
+use crate::brief_sql_text::{CodeAccessKind, reader_from_sql_text, reader_sql_text};
 use crate::brief_widget_writing::put_widget;
 use crate::cached_statements::execute_cached;
 use crate::scope_columns::ScopeColumns;
@@ -97,10 +97,16 @@ impl UiStateStore {
             head_sha: row.head_sha,
             reader: reader_from_sql_text(&row.reader)
                 .ok_or_else(|| anyhow!("unknown reader {}", row.reader))?,
-            code: match (row.code_access.as_str(), row.diff_only_reason) {
-                ("workspace", _) => CodeAccess::Workspace,
-                (_, Some(reason)) => CodeAccess::DiffOnly(reason),
-                (other, None) => return Err(anyhow!("unknown code access {other}")),
+            code: match (
+                CodeAccessKind::from_sql_text(&row.code_access),
+                row.diff_only_reason,
+            ) {
+                (Some(CodeAccessKind::Workspace), _) => CodeAccess::Workspace,
+                (Some(CodeAccessKind::DiffOnly), Some(reason)) => CodeAccess::DiffOnly(reason),
+                (Some(CodeAccessKind::DiffOnly), None) => {
+                    return Err(anyhow!("a diff-only brief without its reason"));
+                }
+                (None, _) => return Err(anyhow!("unknown code access {}", row.code_access)),
             },
             prompt: row.prompt,
             answer: None,
@@ -211,9 +217,10 @@ fn put_brief_row(
     studio: &Studio,
     record: &BriefRecord,
 ) -> Result<i64> {
-    let (code_access, diff_only_reason) = match &record.code {
-        CodeAccess::Workspace => ("workspace", None),
-        CodeAccess::DiffOnly(reason) => ("diff_only", Some(reason.as_str())),
+    let code_access = CodeAccessKind::of(&record.code).as_sql_text();
+    let diff_only_reason = match &record.code {
+        CodeAccess::Workspace => None,
+        CodeAccess::DiffOnly(reason) => Some(reason.as_str()),
     };
     execute_cached(
         transaction,

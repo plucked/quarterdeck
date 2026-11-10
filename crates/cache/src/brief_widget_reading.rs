@@ -8,8 +8,8 @@ use rusqlite::params;
 use crate::UiStateStore;
 use crate::brief_anchor_columns::AnchorColumns;
 use crate::brief_sql_text::{
-    change_from_sql_text, edge_style_from_sql_text, message_style_from_sql_text,
-    role_from_sql_text, tone_from_sql_text, weight_from_sql_text,
+    AnchorSlot, BriefWidgetKind, ScopeList, change_from_sql_text, edge_style_from_sql_text,
+    message_style_from_sql_text, role_from_sql_text, tone_from_sql_text, weight_from_sql_text,
 };
 
 /// A `brief_widgets` row as read.
@@ -84,12 +84,14 @@ impl UiStateStore {
     fn brief_widget(&self, brief_id: i64, row: &WidgetRow) -> Result<StudioWidget> {
         let at = row.position;
         let title = || row.title.clone().unwrap_or_default();
-        Ok(match row.kind.as_str() {
-            "section" => StudioWidget::Section {
+        let kind = BriefWidgetKind::from_sql_text(&row.kind)
+            .ok_or_else(|| anyhow!("unknown widget kind {}", row.kind))?;
+        Ok(match kind {
+            BriefWidgetKind::Section => StudioWidget::Section {
                 heading: title(),
                 body: row.body.clone().unwrap_or_default(),
             },
-            "callout" => StudioWidget::Callout {
+            BriefWidgetKind::Callout => StudioWidget::Callout {
                 tone: row
                     .tone
                     .as_deref()
@@ -97,51 +99,58 @@ impl UiStateStore {
                     .context("a callout without a known tone")?,
                 text: row.body.clone().unwrap_or_default(),
             },
-            "code_excerpt" => StudioWidget::CodeExcerpt {
+            BriefWidgetKind::CodeExcerpt => StudioWidget::CodeExcerpt {
                 caption: title(),
-                anchor: self.slot_anchor(brief_id, at, "excerpt")?,
+                anchor: self.slot_anchor(brief_id, at, AnchorSlot::Excerpt)?,
             },
-            "code_compare" => StudioWidget::CodeCompare {
+            BriefWidgetKind::CodeCompare => StudioWidget::CodeCompare {
                 caption: title(),
-                before: self.slot_anchor(brief_id, at, "before")?,
-                after: self.slot_anchor(brief_id, at, "after")?,
+                before: self.slot_anchor(brief_id, at, AnchorSlot::Before)?,
+                after: self.slot_anchor(brief_id, at, AnchorSlot::After)?,
             },
-            "table" | "trace" => StudioWidget::Table(StudioTable {
-                title: title(),
-                columns: self.table_columns(brief_id, at)?,
-                rows: self.table_rows(brief_id, at)?,
-                role: if row.kind == "trace" {
-                    TableRole::Trace
-                } else {
-                    TableRole::Mapping
-                },
+            BriefWidgetKind::Table => {
+                StudioWidget::Table(self.table(brief_id, at, title(), TableRole::Mapping)?)
+            }
+            BriefWidgetKind::Trace => {
+                StudioWidget::Table(self.table(brief_id, at, title(), TableRole::Trace)?)
+            }
+            BriefWidgetKind::Scope => StudioWidget::Scope(ChangeScope {
+                changes: self.scope_items(brief_id, at, ScopeList::Changes)?,
+                unchanged: self.scope_items(brief_id, at, ScopeList::Unchanged)?,
+                mechanical: self.scope_items(brief_id, at, ScopeList::Mechanical)?,
             }),
-            "scope" => StudioWidget::Scope(ChangeScope {
-                changes: self.scope_items(brief_id, at, "changes")?,
-                unchanged: self.scope_items(brief_id, at, "unchanged")?,
-                mechanical: self.scope_items(brief_id, at, "mechanical")?,
-            }),
-            "tour" => StudioWidget::Tour(StudioTour {
+            BriefWidgetKind::Tour => StudioWidget::Tour(StudioTour {
                 title: title(),
                 steps: self.tour_steps(brief_id, at)?,
             }),
-            "graph" => StudioWidget::Graph(self.graph(brief_id, at, title())?),
-            "sequence" => StudioWidget::Sequence(self.sequence(brief_id, at, title())?),
-            other => return Err(anyhow!("unknown widget kind {other}")),
+            BriefWidgetKind::Graph => StudioWidget::Graph(self.graph(brief_id, at, title())?),
+            BriefWidgetKind::Sequence => {
+                StudioWidget::Sequence(self.sequence(brief_id, at, title())?)
+            }
         })
     }
 
     /// The anchor in `slot` of widget `at`.
-    fn slot_anchor(&self, brief_id: i64, at: i64, slot: &str) -> Result<CodeAnchor> {
+    fn slot_anchor(&self, brief_id: i64, at: i64, slot: AnchorSlot) -> Result<CodeAnchor> {
         let columns = self.connection().query_row(
             "SELECT path, side, first_line, last_line FROM brief_anchors
              WHERE brief_id = ?1 AND widget_position = ?2 AND slot = ?3",
-            params![brief_id, at, slot],
+            params![brief_id, at, slot.as_sql_text()],
             |row| AnchorColumns::read(row, 0),
         )?;
         columns
             .into_anchor()?
             .context("an anchor without its columns")
+    }
+
+    /// Table `at`: its columns and rows, shown as `role` says.
+    fn table(&self, brief_id: i64, at: i64, title: String, role: TableRole) -> Result<StudioTable> {
+        Ok(StudioTable {
+            title,
+            columns: self.table_columns(brief_id, at)?,
+            rows: self.table_rows(brief_id, at)?,
+            role,
+        })
     }
 
     /// The table's column names in order.
@@ -181,12 +190,13 @@ impl UiStateStore {
     }
 
     /// The items of one of a scope's lists (changes, unchanged, mechanical).
-    fn scope_items(&self, brief_id: i64, at: i64, list: &str) -> Result<Vec<String>> {
+    fn scope_items(&self, brief_id: i64, at: i64, list: ScopeList) -> Result<Vec<String>> {
         let mut statement = self.connection().prepare_cached(
             "SELECT text FROM brief_scope_items WHERE brief_id = ?1 AND widget_position = ?2
              AND list = ?3 ORDER BY position",
         )?;
-        let items = statement.query_map(params![brief_id, at, list], |row| row.get(0))?;
+        let items =
+            statement.query_map(params![brief_id, at, list.as_sql_text()], |row| row.get(0))?;
         Ok(items.collect::<rusqlite::Result<_>>()?)
     }
 

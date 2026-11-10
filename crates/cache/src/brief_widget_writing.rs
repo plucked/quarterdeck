@@ -1,14 +1,13 @@
 use anyhow::Result;
 use qd_studio::{
     ChangeScope, CodeAnchor, StudioGraph, StudioSequence, StudioTable, StudioTour, StudioWidget,
-    TableRole,
 };
 use rusqlite::{Transaction, params};
 
 use crate::brief_anchor_columns::AnchorColumns;
 use crate::brief_sql_text::{
-    change_sql_text, edge_style_sql_text, message_style_sql_text, role_sql_text, tone_sql_text,
-    weight_sql_text,
+    AnchorSlot, BriefWidgetKind, ScopeList, change_sql_text, edge_style_sql_text,
+    message_style_sql_text, role_sql_text, tone_sql_text, weight_sql_text,
 };
 use crate::cached_statements::execute_cached;
 
@@ -21,22 +20,19 @@ pub(crate) fn put_widget(
     widget: &StudioWidget,
 ) -> Result<()> {
     // The shared columns: the kind, a title, a body, a tone.
-    let (kind, title, body, tone): (&str, Option<&str>, Option<&str>, Option<&str>) = match widget {
-        StudioWidget::Section { heading, body } => ("section", Some(heading), Some(body), None),
-        StudioWidget::Callout { tone, text } => {
-            ("callout", None, Some(text), Some(tone_sql_text(*tone)))
+    let (title, body, tone): (Option<&str>, Option<&str>, Option<&str>) = match widget {
+        StudioWidget::Section { heading, body } => (Some(heading), Some(body), None),
+        StudioWidget::Callout { tone, text } => (None, Some(text), Some(tone_sql_text(*tone))),
+        StudioWidget::CodeExcerpt { caption, .. } | StudioWidget::CodeCompare { caption, .. } => {
+            (Some(caption), None, None)
         }
-        StudioWidget::CodeExcerpt { caption, .. } => ("code_excerpt", Some(caption), None, None),
-        StudioWidget::CodeCompare { caption, .. } => ("code_compare", Some(caption), None, None),
-        StudioWidget::Table(table) => match table.role {
-            TableRole::Mapping => ("table", Some(table.title.as_str()), None, None),
-            TableRole::Trace => ("trace", Some(table.title.as_str()), None, None),
-        },
-        StudioWidget::Scope(_) => ("scope", None, None, None),
-        StudioWidget::Tour(tour) => ("tour", Some(tour.title.as_str()), None, None),
-        StudioWidget::Graph(graph) => ("graph", Some(graph.title.as_str()), None, None),
-        StudioWidget::Sequence(sequence) => ("sequence", Some(sequence.title.as_str()), None, None),
+        StudioWidget::Table(table) => (Some(table.title.as_str()), None, None),
+        StudioWidget::Scope(_) => (None, None, None),
+        StudioWidget::Tour(tour) => (Some(tour.title.as_str()), None, None),
+        StudioWidget::Graph(graph) => (Some(graph.title.as_str()), None, None),
+        StudioWidget::Sequence(sequence) => (Some(sequence.title.as_str()), None, None),
     };
+    let kind = BriefWidgetKind::of(widget).as_sql_text();
     execute_cached(
         transaction,
         "INSERT INTO brief_widgets (brief_id, position, page_position, kind, title, body, tone)
@@ -48,11 +44,11 @@ pub(crate) fn put_widget(
     match widget {
         StudioWidget::Section { .. } | StudioWidget::Callout { .. } => {}
         StudioWidget::CodeExcerpt { anchor, .. } => {
-            put_slot_anchor(transaction, brief_id, position, "excerpt", anchor)?;
+            put_slot_anchor(transaction, brief_id, position, AnchorSlot::Excerpt, anchor)?;
         }
         StudioWidget::CodeCompare { before, after, .. } => {
-            put_slot_anchor(transaction, brief_id, position, "before", before)?;
-            put_slot_anchor(transaction, brief_id, position, "after", after)?;
+            put_slot_anchor(transaction, brief_id, position, AnchorSlot::Before, before)?;
+            put_slot_anchor(transaction, brief_id, position, AnchorSlot::After, after)?;
         }
         StudioWidget::Table(table) => put_table(transaction, brief_id, position, table)?,
         StudioWidget::Scope(scope) => put_scope_items(transaction, brief_id, position, scope)?,
@@ -70,7 +66,7 @@ fn put_slot_anchor(
     transaction: &Transaction<'_>,
     brief_id: i64,
     position: i64,
-    slot: &str,
+    slot: AnchorSlot,
     anchor: &CodeAnchor,
 ) -> Result<()> {
     let anchor = AnchorColumns::of(Some(anchor));
@@ -81,7 +77,7 @@ fn put_slot_anchor(
         params![
             brief_id,
             position,
-            slot,
+            slot.as_sql_text(),
             anchor.path,
             anchor.side,
             anchor.first_line,
@@ -127,16 +123,16 @@ fn put_scope_items(
     scope: &ChangeScope,
 ) -> Result<()> {
     for (list, items) in [
-        ("changes", &scope.changes),
-        ("unchanged", &scope.unchanged),
-        ("mechanical", &scope.mechanical),
+        (ScopeList::Changes, &scope.changes),
+        (ScopeList::Unchanged, &scope.unchanged),
+        (ScopeList::Mechanical, &scope.mechanical),
     ] {
         for (item_position, item) in (0_i64..).zip(items) {
             execute_cached(
                 transaction,
                 "INSERT INTO brief_scope_items (brief_id, widget_position, list, position, text)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![brief_id, position, list, item_position, item],
+                params![brief_id, position, list.as_sql_text(), item_position, item],
             )?;
         }
     }

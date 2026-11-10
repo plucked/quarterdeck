@@ -28,7 +28,7 @@
 //! - `brief_anchor_columns.rs`: `AnchorColumns`, a code anchor as its four nullable columns.
 //! - `stored_brief.rs`: `StoredBrief`, a checked studio with the record of its run.
 //! - `brief_index.rs`: `BriefIndex`, which pull requests have a brief.
-//! - `brief_sql_text.rs`: SQL text of the `qd-studio` enums a brief stores.
+//! - `brief_sql_text.rs`: SQL text of the `qd-studio` enums a brief stores, and of the brief tables' own text columns (widget kind, anchor slot, scope list, code access).
 //! - `scope_columns.rs`: a `ReviewScope` as its nullable columns, shared by notes and briefs.
 //! - `database_connection.rs`: the database location and how a connection is opened.
 //! - `schema_migrations.rs`: the append-only schema history and its runner.
