@@ -61,14 +61,18 @@ enum ListingPlace {
 impl ListingPlace {
     /// The place of a diff the budget did or did not hold.
     fn decide(fits_budget: bool, has_workspace: bool) -> Self {
-        if fits_budget {
-            Self::Inline
-        } else if has_workspace {
-            Self::WorkspaceOnly
-        } else {
-            Self::Omitted
+        match (fits_budget, has_workspace) {
+            (true, true | false) => Self::Inline,
+            (false, true) => Self::WorkspaceOnly,
+            (false, false) => Self::Omitted,
         }
     }
+}
+
+/// A file's numbered diff, and whether the message's budget holds it.
+struct BudgetedListing {
+    listing: String,
+    is_listed: bool,
 }
 
 /// The user message for the agent: the pull request, its description
@@ -80,24 +84,51 @@ impl ListingPlace {
 /// documentation before tooling. Without a workspace only the listed diffs
 /// may be cited; with one every diff may, through `diffs/<path>.diff`.
 pub fn studio_prompt(request: &StudioRequest) -> StudioPrompt {
-    let mut prompt = String::new();
-    let mut targets = AnchorTargets::default();
+    let mut prompt = StudioPrompt {
+        text: String::new(),
+        targets: AnchorTargets::default(),
+        workspace_diffs: Vec::new(),
+    };
     let has_workspace = request.code == CodeAccess::Workspace;
 
     // What the brief is about.
-    let _ = writeln!(prompt, "# Pull request\n");
-    let _ = writeln!(prompt, "Repository: {}", request.repository);
-    let _ = writeln!(prompt, "{}", request.subject);
-    let _ = writeln!(prompt, "Author: {}\n", request.author);
+    let text = &mut prompt.text;
+    let _ = writeln!(text, "# Pull request\n");
+    let _ = writeln!(text, "Repository: {}", request.repository);
+    let _ = writeln!(text, "{}", request.subject);
+    let _ = writeln!(text, "Author: {}\n", request.author);
 
     // A combined range's layers with their descriptions, else the one description.
     if request.layers.is_empty() {
-        write_description(&mut prompt, &request.description);
+        write_description(text, &request.description);
     } else {
-        write_layers(&mut prompt, request);
+        write_layers(text, request);
     }
 
     // Every changed file, with why a diff is missing where it is.
+    write_changed_files(text, request);
+
+    // Who reads the brief, which sets how much onboarding it gives.
+    let _ = writeln!(text, "\n## The reader\n\n{}", reader_brief(request));
+
+    // Where the code is, when it is checked out.
+    if has_workspace {
+        write_code_section(text);
+    }
+
+    // The numbered diffs the budget holds, then the closing request.
+    let listings = budget_listings(request);
+    write_diffs(&mut prompt, request, listings, has_workspace);
+    let _ = writeln!(
+        prompt.text,
+        "Write the brief for this pull request in the required structure."
+    );
+    prompt
+}
+
+/// Every changed file, with its status, rename and counts, and why its diff
+/// is missing where it is.
+fn write_changed_files(prompt: &mut String, request: &StudioRequest) {
     let _ = writeln!(prompt, "## Changed files ({})\n", request.files.len());
     for file in &request.files {
         let renamed = file
@@ -115,61 +146,74 @@ pub fn studio_prompt(request: &StudioRequest) -> StudioPrompt {
             file.path, file.status, file.additions, file.deletions
         );
     }
+}
 
-    // Who reads the brief, which sets how much onboarding it gives.
-    let _ = writeln!(prompt, "\n## The reader\n\n{}", reader_brief(request));
+/// Where the checked-out code is, how to cite diffs over the budget, and
+/// when to read through subagents.
+fn write_code_section(prompt: &mut String) {
+    let _ = writeln!(
+        prompt,
+        "\n## The code\n\nYour working folder holds the code: `{HEAD_FOLDER}/` is the repository after the change (at the pull request's head), and `{DIFF_FILE}` is the pull request's whole diff, generated and moved files included, which shows what each changed file was before. Use Read, Grep and Glob there to follow callers, types, tests and anything the diff leaves out; Git LFS files are pointers. Read what you need to explain the change, not the whole repository.\n\nAnchors cite the numbered diffs. Those that fit are listed below; every changed file's diff, listed or not, is in `{DIFFS_FOLDER}/<path>.diff` in the same numbered form (`{DIFFS_FOLDER}/src/lib.rs.diff` for `src/lib.rs`), and anchors may cite any of them. Do not explain only the listed files: a diff over the budget is often where the change happens.\n\nFor a large change (many files over the budget, or a stack of many layers), use subagents: start several Explore agents with the Agent tool at once, each reading one part (a group of layers, a directory, a mechanism) in `{HEAD_FOLDER}/` and `{DIFFS_FOLDER}/`, and ask each to report what that part does and why, with file paths and the numbered lines worth citing. Then write the brief yourself from their reports; they cannot write it. For a small change, read what you need yourself."
+    );
+}
 
-    // Where the code is, when it is checked out.
-    if has_workspace {
-        let _ = writeln!(
-            prompt,
-            "\n## The code\n\nYour working folder holds the code: `{HEAD_FOLDER}/` is the repository after the change (at the pull request's head), and `{DIFF_FILE}` is the pull request's whole diff, generated and moved files included, which shows what each changed file was before. Use Read, Grep and Glob there to follow callers, types, tests and anything the diff leaves out; Git LFS files are pointers. Read what you need to explain the change, not the whole repository.\n\nAnchors cite the numbered diffs. Those that fit are listed below; every changed file's diff, listed or not, is in `{DIFFS_FOLDER}/<path>.diff` in the same numbered form (`{DIFFS_FOLDER}/src/lib.rs.diff` for `src/lib.rs`), and anchors may cite any of them. Do not explain only the listed files: a diff over the budget is often where the change happens.\n\nFor a large change (many files over the budget, or a stack of many layers), use subagents: start several Explore agents with the Agent tool at once, each reading one part (a group of layers, a directory, a mechanism) in `{HEAD_FOLDER}/` and `{DIFFS_FOLDER}/`, and ask each to report what that part does and why, with file paths and the numbered lines worth citing. Then write the brief yourself from their reports; they cannot write it. For a small change, read what you need yourself."
-        );
-    }
-
-    // Which diffs the budget holds: code first, each class in tree order.
+/// Each file's numbered diff (`None` for a file without one), in the
+/// request's order, marked listed while the budget holds it: code first,
+/// then documentation, then tooling, each class in tree order.
+fn budget_listings(request: &StudioRequest) -> Vec<Option<BudgetedListing>> {
     let mut by_priority: Vec<usize> = (0..request.files.len()).collect();
     by_priority.sort_by_key(|&index| ListingPriority::of(&request.files[index].path));
-    let mut is_listed = vec![false; request.files.len()];
-    let mut listings: Vec<Option<String>> = vec![None; request.files.len()];
+    let mut listings: Vec<Option<BudgetedListing>> = request.files.iter().map(|_| None).collect();
     let mut listed_chars = 0;
     for index in by_priority {
         let FileListing::Diff(diff) = &request.files[index].listing else {
             continue;
         };
         let listing = numbered_listing(diff);
-        if listed_chars + listing.len() <= MAX_LISTED_DIFF_CHARS {
+        let is_listed = listed_chars + listing.len() <= MAX_LISTED_DIFF_CHARS;
+        if is_listed {
             listed_chars += listing.len();
-            is_listed[index] = true;
         }
-        listings[index] = Some(listing);
+        listings[index] = Some(BudgetedListing { listing, is_listed });
     }
+    listings
+}
 
-    // The numbered diffs in tree order, and every one for the workspace's `diffs/`.
+/// The numbered diffs in tree order: listed ones in the message, the rest
+/// named; with a workspace every one also goes to `diffs/`. The lines of
+/// every diff an anchor may cite go into the prompt's targets.
+fn write_diffs(
+    prompt: &mut StudioPrompt,
+    request: &StudioRequest,
+    listings: Vec<Option<BudgetedListing>>,
+    has_workspace: bool,
+) {
     let _ = writeln!(
-        prompt,
+        prompt.text,
         "\n## Diffs\n\nEach line: base number, head number, `-` removed / `+` added / blank unchanged, text.\n"
     );
-    let mut workspace_diffs = Vec::new();
-    for (index, file) in request.files.iter().enumerate() {
-        let (FileListing::Diff(diff), Some(listing)) = (&file.listing, &listings[index]) else {
+    for (file, budgeted) in request.files.iter().zip(listings) {
+        let (FileListing::Diff(diff), Some(budgeted)) = (&file.listing, budgeted) else {
             continue;
         };
-        if has_workspace {
-            workspace_diffs.push(WorkspaceDiff {
-                path: file.path.clone(),
-                listing: listing.clone(),
-            });
-        }
-        match ListingPlace::decide(is_listed[index], has_workspace) {
+        let place = ListingPlace::decide(budgeted.is_listed, has_workspace);
+        match place {
             ListingPlace::Inline => {
-                targets.add_file(&file.path, file.previous_path.as_deref(), diff);
-                let _ = writeln!(prompt, "### {}\n\n```\n{listing}```\n", file.path);
+                prompt
+                    .targets
+                    .add_file(&file.path, file.previous_path.as_deref(), diff);
+                let _ = writeln!(
+                    prompt.text,
+                    "### {}\n\n```\n{}```\n",
+                    file.path, budgeted.listing
+                );
             }
             ListingPlace::WorkspaceOnly => {
-                targets.add_file(&file.path, file.previous_path.as_deref(), diff);
+                prompt
+                    .targets
+                    .add_file(&file.path, file.previous_path.as_deref(), diff);
                 let _ = writeln!(
-                    prompt,
+                    prompt.text,
                     "### {}\n\n(over the prompt's size budget: Read `{}`)\n",
                     file.path,
                     WorkspaceDiff::relative_path(&file.path)
@@ -177,21 +221,18 @@ pub fn studio_prompt(request: &StudioRequest) -> StudioPrompt {
             }
             ListingPlace::Omitted => {
                 let _ = writeln!(
-                    prompt,
+                    prompt.text,
                     "### {}\n\n(diff not listed: over the prompt's size budget)\n",
                     file.path
                 );
             }
         }
-    }
-    let _ = writeln!(
-        prompt,
-        "Write the brief for this pull request in the required structure."
-    );
-    StudioPrompt {
-        text: prompt,
-        targets,
-        workspace_diffs,
+        if has_workspace {
+            prompt.workspace_diffs.push(WorkspaceDiff {
+                path: file.path.clone(),
+                listing: budgeted.listing,
+            });
+        }
     }
 }
 
