@@ -1,48 +1,36 @@
 use gpui::{
-    AnyElement, Context, Div, FontWeight, IntoElement, Render, Rgba, SharedString, Stateful,
-    Styled, Window, div, list, prelude::*, px, relative,
+    AnyElement, Context, FontWeight, IntoElement, Render, Rgba, SharedString, Window, div, list,
+    prelude::*, px, relative,
 };
-use qd_github::{CheckOutcome, ConflictLocation, MergeConflict, StatusCheck};
+use qd_github::CheckOutcome;
 
+use super::check_notes::{access_note, conflict_note, footnote};
 use super::check_outcome_mark::CheckOutcomeMark;
-use super::check_row::{CheckRow, CheckSection, SkippedChecks, TreeDepth};
+use super::check_row::{CheckRow, CheckSection, SkippedChecks};
+use super::check_row_rendering::{
+    NodeRow, TREE_INDENT, render_flagged_row, render_job_row, render_node_row,
+};
 use super::check_tally::CheckTally;
 use super::check_tree::{CheckTree, TreeEntry};
 use super::checks_panel::ChecksPanel;
-use super::shown_checks::{CheckContent, ShownChecks};
+use super::checks_summary::Summary;
+use super::shown_checks::ShownChecks;
 use crate::button::Button;
 use crate::count_as_f32::count_as_f32;
-use crate::counted::counted;
-use crate::display_date::{short_duration, time_ago, unix_now, unix_seconds};
-use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
-use crate::markdown_view::is_openable;
+use crate::fold_chevron::FoldState;
 use crate::pulsing_status::PulsingStatus;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::section_label::SectionLabel;
-use crate::short_sha::short_sha;
 use crate::theme;
 
 /// Diameter of the mark beside the verdict.
 const VERDICT_MARK_SIZE: f32 = 18.;
-/// Diameter of a row's mark.
-const ROW_MARK_SIZE: f32 = 14.;
-/// Height of a tree row.
-const TREE_ROW_HEIGHT: f32 = 26.;
-/// Indent per tree level.
-const TREE_INDENT: f32 = 12.;
-/// Left padding of a tree row at the top level.
-const TREE_PADDING: f32 = 6.;
 /// Height of the outcome bar under the verdict.
 const OUTCOME_BAR_HEIGHT: f32 = 4.;
 /// Gap between the outcome bar's segments.
 const OUTCOME_BAR_GAP: f32 = 1.;
 /// How far the verdict's mark sits down, to center it on the verdict's first line.
 const VERDICT_MARK_DROP: f32 = 1.;
-/// How far a flagged row's mark and its right column sit down, to line up
-/// with the check's name.
-const FLAGGED_ROW_DROP: f32 = 2.;
-/// Size of a section heading's text.
-const HEADING_TEXT_SIZE: f32 = 10.;
 /// Height of a section heading's line, so headings with and without the
 /// skipped switch take the same room.
 const HEADING_ROW_HEIGHT: f32 = 22.;
@@ -313,325 +301,6 @@ impl ChecksPanel {
     }
 }
 
-/// What the summary says about the checks.
-struct Summary {
-    outcome: Option<CheckOutcome>,
-    verdict: String,
-    counts: String,
-    /// The outcome counts the bar shows; none when single checks are unknown.
-    bar: Option<CheckTally>,
-    /// The required checks' counts, when there are any.
-    required: Option<CheckTally>,
-}
-
-impl Summary {
-    /// The summary of checks read one by one.
-    fn of_tree(tree: &CheckTree) -> Self {
-        let tally = *tree.tally();
-        let outcome = tally.outcome();
-        let verdict = match outcome {
-            None => "No checks on this commit".to_owned(),
-            Some(CheckOutcome::Failed) => counted(
-                tally.count(CheckOutcome::Failed),
-                "check failed",
-                "checks failed",
-            ),
-            Some(CheckOutcome::Cancelled) => {
-                counted(tally.broken(), "check cancelled", "checks cancelled")
-            }
-            Some(CheckOutcome::Running | CheckOutcome::Queued) => counted(
-                tally.pending(),
-                "check still running",
-                "checks still running",
-            ),
-            Some(CheckOutcome::Expected) => counted(
-                tally.count(CheckOutcome::Expected),
-                "required check not reported",
-                "required checks not reported",
-            ),
-            Some(CheckOutcome::Passed | CheckOutcome::Neutral) => "All checks passed".to_owned(),
-            Some(CheckOutcome::Skipped) => "Every check was skipped".to_owned(),
-        };
-        let counts = tally
-            .nonzero()
-            .map(|(outcome, count)| format!("{count} {}", outcome_word(outcome)))
-            .collect::<Vec<_>>()
-            .join(" · ");
-        Self {
-            outcome,
-            verdict,
-            counts,
-            bar: (tally.ran() > 0).then_some(tally),
-            required: (tree.required().total() > 0).then_some(*tree.required()),
-        }
-    }
-
-    /// The summary when only GitHub's overall verdict and count are known.
-    fn of_rollup(shown: &ShownChecks) -> Self {
-        let verdict = match shown.rollup {
-            None => "No checks on this commit",
-            Some(CheckOutcome::Failed | CheckOutcome::Cancelled) => "Checks are failing",
-            Some(CheckOutcome::Running | CheckOutcome::Queued | CheckOutcome::Expected) => {
-                "Checks are running"
-            }
-            Some(CheckOutcome::Passed | CheckOutcome::Neutral | CheckOutcome::Skipped) => {
-                "Checks passed"
-            }
-        };
-        Self {
-            outcome: shown.rollup,
-            verdict: verdict.to_owned(),
-            counts: counted(shown.total_count, "check", "checks"),
-            bar: None,
-            required: None,
-        }
-    }
-
-    /// The summary of a commit on which nothing reported (no checks, or
-    /// only required ones waiting) says why, when a merge conflict is the reason.
-    fn with_conflict(self, conflict: Option<&MergeConflict>) -> Self {
-        match (self.outcome, conflict) {
-            (None | Some(CheckOutcome::Expected), Some(conflict)) => Self {
-                outcome: Some(CheckOutcome::Failed),
-                verdict: "No checks: merge conflict".to_owned(),
-                counts: conflict_sentence(conflict),
-                ..self
-            },
-            _ => self,
-        }
-    }
-}
-
-/// The parts of a workflow or group row.
-struct NodeRow {
-    id: gpui::ElementId,
-    indent: f32,
-    name: SharedString,
-    tally: CheckTally,
-    /// The required checks inside, which the row's pill counts.
-    required: CheckTally,
-    fold: FoldState,
-    weight: FontWeight,
-}
-
-/// A foldable row: chevron, outcome mark, name, a pill when required
-/// checks are inside, then its progress on the right: how many failed,
-/// else how many of those that ran are done.
-fn render_node_row(row: NodeRow) -> Stateful<Div> {
-    let (progress, color) = match (row.tally.broken(), row.tally.ran()) {
-        (0, 0) => ("skipped".to_owned(), theme::subtle()),
-        (0, ran) => (format!("{}/{ran}", row.tally.finished()), theme::subtle()),
-        (broken, _) => (format!("{broken} failed"), theme::danger()),
-    };
-    tree_row(row.id, row.indent)
-        .child(FoldChevron::new("fold", row.fold))
-        .child(CheckOutcomeMark::new(
-            "mark",
-            row.tally.outcome().unwrap_or(CheckOutcome::Neutral),
-            ROW_MARK_SIZE,
-        ))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .font_weight(row.weight)
-                .text_color(theme::text())
-                .child(row.name),
-        )
-        .children(render_required_count(&row.required))
-        .child(
-            div()
-                .flex_none()
-                .text_xs()
-                .text_color(color)
-                .child(progress),
-        )
-}
-
-/// A check in the tree: indented past the chevrons, its mark, its name in
-/// its group, how long it took (or runs); a click opens its page.
-fn render_job_row(
-    tree: &CheckTree,
-    index: usize,
-    depth: TreeDepth,
-    cx: &mut Context<ChecksPanel>,
-) -> AnyElement {
-    let Some(check) = tree.check(index) else {
-        return div().into_any_element();
-    };
-    let indent = match depth {
-        TreeDepth::InWorkflow => TREE_INDENT,
-        TreeDepth::InGroup => 2. * TREE_INDENT,
-    };
-    let is_skipped = check.outcome == CheckOutcome::Skipped;
-    tree_row(("check-job", index).into(), indent)
-        .child(div().flex_none().w(px(FOLD_CHEVRON_SIZE)))
-        .child(CheckOutcomeMark::new("mark", check.outcome, ROW_MARK_SIZE))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .text_color(if is_skipped {
-                    theme::subtle()
-                } else {
-                    theme::text()
-                })
-                .child(tree.job_name(index).to_owned()),
-        )
-        .children(render_required_tag(check))
-        .child(
-            div()
-                .flex_none()
-                .text_xs()
-                .text_color(theme::subtle())
-                .child(timing(check, unix_now())),
-        )
-        .map(|row| with_details_link(row, check, cx))
-        .into_any_element()
-}
-
-/// A failed or pending check above the tree: its mark, name and where it
-/// sits (`Workflow › Group`) under it, how long it ran; a click opens its page.
-fn render_flagged_row(tree: &CheckTree, index: usize, cx: &mut Context<ChecksPanel>) -> AnyElement {
-    let Some(check) = tree.check(index) else {
-        return div().into_any_element();
-    };
-    div()
-        .id(("check-flagged", index))
-        .flex()
-        .items_start()
-        .gap_2()
-        .px_3()
-        .py_1()
-        .text_sm()
-        .hover(|style| style.bg(theme::hover()))
-        .child(div().pt(px(FLAGGED_ROW_DROP)).child(CheckOutcomeMark::new(
-            "mark",
-            check.outcome,
-            ROW_MARK_SIZE,
-        )))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .truncate()
-                        .text_color(theme::text())
-                        .child(tree.job_name(index).to_owned()),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_xs()
-                        .text_color(theme::subtle())
-                        .child(tree.path_of(index)),
-                ),
-        )
-        .child(
-            div()
-                .flex_none()
-                .flex()
-                .items_center()
-                .gap_1p5()
-                .pt(px(FLAGGED_ROW_DROP))
-                .children(render_required_tag(check))
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(theme::subtle())
-                        .child(timing(check, unix_now())),
-                ),
-        )
-        .map(|row| with_details_link(row, check, cx))
-        .into_any_element()
-}
-
-/// The frame of a tree row: one line, indented, hovering.
-fn tree_row(id: gpui::ElementId, indent: f32) -> Stateful<Div> {
-    div()
-        .id(id)
-        .flex()
-        .items_center()
-        .gap_1p5()
-        .h(px(TREE_ROW_HEIGHT))
-        .pl(px(TREE_PADDING + indent))
-        .pr_3()
-        .text_sm()
-        .cursor_pointer()
-        .hover(|style| style.bg(theme::hover()))
-}
-
-/// Makes `row` open the check's page on GitHub (or its app) when clicked;
-/// only `http(s)` links open, since the URL comes from GitHub's data.
-fn with_details_link(
-    row: Stateful<Div>,
-    check: &StatusCheck,
-    cx: &mut Context<ChecksPanel>,
-) -> Stateful<Div> {
-    let Some(url) = check.details_url.clone().filter(|url| is_openable(url)) else {
-        return row.cursor_default();
-    };
-    row.cursor_pointer()
-        .on_click(cx.listener(move |_, _, _, cx| cx.open_url(&url)))
-}
-
-/// A small `Required` pill for a check branch protection requires, in the
-/// danger color when it failed or was cancelled (as its workflow's pill).
-fn render_required_tag(check: &StatusCheck) -> Option<impl IntoElement> {
-    let state = match check.outcome {
-        CheckOutcome::Failed | CheckOutcome::Cancelled => RequiredState::Broken,
-        _ => RequiredState::Fine,
-    };
-    check
-        .is_required
-        .then(|| render_required_pill("Required".to_owned(), state))
-}
-
-/// The pill of a workflow or group holding required checks, so a folded
-/// row shows them: `Required` for one, `3 required` for more, in the
-/// danger color while one of them failed or was cancelled.
-fn render_required_count(required: &CheckTally) -> Option<impl IntoElement> {
-    let label = match required.total() {
-        0 => return None,
-        1 => "Required".to_owned(),
-        count => format!("{count} required"),
-    };
-    let state = match required.broken() {
-        0 => RequiredState::Fine,
-        _ => RequiredState::Broken,
-    };
-    Some(render_required_pill(label, state))
-}
-
-/// Whether the required checks a pill stands for are failing.
-#[derive(Clone, Copy)]
-enum RequiredState {
-    Fine,
-    Broken,
-}
-
-/// The pill marking required checks.
-fn render_required_pill(label: String, state: RequiredState) -> impl IntoElement {
-    let (border, text) = match state {
-        RequiredState::Fine => (theme::border_strong(), theme::muted()),
-        RequiredState::Broken => (theme::danger(), theme::danger()),
-    };
-    div()
-        .flex_none()
-        .px_1p5()
-        .rounded_full()
-        .border_1()
-        .border_color(border)
-        .text_size(px(HEADING_TEXT_SIZE))
-        .text_color(text)
-        .child(label)
-}
-
 /// The bar of outcomes that ran, each segment as wide as its share.
 fn render_outcome_bar(tally: CheckTally) -> impl IntoElement {
     let ran = tally.ran();
@@ -674,106 +343,6 @@ fn render_inline_note(text: impl Into<SharedString>, color: Rgba) -> AnyElement 
         .into_any_element()
 }
 
-/// `This pull request conflicts with develop.`, or the layer below that does.
-fn conflict_sentence(conflict: &MergeConflict) -> String {
-    match conflict.location {
-        ConflictLocation::Shown => {
-            format!("This pull request conflicts with {}.", conflict.base_ref)
-        }
-        ConflictLocation::LayerBelow => format!(
-            "#{}, lower in this stack, conflicts with {}.",
-            conflict.number, conflict.base_ref
-        ),
-    }
-}
-
-/// What a merge conflict means for the checks: none run without a merge
-/// commit, so none start until it is resolved. With checks shown, it says
-/// which pull request conflicts too (the summary says so only without).
-fn conflict_note(shown: &ShownChecks) -> Option<String> {
-    let conflict = shown.conflict.as_ref()?;
-    let has_checks = match shown.content.tree() {
-        Some(tree) => tree.tally().total() > tree.expected().len(),
-        None => shown.rollup.is_some(),
-    };
-    let fix = match conflict.location {
-        ConflictLocation::Shown => "Resolve it".to_owned(),
-        ConflictLocation::LayerBelow => format!("Resolve it in #{}", conflict.number),
-    };
-    let note = if has_checks {
-        format!(
-            "{} GitHub starts no pull request workflows while it cannot build the \
-             merge commit, so new pushes run no checks. {fix} first.",
-            conflict_sentence(conflict)
-        )
-    } else {
-        format!(
-            "GitHub starts no pull request workflows while it cannot build the merge \
-             commit. {fix} and the checks run."
-        )
-    };
-    Some(note)
-}
-
-/// What the token's access leaves out, when it leaves something out.
-fn access_note(shown: &ShownChecks) -> Option<&'static str> {
-    match shown.content {
-        CheckContent::NotPermitted => Some(
-            "This GitHub token may read only the overall state. To list the checks, \
-             give it read access to Actions and Commit statuses.",
-        ),
-        CheckContent::FromActions(_) => Some(
-            "Read from GitHub Actions: this token may not read check runs, so \
-             other apps' checks are missing and required checks are matched by name.",
-        ),
-        CheckContent::Listed(_) => None,
-    }
-}
-
-/// `Required: 3 of 3 passed · abc1234 · read 2m ago`, the parts known.
-fn footnote(shown: &ShownChecks, required: Option<&CheckTally>) -> String {
-    let read = format!("read {}", time_ago(shown.read_at, unix_now()));
-    required
-        .map(|required| {
-            format!(
-                "Required: {} of {} passed",
-                required.count(CheckOutcome::Passed),
-                required.total()
-            )
-        })
-        .into_iter()
-        .chain([short_sha(&shown.head_sha).to_owned(), read])
-        .collect::<Vec<_>>()
-        .join(" · ")
-}
-
-/// How long a finished check took, how long a running one runs, or that it waits.
-fn timing(check: &StatusCheck, now: i64) -> String {
-    let started = check.started_at.as_deref().and_then(unix_seconds);
-    let completed = check.completed_at.as_deref().and_then(unix_seconds);
-    match (check.outcome, started, completed) {
-        (CheckOutcome::Queued, _, _) => "queued".to_owned(),
-        (CheckOutcome::Skipped, _, _) => String::new(),
-        (CheckOutcome::Running, Some(started), _) => short_duration(now - started),
-        (_, Some(started), Some(completed)) => short_duration(completed - started),
-        _ => String::new(),
-    }
-}
-
-/// The word an outcome is counted with.
-fn outcome_word(outcome: CheckOutcome) -> &'static str {
-    match outcome {
-        CheckOutcome::Failed => "failed",
-        CheckOutcome::Running => "running",
-        CheckOutcome::Queued => "queued",
-        CheckOutcome::Expected => "expected",
-        CheckOutcome::Cancelled => "cancelled",
-        CheckOutcome::Neutral => "neutral",
-        CheckOutcome::Passed => "passed",
-        CheckOutcome::Skipped => "skipped",
-    }
-}
-
 /// An outcome's color in the bar, matching its mark.
 fn bar_color(outcome: CheckOutcome) -> Rgba {
     match outcome {
@@ -792,53 +361,5 @@ fn share(part: usize, whole: usize) -> f32 {
     match whole {
         0 => 0.,
         _ => count_as_f32(part) / count_as_f32(whole),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A commit without checks names the stack layer whose conflict holds them up.
-    #[test]
-    fn a_conflict_explains_missing_checks() {
-        let conflict = MergeConflict {
-            number: 36410,
-            base_ref: "develop".to_owned(),
-            location: ConflictLocation::LayerBelow,
-        };
-        let summary =
-            Summary::of_tree(&CheckTree::build(Vec::new())).with_conflict(Some(&conflict));
-        assert_eq!(summary.verdict, "No checks: merge conflict");
-        assert_eq!(
-            summary.counts,
-            "#36410, lower in this stack, conflicts with develop."
-        );
-    }
-
-    /// Required checks waiting on a conflicting commit are explained by the conflict.
-    #[test]
-    fn a_conflict_explains_waiting_required_checks() {
-        let conflict = MergeConflict {
-            number: 36410,
-            base_ref: "develop".to_owned(),
-            location: ConflictLocation::Shown,
-        };
-        let expected = StatusCheck {
-            name: "check-lfs".to_owned(),
-            source: qd_github::CheckSource::NotReported,
-            outcome: CheckOutcome::Expected,
-            is_required: true,
-            details_url: None,
-            started_at: None,
-            completed_at: None,
-        };
-        let tree = CheckTree::build(vec![expected]);
-        assert_eq!(
-            Summary::of_tree(&tree).verdict,
-            "1 required check not reported"
-        );
-        let summary = Summary::of_tree(&tree).with_conflict(Some(&conflict));
-        assert_eq!(summary.verdict, "No checks: merge conflict");
     }
 }
