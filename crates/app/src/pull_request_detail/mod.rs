@@ -62,7 +62,11 @@
 //! - `comment_editor.rs`: `CommentEditor`, the comment being written and what it is for.
 //! - `operation_status.rs`: `OperationStatus`, how the last review or pull request action went, and its line.
 //! - `side_panel_tab.rs`: `SidePanelTab`, files, review, actions or checks.
-//! - `review_actions.rs`: writing, editing, deleting and submitting comments; loading GitHub's.
+//! - `review_actions.rs`: where new comments go, which cards show and where, starting the review over.
+//! - `comment_editing.rs`: the comment editor: opening it on a line, a reply or an edit, saving and closing it.
+//! - `github_review_actions.rs`: the GitHub review: loading the conversations, editing them on GitHub, submitting.
+//! - `local_note_actions.rs`: the user's notes: adding, deleting, copying the local ones for an agent, finding one in the diff.
+//! - `side_panel_actions.rs`: the side panel's tab, the review's verdict, summary and comment destination.
 //! - `lines_label.rs`: `lines_label`, the lines a comment is about (`Line 42`, `Lines 40–42`).
 //! - `local_review_export.rs`: the local notes as Markdown for an agent.
 //! - `comment_card_rendering.rs`: the comment cards and the composer in the diff.
@@ -103,6 +107,7 @@ mod changed_files;
 mod changed_rows;
 mod comment_card;
 mod comment_card_rendering;
+mod comment_editing;
 mod comment_editor;
 mod comment_placement;
 mod comment_range;
@@ -134,6 +139,7 @@ mod file_tree_state;
 mod filter_rendering;
 mod folder_summary;
 mod folder_viewed_state;
+mod github_review_actions;
 mod head_commit;
 mod highlighted_diff;
 mod layer_request;
@@ -141,6 +147,7 @@ mod line_counts;
 mod lines_label;
 mod load_progress;
 mod loaded_file;
+mod local_note_actions;
 mod local_review_export;
 mod operation_status;
 mod parsed_description;
@@ -160,6 +167,7 @@ mod run_cancel;
 mod scroll_anchor;
 mod selected_diff_text;
 mod selection_granularity;
+mod side_panel_actions;
 mod side_panel_tab;
 mod stack_actions;
 mod stack_bar_rendering;
