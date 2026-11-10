@@ -3,9 +3,8 @@ use gpui::{AnyElement, Context, div, list, prelude::*};
 use super::brief_row::BriefRow;
 use super::pull_request_detail::PullRequestDetail;
 use crate::brief_view::{
-    BriefState, BriefWidgetContext, render_brief_bar, render_brief_column, render_brief_page_row,
-    render_brief_status, render_brief_version, render_column_width_probe, render_page_tabs,
-    render_report_panel,
+    BriefState, BriefWidgetContext, render_brief_bar, render_brief_column, render_brief_header,
+    render_brief_page_row, render_brief_status, render_column_width_probe, render_page_tabs,
 };
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 
@@ -22,19 +21,14 @@ impl PullRequestDetail {
                 let tabs = (brief.pages.len() > 1)
                     .then(|| render_page_tabs(&brief.pages, self.current_brief_page(), handlers));
                 Some(render_brief_bar(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(render_brief_version(
-                            &brief.record,
-                            self.shown_head_sha(),
-                            self.brief().report(),
-                            handlers,
-                        ))
-                        .children(render_report_panel(self.brief().report(), handlers))
-                        .children(tabs)
-                        .into_any_element(),
+                    render_brief_header(
+                        &brief.record,
+                        self.shown_head_sha(),
+                        self.brief().report(),
+                        handlers,
+                    )
+                    .children(tabs)
+                    .into_any_element(),
                 ))
             }
             _ => None,

@@ -8,8 +8,8 @@ use super::sample_brief::SampleBrief;
 use crate::app_commands::CloseWindow;
 use crate::brief_view::{
     BriefPageRow, BriefWidgetContext, PreparedBrief, PreparedWidget, render_brief_column,
-    render_brief_page_row, render_brief_status, render_brief_version, render_column_width_probe,
-    render_page_tabs, render_report_panel,
+    render_brief_header, render_brief_page_row, render_brief_status, render_column_width_probe,
+    render_page_tabs,
 };
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::section_label::SectionLabel;
@@ -111,18 +111,13 @@ impl BriefGallery {
             GalleryRow::Version => (
                 "version line and report panel (pinned above the brief in the Brief pane)"
                     .to_owned(),
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(render_brief_version(
-                        &sample.brief.record,
-                        sample.brief.record.head_sha.as_deref(),
-                        self.report.state(),
-                        &self.handlers,
-                    ))
-                    .children(render_report_panel(self.report.state(), &self.handlers))
-                    .into_any_element(),
+                render_brief_header(
+                    &sample.brief.record,
+                    sample.brief.record.head_sha.as_deref(),
+                    self.report.state(),
+                    &self.handlers,
+                )
+                .into_any_element(),
             ),
             GalleryRow::PageTabs => (
                 "page tabs (pinned above the brief in the Brief pane)".to_owned(),

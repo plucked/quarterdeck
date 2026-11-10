@@ -1,6 +1,7 @@
 use gpui::{AnyElement, IntoElement, Rgba, SharedString, div, prelude::*};
 use qd_studio::{AgentProgress, ReaderFamiliarity};
 
+use super::brief_card::brief_card;
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::brief_state::BriefState;
 use super::familiarity_picker::render_familiarity_picker;
@@ -85,15 +86,11 @@ pub fn render_brief_status(
         StatusButtonLook::Plain => button,
     };
     // The card: label, text, the reader picker when asked, then the button.
-    div()
+    brief_card()
         .flex()
         .flex_col()
         .gap_3()
         .p_4()
-        .rounded_md()
-        .bg(theme::surface())
-        .border_1()
-        .border_color(theme::border_strong())
         .child(SectionLabel::new(content.label))
         .child(
             div()

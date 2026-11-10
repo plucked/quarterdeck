@@ -37,6 +37,8 @@
 //! - `report_state.rs`: `ReportState`, where reporting the shown brief stands.
 //! - `brief_report.rs`: `BriefReport` and `ReportHost`: the report's state and save task, and the steps every view shares.
 //! - `report_rendering.rs`: the report panel under the version line: text field, saved path.
+//! - `brief_header_rendering.rs`: `render_brief_header`, the version line and the report panel pinned above a written brief.
+//! - `brief_card.rs`: `brief_card`, the card look of the status card and the report panel.
 //! - `version_rendering.rs`: the line above a brief: the commit it was written for, against the shown head, and the Report button.
 //! - `column_width_probe.rs`: `render_column_width_probe`, measures the brief's column so diagrams are laid out for it.
 //! - `brief_rendering.rs`: the column and the bar over it, each widget by kind, the lead and callouts.
@@ -46,10 +48,12 @@
 //! - `table_rendering.rs`: tables of Markdown cells; a trace numbers its rows.
 //! - `brief_footer_rendering.rs`: the footer (what the brief was written from, Write again) and the left-out list.
 
+mod brief_card;
 mod brief_diffs;
 mod brief_excerpt;
 mod brief_footer_rendering;
 mod brief_handlers;
+mod brief_header_rendering;
 mod brief_page_rendering;
 mod brief_page_row;
 mod brief_rendering;
@@ -90,6 +94,7 @@ mod version_rendering;
 
 pub use brief_diffs::BriefDiffs;
 pub use brief_handlers::{BriefHandlers, view_action, view_handler};
+pub use brief_header_rendering::render_brief_header;
 pub use brief_page_rendering::render_brief_page_row;
 pub use brief_page_row::BriefPageRow;
 pub use brief_rendering::{render_brief_bar, render_brief_column};
@@ -102,6 +107,4 @@ pub use diagram_geometry::DEFAULT_DIAGRAM_WIDTH;
 pub use page_rendering::render_page_tabs;
 pub use prepared_brief::PreparedBrief;
 pub use prepared_widget::PreparedWidget;
-pub use report_rendering::render_report_panel;
 pub use report_state::ReportState;
-pub use version_rendering::render_brief_version;

@@ -1,5 +1,6 @@
 use gpui::{AnyElement, Entity, IntoElement, div, prelude::*};
 
+use super::brief_card::brief_card;
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::report_state::ReportState;
 use crate::button::Button;
@@ -101,13 +102,5 @@ fn report_form(
 
 /// The panel's card.
 fn panel() -> gpui::Div {
-    div()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .p_3()
-        .rounded_md()
-        .bg(theme::surface())
-        .border_1()
-        .border_color(theme::border_strong())
+    brief_card().flex().flex_col().gap_2().p_3()
 }
