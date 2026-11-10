@@ -40,10 +40,10 @@ const MAX_ERROR_OUTPUT_CHARS: usize = 2_000;
 /// `--safe-mode` (no CLAUDE.md, hooks, skills or plugins, so a checked-out
 /// repository cannot instruct it), no MCP servers, nothing that would ask
 /// for permission allowed, and a spending limit. With a `workspace` it
-/// starts there with only `Read`, `Grep` and `Glob`; without one it starts
+/// starts there with only `Read`, `Grep`, `Glob` and `Agent`; without one it starts
 /// in a new empty folder with no tools at all (only the structured-output
-/// tool remains). With a workspace it may also start subagents, which read
-/// under the same confinement. The answer must match [`STUDIO_SCHEMA`]; Claude Code
+/// tool remains). The `Agent` tool starts subagents, which read under the
+/// same confinement. The answer must match [`STUDIO_SCHEMA`]; Claude Code
 /// re-prompts until it does. Progress is reported per streamed event;
 /// setting `cancel` stops the process within a fifth of a second, even
 /// while it prints nothing: `SIGTERM`, then `SIGKILL` after a grace period.
