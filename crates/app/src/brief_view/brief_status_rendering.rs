@@ -1,4 +1,4 @@
-use gpui::{AnyElement, IntoElement, div, prelude::*};
+use gpui::{AnyElement, IntoElement, Rgba, SharedString, div, prelude::*};
 use qd_studio::{AgentProgress, ReaderFamiliarity};
 
 use super::brief_handlers::{BriefHandlers, on_click};
@@ -11,6 +11,54 @@ use crate::theme;
 
 /// Characters per thousand, for the writing progress.
 const CHARACTERS_PER_THOUSAND: f64 = 1000.;
+/// What the card says before a brief is written: what writing one does.
+const INTRO_TEXT: &str = "Claude Code reads this change's diffs and a shallow checkout of its head \
+     commit, and walks you through it: why it exists, the context you \
+     need, what changes, the order to read it in and how it works, with every \
+     claim tied to lines you can open in the diff. It can only read files in that checkout, which \
+     is deleted when it is done; it cannot run or change anything. The code \
+     it reads is sent to Anthropic.";
+
+/// What a status card shows: its label, its text, whether the reader picks
+/// how well they know the area, and its button.
+struct StatusCardContent {
+    label: &'static str,
+    text: SharedString,
+    text_color: Rgba,
+    reader_picker: ReaderPicker,
+    button: StatusButton,
+}
+
+/// Whether a status card asks how well the reader knows the area.
+enum ReaderPicker {
+    Shown,
+    Hidden,
+}
+
+/// A status card's button.
+struct StatusButton {
+    id: &'static str,
+    label: &'static str,
+    look: StatusButtonLook,
+    action: StatusAction,
+    is_disabled: bool,
+}
+
+/// How a status card's button looks.
+enum StatusButtonLook {
+    /// The main action: writing a first brief.
+    Primary,
+    /// Quiet, beside a run in progress.
+    Ghost,
+    /// Outlined: trying again after a failure.
+    Plain,
+}
+
+/// What a status card's button does.
+enum StatusAction {
+    Write,
+    Cancel,
+}
 
 /// No brief yet (what it is, and a button), one being written (how far,
 /// and Cancel) or a failed run (why, and Try again). `can_write` is false
@@ -21,7 +69,23 @@ pub fn render_brief_status(
     reader: ReaderFamiliarity,
     handlers: &BriefHandlers,
 ) -> AnyElement {
-    let card = div()
+    let Some(content) = status_card_content(state, can_write) else {
+        return div().into_any_element();
+    };
+    // The button, styled and wired as the state asks.
+    let button = Button::new(content.button.id, content.button.label)
+        .disabled(content.button.is_disabled)
+        .on_click(on_click(match content.button.action {
+            StatusAction::Write => &handlers.write,
+            StatusAction::Cancel => &handlers.cancel,
+        }));
+    let button = match content.button.look {
+        StatusButtonLook::Primary => button.primary(),
+        StatusButtonLook::Ghost => button.ghost(),
+        StatusButtonLook::Plain => button,
+    };
+    // The card: label, text, the reader picker when asked, then the button.
+    div()
         .flex()
         .flex_col()
         .gap_3()
@@ -29,62 +93,66 @@ pub fn render_brief_status(
         .rounded_md()
         .bg(theme::surface())
         .border_1()
-        .border_color(theme::border_strong());
+        .border_color(theme::border_strong())
+        .child(SectionLabel::new(content.label))
+        .child(
+            div()
+                .text_sm()
+                .text_color(content.text_color)
+                .child(content.text),
+        )
+        .when(
+            matches!(content.reader_picker, ReaderPicker::Shown),
+            |card| card.child(render_familiarity_picker("brief-reader", reader, handlers)),
+        )
+        .child(div().flex().child(button))
+        .into_any_element()
+}
+
+/// What the status card shows for `state`; `None` once a brief is written,
+/// which shows in its place.
+fn status_card_content(state: Option<&BriefState>, can_write: bool) -> Option<StatusCardContent> {
     match state {
-        None => card
-            .child(SectionLabel::new("Brief"))
-            .child(div().text_sm().text_color(theme::muted()).child(
-                "Claude Code reads this change's diffs and a shallow checkout of its head \
-                 commit, and walks you through it: why it exists, the context you \
-                 need, what changes, the order to read it in and how it works, with every \
-                 claim tied to lines you can open in the diff. It can only read files in that checkout, which \
-                 is deleted when it is done; it cannot run or change anything. The code \
-                 it reads is sent to Anthropic.",
-            ))
-            .child(render_familiarity_picker("brief-reader", reader, handlers))
-            .child(
-                div().flex().child(
-                    Button::new("write-brief", "Write brief")
-                        .primary()
-                        .disabled(!can_write)
-                        .on_click(on_click(&handlers.write)),
-                ),
-            )
-            .into_any_element(),
-        Some(BriefState::Writing(progress)) => card
-            .child(SectionLabel::new("Writing the brief"))
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(theme::muted())
-                    .child(progress_text(*progress)),
-            )
-            .child(
-                div().flex().child(
-                    Button::new("cancel-brief", "Cancel")
-                        .ghost()
-                        .on_click(on_click(&handlers.cancel)),
-                ),
-            )
-            .into_any_element(),
-        Some(BriefState::Failed(message)) => card
-            .child(SectionLabel::new("No brief"))
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(theme::danger())
-                    .child(message.clone()),
-            )
-            .child(render_familiarity_picker("brief-reader", reader, handlers))
-            .child(
-                div().flex().child(
-                    Button::new("retry-brief", "Try again")
-                        .disabled(!can_write)
-                        .on_click(on_click(&handlers.write)),
-                ),
-            )
-            .into_any_element(),
-        Some(BriefState::Written(_)) => div().into_any_element(),
+        None => Some(StatusCardContent {
+            label: "Brief",
+            text: INTRO_TEXT.into(),
+            text_color: theme::muted(),
+            reader_picker: ReaderPicker::Shown,
+            button: StatusButton {
+                id: "write-brief",
+                label: "Write brief",
+                look: StatusButtonLook::Primary,
+                action: StatusAction::Write,
+                is_disabled: !can_write,
+            },
+        }),
+        Some(BriefState::Writing(progress)) => Some(StatusCardContent {
+            label: "Writing the brief",
+            text: progress_text(*progress).into(),
+            text_color: theme::muted(),
+            reader_picker: ReaderPicker::Hidden,
+            button: StatusButton {
+                id: "cancel-brief",
+                label: "Cancel",
+                look: StatusButtonLook::Ghost,
+                action: StatusAction::Cancel,
+                is_disabled: false,
+            },
+        }),
+        Some(BriefState::Failed(message)) => Some(StatusCardContent {
+            label: "No brief",
+            text: message.clone(),
+            text_color: theme::danger(),
+            reader_picker: ReaderPicker::Shown,
+            button: StatusButton {
+                id: "retry-brief",
+                label: "Try again",
+                look: StatusButtonLook::Plain,
+                action: StatusAction::Write,
+                is_disabled: !can_write,
+            },
+        }),
+        Some(BriefState::Written(_)) => None,
     }
 }
 
