@@ -257,31 +257,18 @@ fn lay_out_graph_in(graph: &StudioGraph, direction: GraphDirection) -> GraphLayo
     separate_labels(&mut edges);
 
     // Move everything so the furthest parts sit a margin inside the diagram.
-    let extent = nodes
-        .iter()
-        .chain(groups.iter().flatten())
-        .copied()
-        .chain(
+    let extent = DiagramRect::enclosing(
+        nodes.iter().chain(groups.iter().flatten()).copied().chain(
             edges
                 .iter()
                 .flat_map(|edge| [edge.label, edge.curve.bounds()]),
-        )
-        .fold(
-            (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
-            |(min_x, min_y, max_x, max_y), rect| {
-                (
-                    min_x.min(rect.x),
-                    min_y.min(rect.y),
-                    max_x.max(rect.right()),
-                    max_y.max(rect.bottom()),
-                )
-            },
-        );
-    let (min_x, min_y, max_x, max_y) = extent;
-    let (shift_x, shift_y) = (DIAGRAM_MARGIN - min_x, DIAGRAM_MARGIN - min_y);
+        ),
+    )
+    .unwrap_or_default();
+    let (shift_x, shift_y) = (DIAGRAM_MARGIN - extent.x, DIAGRAM_MARGIN - extent.y);
     GraphLayout {
-        width: max_x - min_x + 2. * DIAGRAM_MARGIN,
-        height: max_y - min_y + 2. * DIAGRAM_MARGIN,
+        width: extent.width + 2. * DIAGRAM_MARGIN,
+        height: extent.height + 2. * DIAGRAM_MARGIN,
         nodes: nodes
             .iter()
             .map(|rect| rect.moved(shift_x, shift_y))
@@ -344,15 +331,7 @@ fn place_nodes(
         members.iter().map(|&node| sizes[node].1).sum::<f32>()
             + direction.stack_gap() * count_as_f32(members.len().saturating_sub(1))
     };
-    let mut nodes = vec![
-        DiagramRect {
-            x: 0.,
-            y: 0.,
-            width: 0.,
-            height: 0.,
-        };
-        heights.len()
-    ];
+    let mut nodes = vec![DiagramRect::default(); heights.len()];
     let mut band_start = 0.;
     for (band, group) in band_groups.iter().enumerate() {
         let band_cells = || {
@@ -381,30 +360,19 @@ fn place_nodes(
 /// A boundary's border: around its boxes, with room for its name above
 /// them; `None` when no box sits in it.
 fn group_border(graph: &StudioGraph, nodes: &[DiagramRect], group: usize) -> Option<DiagramRect> {
-    let mut members = graph
+    let members = graph
         .nodes
         .iter()
         .zip(nodes)
         .filter(|(node, _)| node.group == Some(group))
         .map(|(_, rect)| *rect);
-    let first = members.next()?;
-    let (min_x, min_y, max_x, max_y) = members.fold(
-        (first.x, first.y, first.right(), first.bottom()),
-        |(min_x, min_y, max_x, max_y), rect| {
-            (
-                min_x.min(rect.x),
-                min_y.min(rect.y),
-                max_x.max(rect.right()),
-                max_y.max(rect.bottom()),
-            )
-        },
-    );
-    let top = min_y - GROUP_PADDING - GROUP_LABEL_HEIGHT;
+    let boxes = DiagramRect::enclosing(members)?;
+    let top = boxes.y - GROUP_PADDING - GROUP_LABEL_HEIGHT;
     Some(DiagramRect {
-        x: min_x - GROUP_PADDING,
+        x: boxes.x - GROUP_PADDING,
         y: top,
-        width: max_x - min_x + 2. * GROUP_PADDING,
-        height: max_y + GROUP_PADDING - top,
+        width: boxes.width + 2. * GROUP_PADDING,
+        height: boxes.bottom() + GROUP_PADDING - top,
     })
 }
 

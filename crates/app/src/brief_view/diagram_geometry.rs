@@ -12,7 +12,7 @@ pub struct DiagramPoint {
 }
 
 /// A rectangle of a diagram, in pixels from its top left corner.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct DiagramRect {
     pub x: f32,
     pub y: f32,
@@ -21,6 +21,38 @@ pub struct DiagramRect {
 }
 
 impl DiagramRect {
+    /// A rectangle of no size at `point`.
+    pub fn at_point(point: DiagramPoint) -> Self {
+        Self {
+            x: point.x,
+            y: point.y,
+            ..Self::default()
+        }
+    }
+
+    /// The smallest rectangle holding every one of `rects`; `None` for none.
+    pub fn enclosing(rects: impl IntoIterator<Item = Self>) -> Option<Self> {
+        let mut rects = rects.into_iter();
+        let first = rects.next()?;
+        let (min_x, min_y, max_x, max_y) = rects.fold(
+            (first.x, first.y, first.right(), first.bottom()),
+            |(min_x, min_y, max_x, max_y), rect| {
+                (
+                    min_x.min(rect.x),
+                    min_y.min(rect.y),
+                    max_x.max(rect.right()),
+                    max_y.max(rect.bottom()),
+                )
+            },
+        );
+        Some(Self {
+            x: min_x,
+            y: min_y,
+            width: max_x - min_x,
+            height: max_y - min_y,
+        })
+    }
+
     pub fn right(&self) -> f32 {
         self.x + self.width
     }
@@ -111,23 +143,9 @@ impl CubicCurve {
     /// A rectangle the curve stays within: the box around its control points.
     pub fn bounds(&self) -> DiagramRect {
         let points = [self.start, self.control_start, self.control_end, self.end];
-        let (min_x, min_y, max_x, max_y) = points.iter().fold(
-            (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
-            |(min_x, min_y, max_x, max_y), point| {
-                (
-                    min_x.min(point.x),
-                    min_y.min(point.y),
-                    max_x.max(point.x),
-                    max_y.max(point.y),
-                )
-            },
-        );
-        DiagramRect {
-            x: min_x,
-            y: min_y,
-            width: max_x - min_x,
-            height: max_y - min_y,
-        }
+        // Four points always enclose something; the start alone is the fallback.
+        DiagramRect::enclosing(points.map(DiagramRect::at_point))
+            .unwrap_or_else(|| DiagramRect::at_point(self.start))
     }
 
     /// The curve moved by `x` and `y`.
