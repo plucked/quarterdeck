@@ -5,9 +5,9 @@ use qd_github::PullRequestFile;
 
 use super::FileDiffState;
 use super::file_status_badge::render_file_status_badge;
+use super::tree_locate_button::TreeLocateButton;
 use crate::controls::{CheckState, Checkbox, FoldChevron, FoldState};
 use crate::theme;
-use crate::tree_locate_button::TreeLocateButton;
 
 /// A click handler shared by several elements of one file.
 pub type FileClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;

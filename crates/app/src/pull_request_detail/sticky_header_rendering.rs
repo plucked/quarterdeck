@@ -2,11 +2,11 @@ use gpui::{AnyElement, Context, FontWeight, IntoElement, Styled, div, prelude::*
 use qd_github::PullRequest;
 
 use super::detail_mode::DetailMode;
+use super::github_link::GitHubLink;
 use super::pull_request_detail::PullRequestDetail;
 use crate::avatar_images::Avatar;
 use crate::controls::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState, SegmentedControl, view_option};
 use crate::display_text::short_date;
-use crate::github_link::GitHubLink;
 use crate::markdown_view::MarkdownView;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;

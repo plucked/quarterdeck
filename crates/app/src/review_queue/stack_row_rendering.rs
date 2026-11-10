@@ -6,10 +6,10 @@ use qd_github::{PullRequest, RepoRef, StackLayer, ViewerReview};
 
 use super::ReviewQueue;
 use super::pull_request_row_rendering::{VERDICT_BADGE_ID, render_brief_mark};
+use super::review_verdict_badge::ReviewVerdictBadge;
 use super::sidebar_rendering::{render_meta, row_frame};
 use super::stack_group::StackGroup;
 use crate::controls::{FoldChevron, FoldState};
-use crate::review_verdict_badge::ReviewVerdictBadge;
 use crate::theme;
 
 /// Width of the column holding a stack layer's position and rail.

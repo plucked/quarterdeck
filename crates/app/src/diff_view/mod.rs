@@ -8,6 +8,7 @@
 //!
 //! Files:
 //! - `file_header_rendering.rs`: a file's header row, the top of its card.
+//! - `tree_locate_button.rs`: `TreeLocateButton`, the file header's icon button showing the file in the file tree.
 //! - `file_status_badge.rs`: the letter badge for a file's status (added, removed, renamed…).
 //! - `unified_rendering.rs`: one unified diff row.
 //! - `split_rendering.rs`: one side-by-side diff row.
@@ -47,6 +48,7 @@ mod file_status_badge;
 mod file_text_load;
 mod gap_part;
 mod split_rendering;
+mod tree_locate_button;
 mod unified_rendering;
 
 pub use code_cells::{CodeCells, SideSelection};

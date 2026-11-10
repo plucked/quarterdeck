@@ -16,7 +16,9 @@
 //! - `sidebar_rendering.rs`: renders the queue list, its tabs, its status line and repository headers.
 //! - `pull_request_row_rendering.rs`: renders a standalone pull request's sidebar row.
 //! - `stack_row_rendering.rs`: renders a stack's header and its layer rows in the sidebar.
+//! - `review_verdict_badge.rs`: `ReviewVerdictBadge`, the viewer's latest review verdict as a small round mark on a row.
 //! - `top_bar_rendering.rs`: the bar across the window's top (panel toggles, refresh, title) and its height, `TOP_BAR_HEIGHT`, which places the traffic lights.
+//! - `panel_toggle.rs`: `PanelToggle`, the top bar's icon button showing or hiding a side panel.
 //! - `refresh_status.rs`: `RefreshStatus`, the state of the queue's refresh.
 //! - `refresh_schedule.rs`: `RefreshSchedule`, when the queue refreshes on its own.
 //! - `activation_refresh.rs`: `ActivationRefresh`, whether a window activation refreshes.
@@ -55,6 +57,7 @@ mod others_group;
 mod others_repository;
 mod others_tab;
 mod others_tab_actions;
+mod panel_toggle;
 mod pull_request_row_rendering;
 mod queue_actions;
 mod queue_lists;
@@ -67,6 +70,7 @@ mod refresh_status;
 mod repo_group;
 mod restore_phase;
 mod review_queue;
+mod review_verdict_badge;
 mod selection_after_refresh;
 mod selection_origin;
 mod selection_restore;

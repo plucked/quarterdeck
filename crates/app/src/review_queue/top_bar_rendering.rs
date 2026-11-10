@@ -2,9 +2,9 @@ use gpui::{ClickEvent, Context, FontWeight, IntoElement, div, prelude::*, px};
 use qd_cache::PanelVisibility;
 
 use super::ReviewQueue;
+use super::panel_toggle::{PanelEdge, PanelToggle};
 use crate::app_update::AppUpdater;
 use crate::controls::Button;
-use crate::panel_toggle::{PanelEdge, PanelToggle};
 use crate::pull_request_detail::PullRequestDetail;
 use crate::theme;
 

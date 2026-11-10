@@ -17,9 +17,7 @@
 //! - `fetch_stack.rs`: gets a stack's layers from the cache, and checks them with GitHub.
 //! - `word_range_at.rs`: the word around an offset, for double-click selection.
 //! - `theme/`: the eight color themes, the active one's colors, and the fonts.
-//! - `tree_locate_button.rs`: `TreeLocateButton`, the file header's icon button showing the file in the file tree.
 //! - `bundled_assets/`: the fonts and icons built into the binary, registered with and served to gpui.
-//! - `github_link.rs`: `GitHubLink`, GitHub's mark as an icon button opening a page on GitHub.
 //! - `diff_line_sides.rs`: a diff line's number on the old or new side, and a brief anchor's side as one.
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
@@ -27,8 +25,6 @@
 //! - `count_as_f32.rs`: `count_as_f32`, a small count as a float for layout arithmetic.
 //! - `distinct_repositories.rs`: `distinct_repositories`, repositories each once in the order first seen.
 //! - `facet_chips/`: filter chips (pick with a click, hide with ⌥-click), shared by the file tree and the Others tab.
-//! - `review_verdict_badge.rs`: `ReviewVerdictBadge`, the viewer's latest review verdict as a small round mark.
-//! - `panel_toggle.rs`: `PanelToggle`, the icon button showing or hiding a side panel.
 //! - `text_area/`: `TextArea`, a multiline text editor (gpui has none).
 //! - `markdown_view/`: `MarkdownView`, renders parsed Markdown (descriptions, comments).
 //! - `review_queue/`: the main view, the queue of pull requests awaiting review.
@@ -53,21 +49,17 @@ mod display_text;
 mod distinct_repositories;
 mod facet_chips;
 mod fetch_stack;
-mod github_link;
 mod launch_app;
 mod main_window;
 mod markdown_view;
-mod panel_toggle;
 mod pull_request_detail;
 mod review_queue;
-mod review_verdict_badge;
 mod scrollbar;
 mod settings_window;
 mod shared_cache;
 mod startup_splash;
 mod text_area;
 mod theme;
-mod tree_locate_button;
 mod ui_state;
 mod word_range_at;
 
