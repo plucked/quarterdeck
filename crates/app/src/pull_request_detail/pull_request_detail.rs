@@ -14,9 +14,7 @@ use qd_cache::{
 };
 use qd_diff::FileDiff;
 use qd_file_tree::{FileKind, FileTree, NodeId};
-use qd_github::{
-    GitHubClient, PullRequest, PullRequestFile, PullRequestStack, RepoRef, StackMembership,
-};
+use qd_github::{GitHubClient, PullRequest, PullRequestFile, PullRequestStack, RepoRef};
 use qd_markdown::MarkdownDocument;
 use qd_syntax::DiffSyntax;
 
@@ -27,7 +25,7 @@ use super::changed_files::ChangedFiles;
 use super::changed_rows::ChangedRows;
 use super::context_loads::ContextLoads;
 use super::detail_content::DetailContent;
-use super::detail_event::{DetailEvent, LayerRequest};
+use super::detail_event::DetailEvent;
 use super::detail_row_list::DetailRowList;
 use super::diff_selection::DiffSelection;
 use super::fetch_changed_files::fetch_changed_files;
@@ -35,6 +33,7 @@ use super::fetch_combined_files::fetch_combined_files;
 use super::file_review_state::FileReviewState;
 use super::file_tree_state::FileTreeState;
 use super::folder_viewed_state::FolderViewedState;
+use super::layer_request::LayerRequest;
 use super::load_progress::LoadProgress;
 use super::loaded_file::LoadedFile;
 use super::parsed_description::ParsedDescription;
@@ -981,21 +980,12 @@ impl PullRequestDetail {
 
     /// Asks the owner to show layer `index` of the stack.
     pub(super) fn open_layer(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(stack) = &self.stack else {
+        let Some(request) = self
+            .stack
+            .as_ref()
+            .and_then(|stack| LayerRequest::of_layer(stack, index))
+        else {
             return;
-        };
-        let Some(layer) = stack.layers.get(index) else {
-            return;
-        };
-        let request = LayerRequest {
-            repo: stack.repo.clone(),
-            number: layer.number,
-            membership: StackMembership {
-                number: stack.number,
-                position: u64::try_from(index + 1).unwrap_or(u64::MAX),
-                size: u64::try_from(stack.layers.len()).unwrap_or(u64::MAX),
-                base_ref: stack.base_ref.clone(),
-            },
         };
         cx.emit(DetailEvent::OpenLayer(request));
     }

@@ -16,6 +16,7 @@
 //! - `detail_row_list.rs`: `DetailRowList`, the rows in order and each file's row range.
 //! - `detail_content.rs`: `DetailContent`, what the row list is built from.
 //! - `detail_event.rs`: `DetailEvent`, what the view tells its owner.
+//! - `layer_request.rs`: `LayerRequest`, a stack layer to show, with its place in the stack.
 //! - `diff_selection.rs`: `DiffSelection`, a text selection in one code column of the diff.
 //! - `selected_diff_text.rs`: the code a selection covers, as copied.
 //! - `parsed_description.rs`: `ParsedDescription`, the description of one version, parsed once.
@@ -94,6 +95,7 @@ mod file_tree_state;
 mod filter_rendering;
 mod folder_summary;
 mod folder_viewed_state;
+mod layer_request;
 mod line_counts;
 mod load_progress;
 mod loaded_file;
@@ -116,5 +118,6 @@ mod stack_bar_rendering;
 mod sticky_header_rendering;
 mod viewed_toggle;
 
-pub use detail_event::{DetailEvent, LayerRequest};
+pub use detail_event::DetailEvent;
+pub use layer_request::LayerRequest;
 pub use pull_request_detail::PullRequestDetail;

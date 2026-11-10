@@ -470,21 +470,12 @@ impl ReviewQueue {
         layer: usize,
         cx: &mut Context<Self>,
     ) {
-        let Some(stack) = self.stacks.get(key) else {
+        let Some(request) = self
+            .stacks
+            .get(key)
+            .and_then(|stack| LayerRequest::of_layer(stack, layer))
+        else {
             return;
-        };
-        let Some(number) = stack.layers.get(layer).map(|layer| layer.number) else {
-            return;
-        };
-        let request = LayerRequest {
-            repo: stack.repo.clone(),
-            number,
-            membership: StackMembership {
-                number: stack.number,
-                position: u64::try_from(layer + 1).unwrap_or(u64::MAX),
-                size: u64::try_from(stack.layers.len()).unwrap_or(u64::MAX),
-                base_ref: stack.base_ref.clone(),
-            },
         };
         self.open_layer(&request, cx);
     }
