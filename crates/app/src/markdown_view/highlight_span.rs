@@ -2,6 +2,8 @@ use std::ops::Range;
 
 use qd_markdown::{InlineStyle, StyledRun};
 
+use super::text_pieces::{covers, edge_pieces};
+
 /// A byte range of a text with one Markdown style and one selection state:
 /// the pieces a text's styled runs and the selection cut it into.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,29 +19,17 @@ impl HighlightSpan {
     /// not. Plain, unselected pieces are left out; the result is sorted and
     /// never overlaps, as gpui's text highlights require.
     pub fn split(length: usize, runs: &[StyledRun], selected: Option<&Range<usize>>) -> Vec<Self> {
-        // Every place where the style or the selection may change.
-        let mut edges = vec![0, length];
-        for run in runs {
-            edges.extend([run.range.start, run.range.end]);
-        }
-        if let Some(selected) = selected {
-            edges.extend([selected.start.min(length), selected.end.min(length)]);
-        }
-        edges.sort_unstable();
-        edges.dedup();
-
-        // Describe each piece between two edges and keep the ones that need a highlight.
-        edges
-            .windows(2)
-            .filter_map(|pair| {
-                let range = pair[0]..pair[1];
+        // Cut where the style or the selection may change, then describe
+        // each piece and keep the ones that need a highlight.
+        let edges = runs.iter().map(|run| &run.range).chain(selected);
+        edge_pieces(length, edges)
+            .into_iter()
+            .filter_map(|range| {
                 let style = runs
                     .iter()
-                    .find(|run| run.range.start <= range.start && range.end <= run.range.end)
+                    .find(|run| covers(&run.range, &range))
                     .map_or(InlineStyle::PLAIN, |run| run.style);
-                let is_selected = selected.is_some_and(|selected| {
-                    selected.start <= range.start && range.end <= selected.end
-                });
+                let is_selected = selected.is_some_and(|selected| covers(selected, &range));
                 let needs_highlight = !style.is_plain() || is_selected;
                 needs_highlight.then_some(Self {
                     range,

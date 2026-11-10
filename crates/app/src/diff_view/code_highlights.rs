@@ -3,6 +3,7 @@ use std::ops::Range;
 use gpui::{HighlightStyle, Rgba};
 use qd_syntax::SyntaxSpan;
 
+use crate::markdown_view::{covers, edge_pieces};
 use crate::theme;
 
 /// The text highlights of one diff line: syntax colors from `syntax`,
@@ -17,29 +18,19 @@ pub fn code_highlights(
     emphasis: Rgba,
     selected: Option<&Range<usize>>,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
-    // Every place where the color or the change mark may switch.
-    let mut edges = vec![0, length];
-    for span in syntax {
-        edges.extend([span.range.start.min(length), span.range.end.min(length)]);
-    }
-    for range in changed.iter().chain(selected) {
-        edges.extend([range.start.min(length), range.end.min(length)]);
-    }
-    edges.sort_unstable();
-    edges.dedup();
-
-    // Style each piece between two edges; plain, unchanged pieces need no highlight.
-    edges
-        .windows(2)
-        .filter_map(|pair| {
-            let piece = pair[0]..pair[1];
-            let span = syntax
-                .iter()
-                .find(|span| span.range.start <= piece.start && piece.end <= span.range.end);
-            let covers =
-                |range: &Range<usize>| range.start <= piece.start && piece.end <= range.end;
-            let is_changed = changed.iter().any(covers);
-            let is_selected = selected.is_some_and(covers);
+    // Cut where the color, the change mark or the selection may switch,
+    // then style each piece; plain, unchanged pieces need no highlight.
+    let edges = syntax
+        .iter()
+        .map(|span| &span.range)
+        .chain(changed)
+        .chain(selected);
+    edge_pieces(length, edges)
+        .into_iter()
+        .filter_map(|piece| {
+            let span = syntax.iter().find(|span| covers(&span.range, &piece));
+            let is_changed = changed.iter().any(|range| covers(range, &piece));
+            let is_selected = selected.is_some_and(|range| covers(range, &piece));
             if span.is_none() && !is_changed && !is_selected {
                 return None;
             }

@@ -12,6 +12,7 @@
 //! - `text_selection.rs`: `TextSelection`, anchor and head in document offsets.
 //! - `document_index_at.rs`: maps a mouse position to a document offset.
 //! - `selected_text.rs`: the text of a selection, as copied.
+//! - `text_pieces.rs`: `edge_pieces` and `covers`, a text cut at the edges of ranges, for highlights (also the diff's).
 //! - `highlight_span.rs`: `HighlightSpan`, cuts styled runs at the selection's edges.
 //! - `inline_highlight.rs`: the gpui highlight for a style and selection state.
 //! - `open_web_link.rs`: opens a clicked link when it is a web URL; `is_openable` says which are.
@@ -25,8 +26,10 @@ mod markdown_view;
 mod open_web_link;
 mod selectable_texts;
 mod selected_text;
+mod text_pieces;
 mod text_segment;
 mod text_selection;
 
 pub use markdown_view::MarkdownView;
 pub use open_web_link::is_openable;
+pub use text_pieces::{covers, edge_pieces};
