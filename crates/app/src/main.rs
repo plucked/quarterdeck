@@ -22,6 +22,7 @@
 //! - `bundled_icons.rs`: `BundledIcons`, the asset source serving the SVG icons built into the binary.
 //! - `file_icon_svgs.rs`: the SVG of each file icon in the file tree, and which one the active theme draws.
 //! - `github_link.rs`: `GitHubLink`, GitHub's mark as an icon button opening a page on GitHub.
+//! - `diff_line_sides.rs`: a diff line's number on the old or new side, and a brief anchor's side as one.
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
 //! - `settings_window/`: the settings window (cmd-,), one page per category.
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
@@ -61,6 +62,7 @@ mod checkbox;
 mod checks_panel;
 mod count_as_f32;
 mod counted;
+mod diff_line_sides;
 mod diff_view;
 mod display_date;
 mod display_size;

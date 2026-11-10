@@ -5,6 +5,7 @@ use qd_diff::DiffLineKind;
 use qd_github::LineSide;
 
 use super::loaded_file::LoadedFile;
+use crate::diff_line_sides::line_number_on;
 
 /// Lines of code shown above a note's first line.
 const CONTEXT_LINES: usize = 2;
@@ -124,13 +125,7 @@ fn lines_title(anchor: &NoteAnchor) -> String {
 /// as `+`/`-`/` ` prefixed lines; `None` when the diff does not show them.
 fn code_excerpt(loaded: &LoadedFile, side: LineSide, first: u32, last: u32) -> Option<String> {
     for hunk in loaded.diff.hunks() {
-        let number_of = |index: usize| {
-            let line = &hunk.lines[index];
-            match side {
-                LineSide::New => line.new_number,
-                LineSide::Old => line.old_number,
-            }
-        };
+        let number_of = |index: usize| line_number_on(&hunk.lines[index], side);
         let in_range: Vec<usize> = (0..hunk.lines.len())
             .filter(|index| {
                 number_of(*index).is_some_and(|number| (first..=last).contains(&number))

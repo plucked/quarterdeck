@@ -10,6 +10,7 @@ use super::comment_placement::CommentPlacement;
 use super::detail_content::DetailContent;
 use super::detail_row::DetailRow;
 use super::loaded_file::LoadedFile;
+use crate::diff_line_sides::line_number_on;
 use crate::diff_view::{FileDiffState, FileNote};
 
 /// The rows of the detail pane in order, and which rows belong to each file,
@@ -101,11 +102,7 @@ impl DetailRowList {
                                 row,
                             });
                             let line_number = |index: Option<usize>, side: LineSide| {
-                                let line = hunk.lines.get(index?)?;
-                                let number = match side {
-                                    LineSide::Old => line.old_number,
-                                    LineSide::New => line.new_number,
-                                }?;
+                                let number = line_number_on(hunk.lines.get(index?)?, side)?;
                                 Some((side, number))
                             };
                             let anchors = [

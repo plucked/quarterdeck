@@ -14,6 +14,7 @@
 | `shared_cache` | `SharedCache`: `Arc<Mutex<GitHubCache>>` with poison-tolerant `lock` |
 | `fetch_stack` | `cached_stack` / `refresh_stack`: a stack's layers from the cache, and checked with GitHub (conditional), used by the queue and the detail |
 | `ui_state` | `UiStateRecorder` global (reads saved UI state, batches writes) and window placement conversion |
+| `diff_line_sides` | `line_number_on(line, LineSide)`: a diff line's old or new number; `line_side_of(CodeSide)`: a brief anchor's base / head as old / new |
 | `diff_view` | per-row diff rendering (file header, hunk header, gap bar, unified line, split row, note, card framing) and `DiffSummaryBar`; `GapPart`, `FileTextLoad` |
 | `segmented_control` | `SegmentedControl`: reusable row of exclusive options; `fill_width` spans its container; `large` (body-size labels, more padding) for a view's main switch (Diff / Brief) |
 | `text_area` | `TextArea`: multiline text editor entity (gpui has none): typing through the system input handler (IME), selection, word/line moves, copy/cut/paste, cmd-enter → `TextAreaEvent::Submit`, escape → `Cancel`; key context `TextArea` |

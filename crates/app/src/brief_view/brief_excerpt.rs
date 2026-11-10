@@ -1,7 +1,8 @@
 use qd_diff::DiffLineKind;
-use qd_studio::{CodeAnchor, CodeSide};
+use qd_studio::CodeAnchor;
 
 use super::brief_diffs::BriefDiffs;
+use crate::diff_line_sides::{line_number_on, line_side_of};
 
 /// One line of code quoted in the brief, cut from the loaded diff.
 pub struct ExcerptLine {
@@ -18,14 +19,12 @@ pub fn brief_excerpt(diffs: &dyn BriefDiffs, anchor: &CodeAnchor) -> Vec<Excerpt
         return Vec::new();
     };
     let lines = anchor.lines();
+    let side = line_side_of(anchor.side);
     diff.hunks()
         .iter()
         .flat_map(|hunk| &hunk.lines)
         .filter_map(|line| {
-            let number = match anchor.side {
-                CodeSide::Base => line.old_number,
-                CodeSide::Head => line.new_number,
-            }?;
+            let number = line_number_on(line, side)?;
             lines.contains(&number).then(|| ExcerptLine {
                 number,
                 kind: line.kind,

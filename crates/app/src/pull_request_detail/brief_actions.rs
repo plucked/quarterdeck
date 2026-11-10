@@ -27,6 +27,7 @@ use super::run_cancel::RunCancel;
 use crate::brief_view::{
     BriefHandlers, BriefPageRow, BriefReport, BriefState, PreparedBrief, ReportHost, view_action,
 };
+use crate::diff_line_sides::{line_number_on, line_side_of};
 use crate::ui_state::UiStateRecorder;
 
 /// The report panel's text field while empty.
@@ -299,12 +300,9 @@ impl PullRequestDetail {
     fn row_of_line(&self, file: usize, side: CodeSide, number: u32) -> Option<usize> {
         let range = self.rows().file_range(file)?;
         let diff = &self.loaded_files().get(file)?.diff;
+        let side = line_side_of(side);
         let number_at = |hunk: usize, line: usize| {
-            let line = diff.hunks().get(hunk)?.lines.get(line)?;
-            match side {
-                CodeSide::Base => line.old_number,
-                CodeSide::Head => line.new_number,
-            }
+            line_number_on(diff.hunks().get(hunk)?.lines.get(line)?, side)
         };
         let start = range.start;
         self.rows()
