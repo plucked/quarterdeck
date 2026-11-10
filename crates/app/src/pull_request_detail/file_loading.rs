@@ -1,9 +1,10 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::Context;
 use qd_cache::{ReviewScope, UiStateStore, ViewedFile};
+use qd_diff::DiffOptions;
 use qd_file_tree::FileTree;
 use qd_github::{GitHubClient, PullRequest, PullRequestFile};
 
@@ -63,11 +64,16 @@ impl PullRequestDetail {
             pull_request_id: pull_request.id,
             target: target.clone(),
         };
-        let wants_stored_brief = self.brief().state_of(&brief_key).is_none();
-        let cache = self.services.cache.clone();
-        let client = self.services.github.clone();
-        let ui_state = cx.global::<UiStateRecorder>().shared_store();
-        let options = self.diff_settings.diff_options();
+        let request = ChangesRequest {
+            client: self.services.github.clone(),
+            cache: self.services.cache.clone(),
+            ui_state: cx.global::<UiStateRecorder>().shared_store(),
+            pull_request,
+            target: target.clone(),
+            scope,
+            options: self.diff_settings.diff_options(),
+            wants_stored_brief: self.brief().state_of(&brief_key).is_none(),
+        };
 
         // Clear what was shown; a combined review without its layers only waits.
         let first_step = match target {
@@ -97,44 +103,7 @@ impl PullRequestDetail {
                 let report = |step| {
                     progress_sender.unbounded_send(step).ok();
                 };
-                let files = fetch_target_files(client, &cache, &pull_request, &target, &report)?;
-
-                // Build every diff here too: word comparisons can take a moment on big files.
-                report(LoadProgress::BuildingDiffs { files: files.len() });
-                let built: Vec<LoadedFile> = files
-                    .into_iter()
-                    .map(|file| LoadedFile::build(file, options))
-                    .collect();
-
-                // Put the files in tree order, so the tree and the diff agree.
-                let paths: Vec<&str> = built.iter().map(LoadedFile::filename).collect();
-                let ordered: Vec<LoadedFile> = FileTree::build(&paths)
-                    .file_order()
-                    .into_iter()
-                    .map(|index| built[index].clone())
-                    .collect();
-                let ordered_paths: Vec<&str> = ordered.iter().map(LoadedFile::filename).collect();
-                let tree = FileTree::build(&ordered_paths);
-                let notes_and_summary = read_review_notes(&ui_state, &scope);
-
-                // The stored brief of this scope, and the head the files are of.
-                let brief = wants_stored_brief
-                    .then(|| read_prepared_brief(&ui_state, &scope))
-                    .flatten();
-                let head_sha = HeadCommit::of(&target, &pull_request)
-                    .resolve(&cache)
-                    .ok()
-                    .flatten();
-                anyhow::Ok(FetchedChanges {
-                    files: ordered,
-                    tree,
-                    viewed_marks: read_viewed_files(&ui_state, &scope),
-                    notes: notes_and_summary.0,
-                    summary: notes_and_summary.1,
-                    scope,
-                    brief,
-                    head_sha,
-                })
+                fetch_changes(request, &report)
             });
 
             // Show each step as it is reported; the channel ends with the load.
@@ -220,6 +189,79 @@ fn fetch_target_files(
             })
         }
     }
+}
+
+/// What a load of the shown files needs on the background executor.
+struct ChangesRequest {
+    client: Result<GitHubClient, String>,
+    cache: SharedCache,
+    ui_state: Arc<Mutex<UiStateStore>>,
+    pull_request: PullRequest,
+    target: ReviewTarget,
+    /// Whose marks, notes and brief to read.
+    scope: ReviewScope,
+    options: DiffOptions,
+    /// Whether to read the stored brief: not when this session holds one there.
+    wants_stored_brief: bool,
+}
+
+/// Fetches the files `request` asks for and builds their diffs in tree
+/// order, with the viewed marks, notes, summary, stored brief and head
+/// commit of its scope, reporting each step.
+///
+/// Blocking: runs on the background executor.
+fn fetch_changes(
+    request: ChangesRequest,
+    report: &dyn Fn(LoadProgress),
+) -> anyhow::Result<FetchedChanges> {
+    let ChangesRequest {
+        client,
+        cache,
+        ui_state,
+        pull_request,
+        target,
+        scope,
+        options,
+        wants_stored_brief,
+    } = request;
+    let files = fetch_target_files(client, &cache, &pull_request, &target, report)?;
+
+    // Build every diff here too: word comparisons can take a moment on big files.
+    report(LoadProgress::BuildingDiffs { files: files.len() });
+    let built: Vec<LoadedFile> = files
+        .into_iter()
+        .map(|file| LoadedFile::build(file, options))
+        .collect();
+
+    // Put the files in tree order, so the tree and the diff agree.
+    let paths: Vec<&str> = built.iter().map(LoadedFile::filename).collect();
+    let ordered: Vec<LoadedFile> = FileTree::build(&paths)
+        .file_order()
+        .into_iter()
+        .map(|index| built[index].clone())
+        .collect();
+    let ordered_paths: Vec<&str> = ordered.iter().map(LoadedFile::filename).collect();
+    let tree = FileTree::build(&ordered_paths);
+    let notes_and_summary = read_review_notes(&ui_state, &scope);
+
+    // The stored brief of this scope, and the head the files are of.
+    let brief = wants_stored_brief
+        .then(|| read_prepared_brief(&ui_state, &scope))
+        .flatten();
+    let head_sha = HeadCommit::of(&target, &pull_request)
+        .resolve(&cache)
+        .ok()
+        .flatten();
+    Ok(FetchedChanges {
+        files: ordered,
+        tree,
+        viewed_marks: read_viewed_files(&ui_state, &scope),
+        notes: notes_and_summary.0,
+        summary: notes_and_summary.1,
+        scope,
+        brief,
+        head_sha,
+    })
 }
 
 /// The brief stored for `scope`, prepared for drawing (Markdown parsed,
