@@ -7,15 +7,15 @@ use gpui::App;
 /// `JetBrains Mono` for code, one static file per weight and style the app
 /// draws, so bold and medium text get their real cuts.
 const BUNDLED_FONTS: [&[u8]; 9] = [
-    include_bytes!("../assets/fonts/SchibstedGrotesk-Regular.ttf"),
-    include_bytes!("../assets/fonts/SchibstedGrotesk-Medium.ttf"),
-    include_bytes!("../assets/fonts/SchibstedGrotesk-SemiBold.ttf"),
-    include_bytes!("../assets/fonts/SchibstedGrotesk-Bold.ttf"),
-    include_bytes!("../assets/fonts/SchibstedGrotesk-Italic.ttf"),
-    include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf"),
-    include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf"),
-    include_bytes!("../assets/fonts/JetBrainsMono-Italic.ttf"),
-    include_bytes!("../assets/fonts/JetBrainsMono-BoldItalic.ttf"),
+    include_bytes!("../../assets/fonts/SchibstedGrotesk-Regular.ttf"),
+    include_bytes!("../../assets/fonts/SchibstedGrotesk-Medium.ttf"),
+    include_bytes!("../../assets/fonts/SchibstedGrotesk-SemiBold.ttf"),
+    include_bytes!("../../assets/fonts/SchibstedGrotesk-Bold.ttf"),
+    include_bytes!("../../assets/fonts/SchibstedGrotesk-Italic.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMono-Regular.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMono-Bold.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMono-Italic.ttf"),
+    include_bytes!("../../assets/fonts/JetBrainsMono-BoldItalic.ttf"),
 ];
 
 /// Makes the bundled fonts available to every window under their family

@@ -16,7 +16,7 @@ macro_rules! file_icon_svg {
     ($name:literal) => {
         FileIconSvg {
             path: concat!("icons/files/", $name, ".svg"),
-            svg: include_bytes!(concat!("../assets/icons/files/", $name, ".svg")),
+            svg: include_bytes!(concat!("../../assets/icons/files/", $name, ".svg")),
         }
     };
 }

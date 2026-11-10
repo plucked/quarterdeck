@@ -12,5 +12,5 @@
 | `file_category` | path heuristics (crate-private; callers use `FileKind` and `FileFacets`): `is_test_path`, `is_generated_path` (lock files, minified, `.pb.go`, `.designer.cs`, Unity `.meta`, generated folders), `extension_of`, `file_type_of` (the extension, else the file name: `Dockerfile`, `.gitignore`) |
 
 - UI-free and dependency-free. File indexes are positions in the paths the tree was built from; the app builds the tree, reorders its files by `file_order()`, and builds again so indexes equal display order.
-- A new file type gets a row in `file_icon_rules.rs` and, for a new icon, a `FileIcon` variant plus its SVG in the app (`file_icon_svgs.rs`).
+- A new file type gets a row in `file_icon_rules.rs` and, for a new icon, a `FileIcon` variant plus its SVG in the app (`crates/app/src/bundled_assets/file_icon_svgs.rs`).
 - Test/generated detection is heuristic (GitHub's API has no linguist data); extend the lists in `file_category.rs` with a test case for each new pattern.

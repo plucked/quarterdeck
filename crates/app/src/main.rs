@@ -18,9 +18,7 @@
 //! - `word_range_at.rs`: the word around an offset, for double-click selection.
 //! - `theme/`: the eight color themes, the active one's colors, and the fonts.
 //! - `tree_locate_button.rs`: `TreeLocateButton`, the file header's icon button showing the file in the file tree.
-//! - `bundled_fonts.rs`: registers the fonts built into the binary (`Schibsted Grotesk`, `JetBrains Mono`).
-//! - `bundled_icons.rs`: `BundledIcons`, the asset source serving the SVG icons built into the binary.
-//! - `file_icon_svgs.rs`: the SVG of each file icon in the file tree, and which one the active theme draws.
+//! - `bundled_assets/`: the fonts and icons built into the binary, registered with and served to gpui.
 //! - `github_link.rs`: `GitHubLink`, GitHub's mark as an icon button opening a page on GitHub.
 //! - `diff_line_sides.rs`: a diff line's number on the old or new side, and a brief anchor's side as one.
 //! - `diff_view/`: per-row diff rendering and the summary bar above the files.
@@ -45,8 +43,7 @@ mod app_update;
 mod avatar_images;
 mod brief_gallery;
 mod brief_view;
-mod bundled_fonts;
-mod bundled_icons;
+mod bundled_assets;
 mod checks_panel;
 mod controls;
 mod count_as_f32;
@@ -56,7 +53,6 @@ mod display_text;
 mod distinct_repositories;
 mod facet_chips;
 mod fetch_stack;
-mod file_icon_svgs;
 mod github_link;
 mod launch_app;
 mod main_window;

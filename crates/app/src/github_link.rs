@@ -4,7 +4,7 @@ use gpui::{
     App, ElementId, IntoElement, RenderOnce, SharedString, Window, div, prelude::*, px, svg,
 };
 
-use crate::bundled_icons::GITHUB_MARK;
+use crate::bundled_assets::GITHUB_MARK;
 use crate::theme;
 
 /// Size of the drawn mark.

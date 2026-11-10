@@ -6,7 +6,7 @@ use std::borrow::Cow;
 
 use gpui::{AssetSource, SharedString};
 
-use crate::file_icon_svgs::{file_icon_paths, file_icon_svg};
+use super::file_icon_svgs::{file_icon_paths, file_icon_svg};
 
 /// The asset path of GitHub's mark (Octicons' `mark-github`, MIT), drawn in
 /// the text color by `svg().path(GITHUB_MARK)`.
@@ -15,7 +15,7 @@ pub const GITHUB_MARK: &str = "icons/github-mark.svg";
 /// Every bundled icon: its asset path and its SVG.
 const ICONS: [(&str, &[u8]); 1] = [(
     GITHUB_MARK,
-    include_bytes!("../assets/icons/github-mark.svg"),
+    include_bytes!("../../assets/icons/github-mark.svg"),
 )];
 
 /// Serves the icons compiled into the binary (`assets/icons`, the file
