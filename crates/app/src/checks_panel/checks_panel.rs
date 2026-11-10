@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use gpui::{Context, ListAlignment, ListState, SharedString, Task, px};
-use qd_github::{CheckDetails, CheckOutcome, MergeConflict, PullRequestChecks};
+use qd_github::CheckOutcome;
 
 use super::check_row::{CheckRow, SkippedChecks};
-use super::check_tree::CheckTree;
 use super::checks_target::ChecksTarget;
+use super::shown_checks::{CheckContent, ShownChecks};
 use super::unfolded_checks::UnfoldedChecks;
 use crate::app_services::AppServices;
 use crate::display_date::unix_now;
@@ -36,37 +36,6 @@ pub struct ChecksPanel {
     load_task: Option<Task<()>>,
     /// The wait before the next read; dropped when the tab hides.
     refresh_task: Option<Task<()>>,
-}
-
-/// Checks as last read.
-pub struct ShownChecks {
-    pub head_sha: String,
-    pub rollup: Option<CheckOutcome>,
-    pub total_count: usize,
-    pub content: CheckContent,
-    /// Where the single checks came from.
-    pub origin: CheckOrigin,
-    /// The merge conflict that keeps workflows from running, if any.
-    pub conflict: Option<MergeConflict>,
-    /// When they were read, in Unix seconds.
-    pub read_at: i64,
-}
-
-/// Where the single checks of [`ShownChecks`] came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CheckOrigin {
-    /// GitHub's rollup: every check, with which are required.
-    Rollup,
-    /// GitHub Actions jobs and commit statuses, read because the token may
-    /// not read check runs: no required marks, no other apps' checks.
-    ActionsJobs,
-}
-
-/// The checks arranged for reading, or why only the rollup is known.
-pub enum CheckContent {
-    Tree(Box<CheckTree>),
-    /// The token may not read single checks.
-    NotPermitted,
 }
 
 impl ChecksPanel {
@@ -254,30 +223,6 @@ impl ChecksPanel {
             Some(CheckContent::NotPermitted) | None => Vec::new(),
         };
         self.list.reset(self.rows.len());
-    }
-}
-
-impl ShownChecks {
-    /// The checks as read just now, arranged for reading.
-    fn arrange(checks: PullRequestChecks) -> Self {
-        let origin = match checks.details {
-            CheckDetails::FromActions(_) => CheckOrigin::ActionsJobs,
-            CheckDetails::Listed(_) | CheckDetails::NotPermitted => CheckOrigin::Rollup,
-        };
-        Self {
-            origin,
-            conflict: checks.conflict,
-            head_sha: checks.head_sha,
-            rollup: checks.rollup,
-            total_count: checks.total_count,
-            content: match checks.details {
-                CheckDetails::Listed(listed) | CheckDetails::FromActions(listed) => {
-                    CheckContent::Tree(Box::new(CheckTree::build(listed)))
-                }
-                CheckDetails::NotPermitted => CheckContent::NotPermitted,
-            },
-            read_at: unix_now(),
-        }
     }
 }
 

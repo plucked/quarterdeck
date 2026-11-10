@@ -4,6 +4,7 @@
 //!
 //! Files:
 //! - `checks_panel.rs`: `ChecksPanel`, the tab's view: what it shows, reading the checks and keeping them current.
+//! - `shown_checks.rs`: `ShownChecks`, the checks as last read: arranged in a tree and where they came from, or only the rollup.
 //! - `checks_target.rs`: `ChecksTarget`, the pull request the tab follows.
 //! - `checks_rendering.rs`: the summary (verdict, counts, outcome bar, required checks) and the rows.
 //! - `check_tree.rs`: `CheckTree`, the checks grouped by workflow and called workflow, in reading order.
@@ -19,6 +20,7 @@ mod check_tree;
 mod checks_panel;
 mod checks_rendering;
 mod checks_target;
+mod shown_checks;
 mod unfolded_checks;
 
 pub use checks_panel::ChecksPanel;
