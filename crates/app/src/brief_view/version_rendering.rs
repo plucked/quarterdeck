@@ -4,7 +4,7 @@ use qd_studio::BriefRecord;
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::report_state::ReportState;
 use crate::button::Button;
-use crate::display_date::{age_since, unix_now};
+use crate::display_date::{time_ago, unix_now};
 use crate::short_sha::short_sha;
 use crate::theme;
 
@@ -68,7 +68,7 @@ fn render_version_text(
     shown_head: Option<&str>,
     handlers: &BriefHandlers,
 ) -> AnyElement {
-    let age = age_since(
+    let age = time_ago(
         i64::try_from(record.written_at).unwrap_or(i64::MAX),
         unix_now(),
     );
@@ -82,7 +82,7 @@ fn render_version_text(
             .text_xs()
             .text_color(theme::subtle())
             .child(format!(
-                "Written {age} ago for the head commit {}",
+                "Written {age} for the head commit {}",
                 short_sha(head)
             ))
             .into_any_element(),
@@ -90,7 +90,7 @@ fn render_version_text(
             .text_xs()
             .text_color(theme::subtle())
             .child(format!(
-                "Written {age} ago; its commit is not known, so it may not match the version shown"
+                "Written {age}; its commit is not known, so it may not match the version shown"
             ))
             .into_any_element(),
         BriefVersion::Older { written, shown } => div()
@@ -109,7 +109,7 @@ fn render_version_text(
                     .min_w_0()
                     .text_xs()
                     .child(format!(
-                        "Written {age} ago for an older version (commit {}). The pull request is now at {}, so parts of the brief may no longer match the diff.",
+                        "Written {age} for an older version (commit {}). The pull request is now at {}, so parts of the brief may no longer match the diff.",
                         short_sha(written),
                         short_sha(shown)
                     )),

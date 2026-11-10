@@ -10,7 +10,7 @@ use super::check_tally::CheckTally;
 use super::check_tree::{CheckTree, TreeEntry};
 use super::checks_panel::{CheckContent, CheckOrigin, ChecksPanel, ShownChecks};
 use crate::button::Button;
-use crate::display_date::{age_since, unix_now, unix_seconds};
+use crate::display_date::{time_ago, unix_now, unix_seconds};
 use crate::fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
 use crate::pulsing_status::PulsingStatus;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
@@ -730,10 +730,7 @@ fn access_note(shown: &ShownChecks) -> Option<&'static str> {
 
 /// `Required: 3 of 3 passed · abc1234 · read 2m ago`, the parts known.
 fn footnote(shown: &ShownChecks, required: Option<&CheckTally>) -> String {
-    let read = match age_since(shown.read_at, unix_now()).as_str() {
-        "now" => "read just now".to_owned(),
-        age => format!("read {age} ago"),
-    };
+    let read = format!("read {}", time_ago(shown.read_at, unix_now()));
     required
         .map(|required| {
             format!(

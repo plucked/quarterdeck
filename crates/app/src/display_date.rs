@@ -1,6 +1,7 @@
 //! `short_date` and `relative_age` (with `unix_now`): GitHub's ISO 8601
 //! timestamps as people read them; `unix_seconds` reads one as a time;
-//! `age_since` an age between two Unix times.
+//! `age_since` an age between two Unix times, `time_ago` the same as a
+//! phrase.
 
 /// Month names, January first.
 const MONTHS: [&str; 12] = [
@@ -39,6 +40,15 @@ pub fn age_since(then: i64, now: i64) -> String {
         HOUR..DAY => format!("{}h", age / HOUR),
         DAY..WEEK => format!("{}d", age / DAY),
         _ => format!("{}w", age / WEEK),
+    }
+}
+
+/// How long ago `then` was at `now` (both Unix seconds), as a phrase to
+/// follow a verb: `just now` under a minute, else `12m ago`, `3h ago`.
+pub fn time_ago(then: i64, now: i64) -> String {
+    match age_since(then, now).as_str() {
+        "now" => "just now".to_owned(),
+        age => format!("{age} ago"),
     }
 }
 
@@ -121,5 +131,13 @@ mod tests {
         assert_eq!(relative_age(then, at + 2 * DAY), "2d");
         assert_eq!(relative_age(then, at + 3 * WEEK), "3w");
         assert_eq!(relative_age(then, at + 9 * WEEK), "5 Nov 2026");
+    }
+
+    /// Under a minute reads `just now`, never `now ago`; older ages end in `ago`.
+    #[test]
+    fn time_ago_reads_as_a_phrase() {
+        assert_eq!(time_ago(1000, 1030), "just now");
+        assert_eq!(time_ago(1000, 1000 + 12 * MINUTE), "12m ago");
+        assert_eq!(time_ago(1000, 1000 + 3 * HOUR), "3h ago");
     }
 }

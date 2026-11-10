@@ -29,7 +29,7 @@
 | `pulsing_status` | `PulsingStatus`: a small accent status that pulses while it lasts (the top bar's `Refreshing from GitHub…` / `Opening #n…`, the Checks tab's `Reading…`); `dot_pulse`, the same 1.2 s pulse for activity dots (the detail's activity pill, a running check's mark) |
 | `section_label` | `SectionLabel`: the small uppercase `subtle` label heading a panel section, card or option group (semibold `text_xs` by default; `compact` 10 px for the Checks and Review tabs and chip rows, `weight`, `truncate`) |
 | `checkbox` | `Checkbox` + `CheckState` (unchecked, checked, mixed): a drawn checkbox, used for viewed marks and options |
-| `display_date` | `short_date`: a GitHub timestamp as `21 Oct 2026`; `relative_age`; `unix_seconds` (the Others filter's Updated within) |
+| `display_date` | `short_date`: a GitHub timestamp as `21 Oct 2026`; `relative_age`; `unix_seconds` (the Others filter's Updated within); `age_since`; `time_ago` (`just now`, `12m ago`: the Checks footnote, a brief's version line) |
 | `display_size` | `byte_size`: a byte count as `151.7 MB` |
 | `short_sha` | `short_sha`: a commit SHA's first seven characters (the stack range line, a brief's version line) |
 | `resize_handle` | `ResizeHandle`: reusable divider strip between two panels in a flex row; dragging it reports a clamped width (`ResizeEdge` says which side the panel is on) |
