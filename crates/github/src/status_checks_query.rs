@@ -345,7 +345,7 @@ impl ContextNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphql_response::{GraphQlData, GraphQlResponse};
+    use crate::graphql_response::GraphQlResponse;
 
     /// A page with a workflow job, another app's check and a commit status.
     const MIXED_PAGE: &str = r#"{"data":{"repository":{"pullRequest":{"mergeable":"MERGEABLE","baseRefName":"main",
@@ -380,19 +380,20 @@ mod tests {
           {"type":"FORBIDDEN","message":"Resource not accessible by personal access token"}]}"#;
 
     /// Decodes `json` as the query's answer, withheld parts allowed.
-    fn page_of(json: &str) -> (StatusChecksPage, bool) {
+    fn page_of(json: &str) -> StatusChecksPage {
         let answer: GraphQlResponse<StatusChecksData> = serde_json::from_str(json).unwrap();
-        match answer.into_data_or_forbidden().unwrap() {
-            GraphQlData::Complete(data) => (data.into_page().unwrap(), false),
-            GraphQlData::PartlyForbidden(data) => (data.into_page().unwrap(), true),
-        }
+        answer
+            .into_data_or_forbidden()
+            .unwrap()
+            .into_page()
+            .unwrap()
     }
 
     /// Check runs name their workflow or app; a commit status is its own source.
     #[test]
     fn checks_keep_their_source_and_outcome() {
-        let (page, is_forbidden) = page_of(MIXED_PAGE);
-        assert!(!is_forbidden);
+        let page = page_of(MIXED_PAGE);
+        assert_eq!(page.unreadable_count, 0);
         assert_eq!(page.head_sha, "abc123");
         assert_eq!(page.rollup, Some(CheckOutcome::Running));
         assert_eq!(page.next_cursor, None);
@@ -427,8 +428,7 @@ mod tests {
     /// Withheld checks leave the rollup, the count and the next page readable.
     #[test]
     fn forbidden_checks_keep_the_rollup() {
-        let (page, is_forbidden) = page_of(FORBIDDEN_PAGE);
-        assert!(is_forbidden);
+        let page = page_of(FORBIDDEN_PAGE);
         assert_eq!(page.rollup, Some(CheckOutcome::Failed));
         assert_eq!(page.total_count, 148);
         assert_eq!(page.unreadable_count, 2);
@@ -441,7 +441,7 @@ mod tests {
     fn a_commit_without_checks_has_no_rollup() {
         let json = r#"{"data":{"repository":{"pullRequest":{"mergeable":"CONFLICTING","baseRefName":"develop",
             "commits":{"nodes":[{"commit":{"oid":"abc123","statusCheckRollup":null}}]}}}}}"#;
-        let (page, _) = page_of(json);
+        let page = page_of(json);
         assert_eq!(page.rollup, None);
         assert_eq!(page.total_count, 0);
         assert_eq!(page.mergeable, "CONFLICTING");

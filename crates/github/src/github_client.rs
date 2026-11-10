@@ -6,7 +6,7 @@ use ureq::Agent;
 use ureq::http::{HeaderMap, Response, StatusCode};
 use ureq::{Body, RequestBuilder};
 
-use crate::graphql_response::{GraphQlData, GraphQlResponse};
+use crate::graphql_response::GraphQlResponse;
 use crate::listed_details_query::{LISTED_DETAILS_QUERY, ListedDetailsData};
 use crate::next_page_url::next_page_url;
 use crate::other_pull_requests::others_search_queries;
@@ -197,7 +197,7 @@ impl GitHubClient {
         &self,
         query: &str,
         variables: &serde_json::Value,
-    ) -> Result<GraphQlData<T>, GitHubError> {
+    ) -> Result<T, GitHubError> {
         self.graphql_answer(query, variables)?
             .into_data_or_forbidden()
             .map_err(graphql_error)

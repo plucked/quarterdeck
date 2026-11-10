@@ -1,6 +1,5 @@
 use crate::expected_checks::{RequiredMarks, add_expected_checks};
 use crate::github_client::graphql_error;
-use crate::graphql_response::GraphQlData;
 use crate::layer_conflicts_query::{LayerConflictsData, layer_conflicts_query};
 use crate::status_checks_query::{
     CHECKS_PAGE_SIZE, STATUS_CHECKS_QUERY, StatusChecksData, StatusChecksPage,
@@ -41,7 +40,7 @@ impl GitHubClient {
         let mut after: Option<String> = None;
         for _ in 0..MAX_CHECK_PAGES {
             // Read one page; withheld checks come back as gaps, not as a failure.
-            let data: GraphQlData<StatusChecksData> = self.graphql_allowing_forbidden(
+            let data: StatusChecksData = self.graphql_allowing_forbidden(
                 STATUS_CHECKS_QUERY,
                 &serde_json::json!({
                     "owner": repo.owner,
@@ -51,9 +50,6 @@ impl GitHubClient {
                     "after": after,
                 }),
             )?;
-            let data = match data {
-                GraphQlData::Complete(data) | GraphQlData::PartlyForbidden(data) => data,
-            };
             let mut page = data.into_page().map_err(graphql_error)?;
 
             // A token that cannot read one check reads none: ask GitHub Actions instead.
