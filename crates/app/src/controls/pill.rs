@@ -50,6 +50,7 @@ pub struct Pill {
     style: PillStyle,
     size: PillSize,
     weight: Option<FontWeight>,
+    text_color: Option<Rgba>,
     mark: Option<AnyElement>,
 }
 
@@ -61,6 +62,7 @@ impl Pill {
             style,
             size: PillSize::Small,
             weight: None,
+            text_color: None,
             mark: None,
         }
     }
@@ -91,6 +93,13 @@ impl Pill {
     #[must_use]
     pub fn weight(mut self, weight: FontWeight) -> Self {
         self.weight = Some(weight);
+        self
+    }
+
+    /// Colors the label while keeping the style's fill and border.
+    #[must_use]
+    pub fn text_color(mut self, color: Rgba) -> Self {
+        self.text_color = Some(color);
         self
     }
 
@@ -140,6 +149,8 @@ impl RenderOnce for Pill {
             Some(weight) => pill.font_weight(weight),
             None => pill,
         };
+        // Label color can carry meaning without making the capsule's outline stronger.
+        let pill = pill.when_some(self.text_color, Styled::text_color);
         // A mark sits before the text, centered on it.
         match self.mark {
             Some(mark) => pill

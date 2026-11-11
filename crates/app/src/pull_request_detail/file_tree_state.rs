@@ -35,7 +35,7 @@ pub struct FileTreeState {
     file_count: usize,
     /// Whether the type row shows every type, not only the most common.
     are_types_expanded: bool,
-    /// Each folder's changed lines and viewed state, as of the last row refresh.
+    /// Each folder's changed lines, file count, heat and viewed state, as of the last refresh.
     folder_summaries: HashMap<NodeId, FolderSummary>,
     /// The largest added and removed counts a top-level row shows, which
     /// no deeper row exceeds; the tree's count columns are sized for it.
@@ -109,7 +109,7 @@ impl FileTreeState {
         (self.shown_count, self.file_count)
     }
 
-    /// Folder `folder`'s changed lines and viewed state.
+    /// Folder `folder`'s changed lines, file count, heat and viewed state.
     pub fn folder_summary(&self, folder: NodeId) -> Option<FolderSummary> {
         self.folder_summaries.get(&folder).copied()
     }
@@ -179,6 +179,16 @@ impl FileTreeState {
             let totals = self.summarize(root, files, review, &mut summaries);
             widest = widest.widest(totals.lines);
         }
+        // Scale heat to matching files, including descendants of collapsed folders.
+        // Folders with no matching files contribute zero to the scale.
+        let largest = summaries
+            .values()
+            .map(|summary| summary.file_count)
+            .max()
+            .unwrap_or_default();
+        for summary in summaries.values_mut() {
+            summary.heat = folder_heat(summary.file_count, largest);
+        }
         self.folder_summaries = summaries;
         self.widest_line_counts = widest;
     }
@@ -198,18 +208,22 @@ impl FileTreeState {
                     return NodeTotals::default();
                 };
                 // The folder checkbox covers files the chips let through, viewed or not.
-                let is_covered = self
-                    .filter
-                    .shows_ignoring_viewed(&filtered_file(loaded, &FileReviewState::default()));
-                let is_viewed = review.is_viewed(loaded.filename());
-                NodeTotals {
-                    lines: LineCounts {
+                let filtered = filtered_file(loaded, review);
+                let is_covered = self.filter.shows_ignoring_viewed(&filtered);
+                let mut totals = NodeTotals {
+                    covered: usize::from(is_covered),
+                    viewed: usize::from(is_covered && filtered.is_viewed),
+                    ..NodeTotals::default()
+                };
+                // Counts and heat describe only files that pass the active filters.
+                if self.filter.shows(&filtered) {
+                    totals.file_count = 1;
+                    totals.lines = LineCounts {
                         additions: loaded.file.additions,
                         deletions: loaded.file.deletions,
-                    },
-                    covered: usize::from(is_covered),
-                    viewed: usize::from(is_covered && is_viewed),
+                    };
                 }
+                totals
             }
             TreeNodeKind::Folder { children } => {
                 let totals = children
@@ -220,6 +234,8 @@ impl FileTreeState {
                     node,
                     FolderSummary {
                         lines: totals.lines,
+                        file_count: totals.file_count,
+                        heat: 0.,
                         viewed: FolderViewedState::of(totals.viewed, totals.covered),
                     },
                 );
@@ -361,6 +377,7 @@ impl FileTreeState {
 #[derive(Clone, Copy, Default)]
 struct NodeTotals {
     lines: LineCounts,
+    file_count: usize,
     /// Files the chips let through (a folder checkbox covers these).
     covered: usize,
     /// Of those, the viewed ones.
@@ -371,10 +388,21 @@ impl NodeTotals {
     fn plus(self, other: Self) -> Self {
         Self {
             lines: self.lines.plus(other.lines),
+            file_count: self.file_count + other.file_count,
             covered: self.covered + other.covered,
             viewed: self.viewed + other.viewed,
         }
     }
+}
+
+/// One changed file stays cold; the largest folder is warm. A logarithmic
+/// scale keeps smaller hotspots visible beside a very large subtree.
+fn folder_heat(file_count: usize, largest: usize) -> f64 {
+    if file_count <= 1 || largest <= 1 {
+        return 0.;
+    }
+    let logarithm = |count| f64::from(u32::try_from(count).unwrap_or(u32::MAX)).ln();
+    (logarithm(file_count) / logarithm(largest)).clamp(0., 1.)
 }
 
 /// What the filter looks at in `loaded`, with its viewed mark from `review`.
@@ -390,7 +418,198 @@ fn filtered_file<'file>(
 
 #[cfg(test)]
 mod tests {
+    use qd_diff::DiffOptions;
+    use qd_github::PullRequestFile;
+
     use super::*;
+
+    /// Subtree totals count every status once, including patchless moves and
+    /// binaries, and remain stable through folding and visible viewed marks.
+    #[test]
+    fn folder_counts_and_heat_cover_all_descendants() {
+        // Mix direct and nested files, a compacted folder chain, and a root file.
+        let files: Vec<_> = [
+            ("src/app/main.rs", "modified", 10, 4),
+            ("src/app/moved.rs", "renamed", 0, 0),
+            ("src/image.png", "modified", 0, 0),
+            ("src/deleted.rs", "removed", 0, 7),
+            ("src/new.rs", "added", 3, 0),
+            ("docs/deep/page.md", "copied", 0, 0),
+            ("Cargo.toml", "modified", 1, 1),
+        ]
+        .into_iter()
+        .map(|(filename, status, additions, deletions)| {
+            LoadedFile::build(
+                PullRequestFile {
+                    filename: filename.into(),
+                    previous_filename: (status == "renamed").then(|| "old/moved.rs".into()),
+                    status: status.into(),
+                    additions,
+                    deletions,
+                    patch: None,
+                    sha: None,
+                },
+                DiffOptions::default(),
+            )
+        })
+        .collect();
+        let paths: Vec<_> = files.iter().map(LoadedFile::filename).collect();
+        let mut state = FileTreeState::new(ReviewLayoutState::default());
+        let mut review = FileReviewState::default();
+        state.reset_for(FileTree::build(&paths));
+        state.refresh_rows(&files, &review);
+        let find_folder = |path| {
+            *state
+                .folder_summaries
+                .keys()
+                .find(|node| state.tree.node(**node).path == path)
+                .unwrap()
+        };
+        let source = find_folder("src");
+        let nested = find_folder("src/app");
+        let docs = find_folder("docs/deep");
+        let before = state.folder_summary(source).unwrap();
+        assert_eq!(before.file_count, 5);
+        assert_eq!(before.lines.additions, 13);
+        assert_eq!(before.lines.deletions, 11);
+        assert_eq!(state.folder_summary(nested).unwrap().file_count, 2);
+        assert_eq!(state.folder_summary(docs).unwrap().file_count, 1);
+        assert!(before.heat > state.folder_summary(nested).unwrap().heat);
+        assert!(
+            state.folder_summary(nested).unwrap().heat > state.folder_summary(docs).unwrap().heat
+        );
+
+        // Viewed files still count while shown; folding keeps all descendants counted.
+        review.toggle_viewed(&files[0]);
+        state.collapse_all_folders();
+        state.refresh_rows(&files, &review);
+        let after = state.folder_summary(source).unwrap();
+        assert_eq!(after.file_count, before.file_count);
+        assert_eq!(after.lines, before.lines);
+        assert!((after.heat - before.heat).abs() < f64::EPSILON);
+        assert!(state.row_of_file(0).is_none());
+
+        // A different, empty review leaves no old counts or scale behind.
+        state.reset_for(FileTree::default());
+        state.refresh_rows(&[], &FileReviewState::default());
+        assert!(state.folder_summaries.is_empty());
+    }
+
+    /// Hidden viewed files contribute neither counts nor lines nor heat,
+    /// while folder checkboxes still track reviewed descendants.
+    #[test]
+    fn folder_totals_follow_visible_files() {
+        // A fully reviewed folder starts largest; another is partly reviewed.
+        let paths = [
+            "src/nested/a.rs",
+            "src/nested/b.rs",
+            "src/c.rs",
+            "docs/d.md",
+            "reviewed/e.rs",
+            "reviewed/f.rs",
+            "reviewed/g.rs",
+            "reviewed/h.rs",
+        ];
+        let files: Vec<_> = paths
+            .iter()
+            .map(|path| {
+                LoadedFile::build(
+                    PullRequestFile {
+                        filename: (*path).into(),
+                        previous_filename: None,
+                        status: "modified".into(),
+                        additions: 2,
+                        deletions: 1,
+                        patch: None,
+                        sha: None,
+                    },
+                    DiffOptions::default(),
+                )
+            })
+            .collect();
+        let mut state = FileTreeState::new(ReviewLayoutState::default());
+        let mut review = FileReviewState::default();
+        for index in [0, 4, 5, 6, 7] {
+            review.toggle_viewed(&files[index]);
+        }
+        state.reset_for(FileTree::build(&paths));
+        state.refresh_rows(&files, &review);
+        let find_folder = |path| {
+            *state
+                .folder_summaries
+                .keys()
+                .find(|node| state.tree.node(**node).path == path)
+                .unwrap()
+        };
+        let source = find_folder("src");
+        let nested = find_folder("src/nested");
+        let reviewed = find_folder("reviewed");
+        assert_eq!(state.folder_summary(source).unwrap().file_count, 3);
+
+        // Hide viewed: summaries shrink, and the hidden largest folder no longer sets the scale.
+        state.toggle_hide_viewed();
+        state.refresh_rows(&files, &review);
+        let summary = state.folder_summary(source).unwrap();
+        assert_eq!(summary.file_count, 2);
+        assert_eq!(
+            summary.lines,
+            LineCounts {
+                additions: 4,
+                deletions: 2
+            }
+        );
+        assert!((summary.heat - 1.).abs() < f64::EPSILON);
+        assert_eq!(summary.viewed, FolderViewedState::Some);
+        assert_eq!(state.folder_summary(nested).unwrap().file_count, 1);
+        assert_eq!(state.folder_summary(reviewed).unwrap().file_count, 0);
+        assert_eq!(
+            state.folder_summary(reviewed).unwrap().viewed,
+            FolderViewedState::All
+        );
+        assert!(!state.rows.iter().any(|row| row.node == reviewed));
+
+        // Showing viewed files restores the totals; type filters narrow them too.
+        state.toggle_hide_viewed();
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.folder_summary(source).unwrap().file_count, 3);
+        state.toggle_hide_viewed();
+        state.click_file_type(".md", ChipClick::Pick);
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (1, files.len()));
+        assert_eq!(state.folder_summary(source).unwrap().file_count, 0);
+        assert_eq!(
+            state.folder_summary(source).unwrap().lines,
+            LineCounts::default()
+        );
+
+        // Viewing the last matching file leaves an empty, cold tree; unmarking restores it.
+        review.toggle_viewed(&files[3]);
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.rows, Vec::<TreeRow>::new());
+        assert_eq!(state.widest_line_counts(), LineCounts::default());
+        assert!(
+            state
+                .folder_summaries
+                .values()
+                .all(|summary| summary.file_count == 0 && summary.heat.abs() < f64::EPSILON)
+        );
+        review.toggle_viewed(&files[3]);
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (1, files.len()));
+        assert_eq!(state.rows.len(), 2);
+    }
+
+    /// Empty and single-file folders stay cold; larger counts increase heat
+    /// logarithmically, including counts beyond the layout's 16-bit range.
+    #[test]
+    fn heat_handles_small_and_large_file_sets() {
+        assert!(folder_heat(0, 0).abs() < f64::EPSILON);
+        assert!(folder_heat(1, 1).abs() < f64::EPSILON);
+        assert!(folder_heat(1, 100).abs() < f64::EPSILON);
+        assert!((folder_heat(10, 100) - 0.5).abs() < f64::EPSILON);
+        assert!((folder_heat(100, 100) - 1.).abs() < f64::EPSILON);
+        assert!((folder_heat(10_000, 100_000) - 0.8).abs() < f64::EPSILON);
+    }
 
     /// Collapsing all folds every folder, nested ones too; expanding all
     /// unfolds them, and a flat list has nothing to fold.

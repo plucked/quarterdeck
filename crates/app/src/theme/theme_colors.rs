@@ -16,6 +16,12 @@ const SCROLLBAR_ALPHA: u32 = 0x33;
 const SCROLLBAR_DRAGGED_ALPHA: u32 = 0x66;
 /// The tint over lines a comment is being written about: the added color at this opacity.
 const COMMENT_RANGE_ALPHA: u32 = 0x26;
+/// Five steps from the palette's cool blue to its warm orange.
+const FOLDER_HEAT_STOPS: [f32; 5] = [0., 0.25, 0.5, 0.75, 1.];
+/// Midpoints selecting the nearest heat color, from cold to warm.
+const FOLDER_HEAT_BOUNDARIES: [f64; 4] = [0.125, 0.375, 0.625, 0.875];
+/// Steps toward the text color when a heat color needs more contrast.
+const HEAT_CONTRAST_STEPS: u16 = 100;
 
 /// Every color the views use, worked out once from a `Palette`. The
 /// surfaces step from the background toward the text color, so raised
@@ -51,6 +57,8 @@ pub struct ThemeColors {
     pub diff_filler: Rgba,
     pub hunk_background: Rgba,
     pub renamed: Rgba,
+    /// Folder name and count colors, readable on panels, count capsules and hovered rows.
+    folder_heat: [Rgba; 5],
     /// Syntax colors in `SyntaxKind::ALL` order.
     syntax: [Rgba; 7],
     /// Whether the theme is dark: pictures drawn in near-white (some file
@@ -96,6 +104,7 @@ impl ThemeColors {
             diff_filler: rgb(mix(palette.background, palette.panel, 0.6)),
             hunk_background: rgb(mix(palette.panel, palette.added, 0.06)),
             renamed: rgb(palette.keyword),
+            folder_heat: FOLDER_HEAT_STOPS.map(|amount| rgb(folder_heat_color(palette, amount))),
             syntax: [
                 palette.comment,
                 palette.keyword,
@@ -118,6 +127,37 @@ impl ThemeColors {
             .unwrap_or_default();
         self.syntax[index]
     }
+
+    /// The nearest cold-to-warm color for a folder's relative activity (0 to 1).
+    pub fn folder_heat(&self, amount: f64) -> Rgba {
+        let index = FOLDER_HEAT_BOUNDARIES
+            .iter()
+            .position(|boundary| amount <= *boundary)
+            .unwrap_or(FOLDER_HEAT_BOUNDARIES.len());
+        self.folder_heat[index]
+    }
+}
+
+/// A palette-derived blue-to-orange color, moved toward the text color
+/// just far enough to keep small folder labels readable at rest and on hover.
+fn folder_heat_color(palette: &Palette, amount: f32) -> u32 {
+    let color = mix(palette.added, palette.removed, amount);
+    let hover = mix(palette.background, palette.text, 0.09);
+    let surface = mix(palette.background, palette.text, 0.06);
+    for step in 0..=HEAT_CONTRAST_STEPS {
+        let candidate = mix(
+            color,
+            palette.text,
+            f32::from(step) / f32::from(HEAT_CONTRAST_STEPS),
+        );
+        if contrast_ratio(candidate, palette.line) >= SUBTLE_CONTRAST
+            && contrast_ratio(candidate, hover) >= SUBTLE_CONTRAST
+            && contrast_ratio(candidate, surface) >= SUBTLE_CONTRAST
+        {
+            return candidate;
+        }
+    }
+    palette.text
 }
 
 /// The text color moved toward the background as far as it can go (up to
@@ -182,6 +222,41 @@ mod tests {
 
     use super::super::palettes::palette_of;
     use super::*;
+
+    /// Every heat step stays readable on folders, count capsules and hovered rows in all themes.
+    #[test]
+    fn folder_heat_colors_are_readable_in_every_theme() {
+        for theme in ColorTheme::ALL {
+            let palette = palette_of(theme);
+            let hover = mix(palette.background, palette.text, 0.09);
+            let surface = mix(palette.background, palette.text, 0.06);
+            for amount in FOLDER_HEAT_STOPS {
+                let color = folder_heat_color(palette, amount);
+                assert!(
+                    contrast_ratio(color, palette.line) >= SUBTLE_CONTRAST,
+                    "{}: {amount}",
+                    palette.name
+                );
+                assert!(
+                    contrast_ratio(color, hover) >= SUBTLE_CONTRAST,
+                    "{} hovered: {amount}",
+                    palette.name
+                );
+                assert!(
+                    contrast_ratio(color, surface) >= SUBTLE_CONTRAST,
+                    "{} count capsule: {amount}",
+                    palette.name
+                );
+            }
+            let colors = ThemeColors::from_palette(palette);
+            assert_ne!(
+                colors.folder_heat(0.),
+                colors.folder_heat(1.),
+                "{}",
+                palette.name
+            );
+        }
+    }
 
     /// Black on white is 21:1, and the formula is symmetric.
     #[test]

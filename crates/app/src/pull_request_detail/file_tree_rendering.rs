@@ -9,9 +9,13 @@ use qd_file_tree::{FileIcon, TreeNodeKind, TreeRow};
 use super::folder_viewed_state::FolderViewedState;
 use super::line_counts::LineCounts;
 use super::pull_request_detail::PullRequestDetail;
+use crate::app_settings::AppSettings;
 use crate::bundled_assets::file_icon_path;
-use crate::controls::{CheckState, Checkbox, FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
+use crate::controls::{
+    CheckState, Checkbox, FOLD_CHEVRON_SIZE, FoldChevron, FoldState, Pill, PillStyle, TextTooltip,
+};
 use crate::diff_view::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
+use crate::display_text::counted;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
 
@@ -169,8 +173,8 @@ impl PullRequestDetail {
         }
     }
 
-    /// A folder: chevron, name, the lines changed under it, and its
-    /// tri-state viewed box.
+    /// A folder: chevron, name, changed-file count, changed lines, and its
+    /// tri-state viewed box. Optional heat colors the name and count only.
     fn render_folder_row(
         &self,
         base: Stateful<Div>,
@@ -187,6 +191,10 @@ impl PullRequestDetail {
         let summary = self.file_tree().folder_summary(row.node);
         let state = summary.map_or(FolderViewedState::None, |summary| summary.viewed);
         let counts = summary.map(|summary| summary.lines).unwrap_or_default();
+        let file_count = summary.map_or(0, |summary| summary.file_count);
+        let heat = summary.map_or(0., |summary| summary.heat);
+        let heat_color = AppSettings::folder_heatmap(cx).then(|| theme::folder_heat(heat));
+        let name_color = heat_color.unwrap_or_else(theme::muted);
         let folder = row.node;
         base.hover(|style| style.bg(theme::hover()))
             .on_click(cx.listener(move |detail, _, _, cx| detail.toggle_folder(&path, cx)))
@@ -199,8 +207,22 @@ impl PullRequestDetail {
                     .flex_1()
                     .min_w_0()
                     .truncate()
-                    .text_color(theme::muted())
+                    .text_color(name_color)
                     .child(node.name.clone()),
+            )
+            .child(
+                div()
+                    .id(("folder-count", index))
+                    .flex_none()
+                    .tooltip(TextTooltip::builder(format!(
+                        "{} in this folder and its subfolders matching the current filters",
+                        counted(file_count, "changed file", "changed files")
+                    )))
+                    .child(
+                        Pill::new(counted(file_count, "file", "files"), PillStyle::Filled)
+                            .compact()
+                            .text_color(name_color),
+                    ),
             )
             .child(render_line_counts(counts, columns))
             .child(div().flex_none().w(px(FILE_STATUS_BADGE_SIZE)))

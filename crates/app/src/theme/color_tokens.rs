@@ -83,6 +83,11 @@ pub fn syntax(kind: SyntaxKind) -> Rgba {
     active_colors().syntax(kind)
 }
 
+/// The theme's cold-to-warm color for a folder's relative changed-file count.
+pub fn folder_heat(amount: f64) -> Rgba {
+    active_colors().folder_heat(amount)
+}
+
 /// Text on a `label_colors` background, in every theme.
 pub fn on_label() -> Rgba {
     rgb(0xff_ff_ff)

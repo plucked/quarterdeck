@@ -108,6 +108,20 @@ impl UiStateRecorder {
         Self::record(cx, |pending| pending.color_theme = Some(theme));
     }
 
+    /// Folder coloring saved before launch; none when unsaved or unreadable.
+    /// Reads one small local row on the main thread at startup only.
+    pub fn saved_folder_heatmap(&self) -> Option<bool> {
+        self.store
+            .lock()
+            .folder_heatmap()
+            .unwrap_or_else(|error| report_unreadable("folder heatmap", &error))
+    }
+
+    /// Records folder coloring and schedules a write.
+    pub fn record_folder_heatmap(cx: &mut App, enabled: bool) {
+        Self::record(cx, |pending| pending.folder_heatmap = Some(enabled));
+    }
+
     /// The review layout saved before the last relaunch; `None` when there
     /// is none or it no longer reads. Reads on the main thread at startup only.
     pub fn saved_review_layout(&self) -> Option<ReviewLayoutState> {

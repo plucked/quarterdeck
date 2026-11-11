@@ -45,7 +45,7 @@
 //! - `loaded_file.rs`: `LoadedFile`, a changed file with its built diff, colors and sizes.
 //! - `file_tree_state.rs`: `FileTreeState`, the file tree panel's tree, filter, folders and rows.
 //! - `folder_viewed_state.rs`: `FolderViewedState`, none, some or all of a folder viewed.
-//! - `folder_summary.rs`: `FolderSummary`, a folder's changed lines and viewed state for its tree row.
+//! - `folder_summary.rs`: `FolderSummary`, a folder's changed lines, file count, heat and viewed state for its tree row.
 //! - `line_counts.rs`: `LineCounts`, lines added and removed.
 //! - `file_review_state.rs`: `FileReviewState`, which files are viewed and collapsed.
 //! - `viewed_toggle.rs`: `ViewedToggle`, what toggling a viewed checkbox did.

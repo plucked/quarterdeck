@@ -2,16 +2,20 @@ use gpui::{Context, Div, FontWeight, IntoElement, Stateful, div, prelude::*, px}
 use qd_cache::ColorTheme;
 use qd_syntax::SyntaxKind;
 
+use super::setting_row::SettingRow;
 use super::settings_window::SettingsWindow;
 use super::theme_preview::render_theme_preview;
 use crate::app_settings::AppSettings;
-use crate::controls::SectionLabel;
+use crate::controls::{SectionLabel, SegmentedControl};
 use crate::theme::{self, colors_of, palette_of};
 
 /// Height of a theme card's color strip.
 const SWATCH_HEIGHT: f32 = 40.;
 /// Width of one bar in a swatch, a token's color.
 const SWATCH_BAR_WIDTH: f32 = 14.;
+/// Size of a color swatch in the folder heat legend.
+const HEAT_SWATCH_WIDTH: f32 = 20.;
+const HEAT_SWATCH_HEIGHT: f32 = 8.;
 /// The token colors a swatch shows, left to right.
 const SWATCH_KINDS: [SyntaxKind; 4] = [
     SyntaxKind::Keyword,
@@ -27,6 +31,7 @@ impl SettingsWindow {
     pub(super) fn render_appearance_page(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let active = AppSettings::color_theme(cx);
         let previewed = self.previewed_theme().unwrap_or(active);
+        let heatmap_enabled = AppSettings::folder_heatmap(cx);
         let (light, dark): (Vec<ColorTheme>, Vec<ColorTheme>) = ColorTheme::ALL
             .into_iter()
             .partition(|color_theme| !palette_of(*color_theme).is_dark);
@@ -40,6 +45,14 @@ impl SettingsWindow {
             ))
             .child(Self::render_theme_group("Light", &light, active, cx))
             .child(Self::render_theme_group("Dark", &dark, active, cx))
+            .child(SettingRow::new(
+                "Folder heatmap",
+                "Color folders from cold to warm by the number of changed files in their hierarchy matching the current filters. Includes added, removed, moved and binary files.",
+                SegmentedControl::new("folder-heatmap")
+                    .option("Off", !heatmap_enabled, |_, cx| AppSettings::set_folder_heatmap(cx, false))
+                    .option("On", heatmap_enabled, |_, cx| AppSettings::set_folder_heatmap(cx, true)),
+            ))
+            .when(heatmap_enabled, |page| page.child(render_folder_heat_preview(previewed)))
             .child(
                 div().pt_2().child(
                     SectionLabel::new(format!("Preview · {}", palette_of(previewed).name))
@@ -150,4 +163,28 @@ impl SettingsWindow {
                     ),
             )
     }
+}
+
+/// The heat scale in the hovered theme, on the same background as the file tree.
+fn render_folder_heat_preview(color_theme: ColorTheme) -> impl IntoElement {
+    let colors = colors_of(color_theme);
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .p_2()
+        .rounded_md()
+        .bg(colors.panel)
+        .text_xs()
+        .text_color(colors.muted)
+        .child("Cold · fewer files")
+        .children([0., 0.25, 0.5, 0.75, 1.].map(|amount| {
+            div()
+                .flex_none()
+                .w(px(HEAT_SWATCH_WIDTH))
+                .h(px(HEAT_SWATCH_HEIGHT))
+                .rounded_full()
+                .bg(colors.folder_heat(amount))
+        }))
+        .child("Warm · more files")
 }

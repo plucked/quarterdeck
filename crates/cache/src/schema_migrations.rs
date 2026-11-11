@@ -639,6 +639,11 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     -- Cached pull requests are looked up again (branches and review come together).
     UPDATE pull_requests SET head_ref = NULL, base_ref = NULL;
 ",
+    r"
+    -- Optional folder colors based on changed-file counts, enabled by default.
+    ALTER TABLE appearance_settings ADD COLUMN folder_heatmap INTEGER NOT NULL DEFAULT 1
+        CHECK (folder_heatmap IN (0, 1));
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in
@@ -673,6 +678,40 @@ pub(crate) fn apply_schema_migrations(connection: &mut Connection) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Upgrading preserves the chosen theme and enables folder colors by default.
+    #[test]
+    fn folder_heatmap_migration_preserves_appearance() {
+        // Set up the schema before the folder heatmap preference existed.
+        let mut connection = Connection::open_in_memory().unwrap();
+        let before_heatmap = SCHEMA_MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("ADD COLUMN folder_heatmap"))
+            .unwrap();
+        for sql in &SCHEMA_MIGRATIONS[..before_heatmap] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection
+            .pragma_update(None, "user_version", i64::try_from(before_heatmap).unwrap())
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO appearance_settings (id, color_theme) VALUES (1, 'vellum')",
+                [],
+            )
+            .unwrap();
+
+        // Apply the upgrade and inspect both preferences on the same row.
+        apply_schema_migrations(&mut connection).unwrap();
+        let appearance: (String, bool) = connection
+            .query_row(
+                "SELECT color_theme, folder_heatmap FROM appearance_settings",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(appearance, ("vellum".into(), true));
+    }
 
     /// Widening the queue tab's CHECK for Others keeps the saved tab.
     #[test]

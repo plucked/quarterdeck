@@ -16,7 +16,7 @@
 | `cache_cleanup` / `cleanup_counts` | `delete_expired(ttl)` (unused file sets; PRs in no list), `clear()` (the deletes in one transaction, then `VACUUM` and a WAL checkpoint after it commits, so the file shrinks) |
 | `cache_usage` / `cache_usage_storage` | `CacheUsage` (+ `CachedData`: entries, files, bytes) per kind (pull requests, PR files, comparisons), size on disk (pages + WAL) and free pages; `GitHubCache::usage` sums text bytes with `LENGTH(CAST(… AS BLOB))` |
 | `cache_ttl` / `cache_settings_storage` | `CacheTtl` (6 h, 1 d, 3 d, 1 w; default 1 d) and its row |
-| `color_theme` / `appearance_settings_storage` | `ColorTheme` (Ledger, Vellum, Overcast, Signal, Graphite (default), Tide, Lantern, Beacon), stored by name in `appearance_settings` (one row) |
+| `color_theme` / `appearance_settings_storage` | `ColorTheme` (Ledger, Vellum, Overcast, Signal, Graphite (default), Tide, Lantern, Beacon), stored by name in `appearance_settings` (one row), plus `folder_heatmap` (checked boolean, default on); each preference saves independently |
 | `sql_integers` / `unix_now` | checked integer conversions; current time |
 | `sample_pull_requests` | tests only: `sample_pull_request(id, updated_at)` and `sample_file(filename)`, the pull requests and changed files the tests store |
 | `cached_statements` | `execute_cached`: a write through the connection's statement cache, for statements run once per row (files, layers, list members, labels, brief parts) |

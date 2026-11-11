@@ -18,6 +18,7 @@ pub struct PendingUiState {
     pub diff_view_settings: Option<DiffViewSettings>,
     pub cache_ttl: Option<CacheTtl>,
     pub color_theme: Option<ColorTheme>,
+    pub folder_heatmap: Option<bool>,
     pub review_layout: Option<ReviewLayoutState>,
     pub sidebar_width: Option<f32>,
     pub side_panel_width: Option<f32>,
@@ -52,6 +53,7 @@ impl PendingUiState {
             && self.diff_view_settings.is_none()
             && self.cache_ttl.is_none()
             && self.color_theme.is_none()
+            && self.folder_heatmap.is_none()
             && self.review_layout.is_none()
             && self.sidebar_width.is_none()
             && self.side_panel_width.is_none()
@@ -115,6 +117,9 @@ impl PendingUiState {
         }
         if let Some(theme) = self.color_theme {
             report_failed_write("the color theme", store.put_color_theme(theme));
+        }
+        if let Some(enabled) = self.folder_heatmap {
+            report_failed_write("the folder heatmap", store.put_folder_heatmap(enabled));
         }
 
         // Viewed marks and review notes, every change in the order made.

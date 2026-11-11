@@ -11,11 +11,13 @@ use crate::ui_state::UiStateRecorder;
 /// from and the settings window changes them. Views that depend on a
 /// preference observe this global (`cx.observe_global::<AppSettings>`) and
 /// apply changes as they happen. Every change is saved.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppSettings {
     diff_view: DiffViewSettings,
     cache_ttl: CacheTtl,
     color_theme: ColorTheme,
+    /// Color folder names and counts by their changed-file totals; on by default.
+    folder_heatmap: bool,
     /// The repositories whose other open pull requests the Others tab lists,
     /// in the order they were added.
     watched_repositories: Vec<RepoRef>,
@@ -35,6 +37,7 @@ impl AppSettings {
             diff_view: recorder.saved_diff_view_settings().unwrap_or_default(),
             cache_ttl: recorder.saved_cache_ttl().unwrap_or_default(),
             color_theme: recorder.saved_color_theme().unwrap_or_default(),
+            folder_heatmap: recorder.saved_folder_heatmap().unwrap_or(true),
             watched_repositories: recorder.saved_watched_repositories(),
             hidden_branch_rules: recorder.saved_hidden_branch_rules(),
         };
@@ -45,6 +48,20 @@ impl AppSettings {
     /// The color theme every window is drawn in.
     pub fn color_theme(cx: &App) -> ColorTheme {
         cx.global::<Self>().color_theme
+    }
+
+    /// Whether folder names and counts use the cold-to-warm scale.
+    pub fn folder_heatmap(cx: &App) -> bool {
+        cx.global::<Self>().folder_heatmap
+    }
+
+    /// Applies folder coloring to every open tree and saves the preference.
+    pub fn set_folder_heatmap(cx: &mut App, enabled: bool) {
+        if Self::folder_heatmap(cx) == enabled {
+            return;
+        }
+        cx.update_global::<Self, _>(|settings, _| settings.folder_heatmap = enabled);
+        UiStateRecorder::record_folder_heatmap(cx, enabled);
     }
 
     /// Switches every window to `color_theme` at once and saves it.
