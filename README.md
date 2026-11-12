@@ -31,6 +31,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Filters by kind (code, tests, generated, moved) and by file type, with live counts, and a switch to hide viewed files.
 - **Smart review filters**: in the Files tab, click **Generate smart filter** to have local Claude Code (Opus, high effort) group the entire PR or combined stack range into numbered review buckets. Any number of buckets can be suggested; hover a chip for its explanation, click to include it, or ⌥-click to exclude it alongside Kind and Type. Suggested generated or mechanical buckets have a checkbox for marking their files viewed. Generation shows progress and can be cancelled. Filters survive relaunches and cache cleanup; **Regenerate** replaces them, and a notice appears when the head or base commit changes. Bulk viewed marks require a current filter. Needs Claude Code installed and logged in; like briefs, its read-only run sends the code it reads to Anthropic.
 - Mark files viewed (`v` marks the current one and jumps to the next); marks are kept, and drop off when a file changes again.
+- The top file's header stays visible while scrolling its diff, keeping its name, tree button and Viewed checkbox within reach.
 - Large and generated files start folded. Pull requests with thousands of files stay responsive, including those over GitHub's 3,000-file list limit (loaded as one diff).
 
 **Commenting and reviewing**

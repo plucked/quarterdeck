@@ -25,6 +25,7 @@
 //! - `row_rendering.rs`: renders the pane's layout and each diff row.
 //! - `row_height_estimate.rs`: where each row starts, estimated without layout, for the scrollbar.
 //! - `sticky_header_rendering.rs`: the header above the diff: title, metadata, description.
+//! - `sticky_file_header.rs`: pins the top file's header while its diff scrolls underneath.
 //! - `github_link.rs`: `GitHubLink`, GitHub's mark as an icon button opening the pull request on GitHub.
 //! - `side_panel_rendering.rs`: the side panel: its divider, its tabs and the shown tab.
 //! - `file_tree_rendering.rs`: the side panel's Files tab: progress, folders and files.
@@ -189,6 +190,7 @@ mod smart_filter_state;
 mod stack_actions;
 mod stack_bar_rendering;
 mod stack_state;
+mod sticky_file_header;
 mod sticky_header_rendering;
 mod studio_request;
 mod syntax_highlighting;

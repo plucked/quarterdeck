@@ -52,6 +52,7 @@ impl Render for PullRequestDetail {
                 )
                 .size_full(),
             )
+            .child(self.render_sticky_file_header(cx))
             .child(VerticalScrollbar::new(
                 "detail-scrollbar",
                 ScrollbarTarget::EstimatedList(self.list().clone(), self.current_row_tops()),
@@ -269,7 +270,7 @@ impl PullRequestDetail {
 
     /// File `file`'s header, wired to its collapse and viewed toggles and
     /// to showing it in the file tree.
-    fn render_file_header_row(&self, file: usize, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_file_header_row(&self, file: usize, cx: &mut Context<Self>) -> AnyElement {
         let Some(loaded) = self.loaded_files().get(file) else {
             return div().into_any_element();
         };
