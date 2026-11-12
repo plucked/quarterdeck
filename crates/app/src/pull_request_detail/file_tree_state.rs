@@ -6,6 +6,7 @@ use qd_file_tree::{
     FacetCount, FacetFilter, FileFilter, FileKind, FileTree, FilteredFile, NodeId, TreeNodeKind,
     TreeRow,
 };
+use qd_studio::SmartBucket;
 
 use super::file_review_state::FileReviewState;
 use super::folder_summary::FolderSummary;
@@ -21,6 +22,10 @@ use crate::facet_chips::ChipClick;
 pub struct FileTreeState {
     tree: FileTree,
     filter: FileFilter,
+    pub(super) smart_choices: FacetFilter<u32>,
+    pub(super) smart_counts: Vec<FacetCount<u32>>,
+    smart_buckets: Vec<SmartBucket>,
+    smart_membership: HashMap<String, Vec<u32>>,
     /// Folders collapsed in the tree, by path; folders start expanded.
     collapsed_folders: HashSet<String>,
     /// Every folder's path in the tree, for collapsing them all.
@@ -57,6 +62,10 @@ impl FileTreeState {
                 },
                 file_types: FacetFilter::default(),
             },
+            smart_choices: FacetFilter::default(),
+            smart_counts: Vec::new(),
+            smart_buckets: Vec::new(),
+            smart_membership: HashMap::new(),
             collapsed_folders: HashSet::new(),
             folder_paths: Vec::new(),
             rows: Vec::new(),
@@ -144,13 +153,14 @@ impl FileTreeState {
         self.filter.kinds.only.clear();
         self.filter.file_types = FacetFilter::default();
         self.are_types_expanded = false;
+        self.set_smart_buckets(Vec::new());
     }
 
     /// Whether each file passes the filter, by index.
     pub fn shown_files(&self, files: &[LoadedFile], review: &FileReviewState) -> Vec<bool> {
         files
             .iter()
-            .map(|loaded| self.filter.shows(&filtered_file(loaded, review)))
+            .map(|loaded| self.shows(loaded, review))
             .collect()
     }
 
@@ -169,6 +179,49 @@ impl FileTreeState {
             .collect();
         self.kind_counts = self.filter.kind_counts(&filtered);
         self.type_counts = self.filter.file_type_counts(&filtered);
+        // Counts retain all values, while matching counts include the smart row.
+        let smart_files: Vec<_> = files
+            .iter()
+            .zip(&filtered)
+            .filter(|(loaded, _)| self.smart_admits(loaded.filename()))
+            .map(|(_, file)| *file)
+            .collect();
+        let kinds = self.filter.kind_counts(&smart_files);
+        let types = self.filter.file_type_counts(&smart_files);
+        for count in &mut self.kind_counts {
+            count.matching = kinds
+                .iter()
+                .find(|other| other.value == count.value)
+                .map_or(0, |other| other.matching);
+        }
+        for count in &mut self.type_counts {
+            count.matching = types
+                .iter()
+                .find(|other| other.value == count.value)
+                .map_or(0, |other| other.matching);
+        }
+        let mut counts: HashMap<u32, (usize, usize)> = HashMap::new();
+        for (loaded, file) in files.iter().zip(&filtered) {
+            if let Some(orders) = self.smart_membership.get(loaded.filename()) {
+                for order in orders {
+                    let count = counts.entry(*order).or_default();
+                    count.0 += 1;
+                    count.1 += usize::from(self.filter.shows(file));
+                }
+            }
+        }
+        self.smart_counts = self
+            .smart_buckets
+            .iter()
+            .map(|bucket| {
+                let (total, matching) = counts.get(&bucket.order).copied().unwrap_or_default();
+                FacetCount {
+                    value: bucket.order,
+                    total,
+                    matching,
+                }
+            })
+            .collect();
         self.shown_count = shown.iter().filter(|is_shown| **is_shown).count();
         self.file_count = files.len();
 
@@ -209,14 +262,15 @@ impl FileTreeState {
                 };
                 // The folder checkbox covers files the chips let through, viewed or not.
                 let filtered = filtered_file(loaded, review);
-                let is_covered = self.filter.shows_ignoring_viewed(&filtered);
+                let is_covered = self.smart_admits(loaded.filename())
+                    && self.filter.shows_ignoring_viewed(&filtered);
                 let mut totals = NodeTotals {
                     covered: usize::from(is_covered),
                     viewed: usize::from(is_covered && filtered.is_viewed),
                     ..NodeTotals::default()
                 };
                 // Counts and heat describe only files that pass the active filters.
-                if self.filter.shows(&filtered) {
+                if self.shows(loaded, review) {
                     totals.file_count = 1;
                     totals.lines = LineCounts {
                         additions: loaded.file.additions,
@@ -298,6 +352,7 @@ impl FileTreeState {
     /// Clears both chip rows (the summary's Reset); the viewed switch stays.
     pub fn clear_chips(&mut self) {
         self.filter.clear_chips();
+        self.smart_choices = FacetFilter::default();
     }
 
     /// Shows every type chip, or only the most common again.
@@ -307,7 +362,57 @@ impl FileTreeState {
 
     /// Whether `loaded` passes the filter.
     pub fn shows(&self, loaded: &LoadedFile, review: &FileReviewState) -> bool {
-        self.filter.shows(&filtered_file(loaded, review))
+        self.smart_admits(loaded.filename()) && self.filter.shows(&filtered_file(loaded, review))
+    }
+
+    /// Replace membership only when a plan changes; ordinary refreshes preserve picks.
+    pub fn set_smart_buckets(&mut self, buckets: Vec<SmartBucket>) {
+        if self.smart_buckets == buckets {
+            return;
+        }
+        self.smart_membership.clear();
+        for bucket in &buckets {
+            for path in &bucket.files {
+                self.smart_membership
+                    .entry(path.clone())
+                    .or_default()
+                    .push(bucket.order);
+            }
+        }
+        self.smart_buckets = buckets;
+        self.smart_choices = FacetFilter::default();
+    }
+
+    fn smart_admits(&self, path: &str) -> bool {
+        self.smart_choices.admits_any(
+            self.smart_membership
+                .get(path)
+                .map_or(&[][..], Vec::as_slice),
+        )
+    }
+
+    pub fn click_smart_bucket(&mut self, order: u32, click: ChipClick) {
+        match click {
+            ChipClick::Pick => self.smart_choices.toggle_only(&order),
+            ChipClick::Hide => self.smart_choices.toggle_hidden(&order),
+        }
+    }
+
+    pub fn has_chips_set(&self) -> bool {
+        self.filter.has_chips_set() || self.smart_choices.is_active()
+    }
+
+    pub fn describe_filter(&self) -> Vec<String> {
+        let mut parts = self.filter.describe();
+        for bucket in &self.smart_buckets {
+            if self.smart_choices.only.contains(&bucket.order) {
+                parts.push(bucket.label.clone());
+            }
+            if self.smart_choices.hidden.contains(&bucket.order) {
+                parts.push(format!("not {}", bucket.label));
+            }
+        }
+        parts
     }
 
     /// Whether the tree has folders at all (a flat list has nothing to fold).
@@ -346,8 +451,10 @@ impl FileTreeState {
             .into_iter()
             .filter(|file| {
                 files.get(*file).is_some_and(|loaded| {
-                    self.filter
-                        .shows_ignoring_viewed(&filtered_file(loaded, &unmarked))
+                    self.smart_admits(loaded.filename())
+                        && self
+                            .filter
+                            .shows_ignoring_viewed(&filtered_file(loaded, &unmarked))
                 })
             })
             .collect()
@@ -422,6 +529,92 @@ mod tests {
     use qd_github::PullRequestFile;
 
     use super::*;
+
+    /// Smart picks intersect the other rows, feed counts and folder marks,
+    /// and never acquire files added after the plan was generated.
+    #[test]
+    fn smart_buckets_compose_with_filters_and_folder_review() {
+        let paths = ["src/a.rs", "src/b.rs", "src/readme.md", "src/new.rs"];
+        let files: Vec<_> = paths
+            .iter()
+            .map(|path| {
+                LoadedFile::build(
+                    PullRequestFile {
+                        filename: (*path).into(),
+                        previous_filename: None,
+                        status: "modified".into(),
+                        additions: 1,
+                        deletions: 0,
+                        patch: None,
+                        sha: None,
+                    },
+                    DiffOptions::default(),
+                )
+            })
+            .collect();
+        let mut state = FileTreeState::new(ReviewLayoutState::default());
+        state.reset_for(FileTree::build(&paths));
+        let bucket = |order, paths: &[&str]| SmartBucket {
+            order,
+            label: format!("Step {order}"),
+            description: "Inspect this part".into(),
+            suggest_viewed: false,
+            files: paths.iter().map(|path| (*path).to_owned()).collect(),
+        };
+        state.set_smart_buckets(vec![
+            bucket(1, &["src/a.rs", "src/readme.md"]),
+            bucket(2, &["src/a.rs", "src/b.rs"]),
+        ]);
+        let mut review = FileReviewState::default();
+        review.toggle_viewed(&files[0]);
+        state.click_smart_bucket(1, ChipClick::Pick);
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (2, 4));
+        let folder = state.tree.roots()[0];
+        assert_eq!(state.folder_files(folder, &files), [0, 2]);
+        assert_eq!(
+            state.folder_viewed_state(folder, &files, &review),
+            FolderViewedState::Some
+        );
+        assert!(!state.shows(&files[3], &review));
+        assert_eq!(
+            state
+                .type_counts
+                .iter()
+                .find(|c| c.value == ".rs")
+                .unwrap()
+                .matching,
+            1
+        );
+        state.click_file_type(".rs", ChipClick::Pick);
+        state.toggle_hide_viewed();
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (0, 4));
+        assert_eq!(
+            state
+                .smart_counts
+                .iter()
+                .map(|c| c.matching)
+                .collect::<Vec<_>>(),
+            [0, 1]
+        );
+        assert_eq!(state.folder_files(folder, &files), [0]);
+        // Hiding an overlapping bucket overrides a picked one.
+        state.toggle_hide_viewed();
+        state.click_smart_bucket(2, ChipClick::Hide);
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (0, 4));
+        state.clear_chips();
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (4, 4));
+        assert!(!state.has_chips_set());
+        // Loading another scope drops its choices and membership.
+        state.click_smart_bucket(1, ChipClick::Pick);
+        state.reset_for(FileTree::build(&paths));
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (4, 4));
+        assert_eq!(state.smart_counts, Vec::<FacetCount<u32>>::new());
+    }
 
     /// Subtree totals count every status once, including patchless moves and
     /// binaries, and remain stable through folding and visible viewed marks.

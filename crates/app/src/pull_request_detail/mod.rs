@@ -92,6 +92,7 @@
 //! - `run_cancel.rs`: `RunCancel`, kills the agent process when the run is dropped.
 //! - `brief_job.rs`: `BriefJob`, one brief's background run: checkout, agent, checks, storing.
 //! - `brief_code.rs`: `BriefCode`, the shallow checkout of the head commit a brief's agent reads (or why there is none).
+//! - `smart_filter_state.rs`, `smart_filter_actions.rs`, `smart_filter_job.rs`, `smart_filter_rendering.rs`: saved review buckets, their agent run, filters and bulk viewed actions.
 //! - `brief_actions.rs`: writing a brief with Claude Code and cancelling it, its pages and reader.
 //! - `brief_handlers.rs`: `detail_brief_handlers`, what the brief's links and buttons do in the detail, and its report host.
 //! - `studio_request.rs`: `studio_request`, what the agent is told about the shown pull request and its files.
@@ -181,6 +182,10 @@ mod show_change;
 mod side_panel_actions;
 mod side_panel_rendering;
 mod side_panel_tab;
+mod smart_filter_actions;
+mod smart_filter_job;
+mod smart_filter_rendering;
+mod smart_filter_state;
 mod stack_actions;
 mod stack_bar_rendering;
 mod stack_state;

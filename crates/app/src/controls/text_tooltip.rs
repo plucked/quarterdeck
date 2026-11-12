@@ -28,6 +28,7 @@ impl TextTooltip {
 impl Render for TextTooltip {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .max_w(gpui::px(360.))
             .px_2()
             .py_1()
             .rounded_md()

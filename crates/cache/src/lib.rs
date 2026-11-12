@@ -136,6 +136,7 @@ mod review_summary;
 mod sample_pull_requests;
 mod schema_migrations;
 mod scope_columns;
+mod smart_filter_storage;
 mod sql_integers;
 mod stack_review_mode;
 mod stack_storage;

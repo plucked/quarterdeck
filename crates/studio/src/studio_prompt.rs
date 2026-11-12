@@ -84,6 +84,15 @@ struct BudgetedListing {
 /// documentation before tooling. Without a workspace only the listed diffs
 /// may be cited; with one every diff may, through `diffs/<path>.diff`.
 pub fn studio_prompt(request: &StudioRequest) -> StudioPrompt {
+    change_prompt(request, false)
+}
+
+/// The complete file inventory and budgeted diffs, with a reading-plan request.
+pub fn smart_filter_prompt(request: &StudioRequest) -> StudioPrompt {
+    change_prompt(request, true)
+}
+
+fn change_prompt(request: &StudioRequest, smart: bool) -> StudioPrompt {
     let mut prompt = StudioPrompt {
         text: String::new(),
         targets: AnchorTargets::default(),
@@ -109,11 +118,13 @@ pub fn studio_prompt(request: &StudioRequest) -> StudioPrompt {
     write_changed_files(text, request);
 
     // Who reads the brief, which sets how much onboarding it gives.
-    let _ = writeln!(text, "\n## The reader\n\n{}", reader_brief(request));
+    if !smart {
+        let _ = writeln!(text, "\n## The reader\n\n{}", reader_brief(request));
+    }
 
     // Where the code is, when it is checked out.
     if has_workspace {
-        write_code_section(text);
+        write_code_section(text, smart);
     }
 
     // The numbered diffs the budget holds, then the closing request.
@@ -121,7 +132,12 @@ pub fn studio_prompt(request: &StudioRequest) -> StudioPrompt {
     write_diffs(&mut prompt, request, listings, has_workspace);
     let _ = writeln!(
         prompt.text,
-        "Write the brief for this pull request in the required structure."
+        "{}",
+        if smart {
+            "Group all changed files into ordered review buckets in the required structure."
+        } else {
+            "Write the brief for this pull request in the required structure."
+        }
     );
     prompt
 }
@@ -150,7 +166,14 @@ fn write_changed_files(prompt: &mut String, request: &StudioRequest) {
 
 /// Where the checked-out code is, how to cite diffs over the budget, and
 /// when to read through subagents.
-fn write_code_section(prompt: &mut String) {
+fn write_code_section(prompt: &mut String, smart: bool) {
+    if smart {
+        let _ = writeln!(
+            prompt,
+            "\n## The code\n\nRead `{HEAD_FOLDER}/` for surrounding code, `{DIFF_FILE}` for the complete diff (including generated and moved files), and `{DIFFS_FOLDER}/<path>.diff` for numbered diffs omitted below. Use Read, Grep and Glob. Inspect enough evidence to group the whole change, including files whose diffs did not fit in this message."
+        );
+        return;
+    }
     let _ = writeln!(
         prompt,
         "\n## The code\n\nYour working folder holds the code: `{HEAD_FOLDER}/` is the repository after the change (at the pull request's head), and `{DIFF_FILE}` is the pull request's whole diff, generated and moved files included, which shows what each changed file was before. Use Read, Grep and Glob there to follow callers, types, tests and anything the diff leaves out; Git LFS files are pointers. Read what you need to explain the change, not the whole repository.\n\nAnchors cite the numbered diffs. Those that fit are listed below; every changed file's diff, listed or not, is in `{DIFFS_FOLDER}/<path>.diff` in the same numbered form (`{DIFFS_FOLDER}/src/lib.rs.diff` for `src/lib.rs`), and anchors may cite any of them. Do not explain only the listed files: a diff over the budget is often where the change happens.\n\nFor a large change (many files over the budget, or a stack of many layers), use subagents: start several Explore agents with the Agent tool at once, each reading one part (a group of layers, a directory, a mechanism) in `{HEAD_FOLDER}/` and `{DIFFS_FOLDER}/`, and ask each to report what that part does and why, with file paths and the numbered lines worth citing. Then write the brief yourself from their reports; they cannot write it. For a small change, read what you need yourself."
@@ -689,6 +712,28 @@ Write the brief for this pull request in the required structure.
             paths,
             [".github/workflows/ci.yml", "src/cache.rs", "README.md"]
         );
+    }
+
+    /// Smart plans use the same complete inventory for a PR and a stack,
+    /// but never ask for a brief or tools unavailable to their runner.
+    #[test]
+    fn smart_prompts_cover_layers_and_omitted_files_without_brief_instructions() {
+        for request in representative_requests() {
+            let prompt = smart_filter_prompt(&request);
+            for file in &request.files {
+                assert!(prompt.text.contains(&file.path));
+            }
+            assert!(prompt.text.ends_with(
+                "Group all changed files into ordered review buckets in the required structure.\n"
+            ));
+            assert!(!prompt.text.contains("Write the brief"));
+            assert!(!prompt.text.contains("## The reader"));
+            assert!(!prompt.text.contains("Agent tool"));
+            if request.code == CodeAccess::Workspace {
+                assert!(prompt.text.contains("change.diff"));
+                assert!(prompt.text.contains("combined") || !request.layers.is_empty());
+            }
+        }
     }
 
     /// The whole prompt, word for word, for a single pull request read by

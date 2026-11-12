@@ -20,6 +20,7 @@ impl PullRequestDetail {
             .child(self.render_hide_viewed_switch(cx))
             .child(self.render_kind_row(cx))
             .child(self.render_type_row(cx))
+            .child(self.render_smart_row(cx))
             .child(
                 div()
                     .flex()
@@ -128,8 +129,7 @@ impl PullRequestDetail {
     /// `Showing 312 of 1390 · Moved · Reset` while anything narrows the
     /// files; otherwise how the chips work.
     fn render_filter_summary(&self, cx: &mut Context<Self>) -> AnyElement {
-        let filter = self.file_tree().filter();
-        let parts = filter.describe();
+        let parts = self.file_tree().describe_filter();
         if parts.is_empty() {
             return div()
                 .text_xs()
@@ -147,7 +147,7 @@ impl PullRequestDetail {
                 "Showing {shown} of {total} · {}",
                 parts.join(" · ")
             )))
-            .when(filter.has_chips_set(), |summary| {
+            .when(self.file_tree().has_chips_set(), |summary| {
                 summary.child(
                     div()
                         .id("filter-reset")

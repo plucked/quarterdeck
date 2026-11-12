@@ -9,6 +9,7 @@ use super::agent_run_error::AgentRunError;
 use super::claude_event::ClaudeEvent;
 use super::new_process_folder::new_process_folder;
 use super::output_lines::{NextLine, OutputLines};
+use super::smart_filter_guide::{SMART_FILTER_GUIDE, SMART_FILTER_SCHEMA};
 use super::stop_child::stop_child;
 use super::studio_guide::STUDIO_GUIDE;
 use super::studio_schema::STUDIO_SCHEMA;
@@ -54,12 +55,72 @@ pub fn run_claude(
     cancel: &AtomicBool,
     on_progress: &mut dyn FnMut(AgentProgress),
 ) -> Result<AgentAnswer, AgentRunError> {
+    run_configured(
+        program,
+        prompt,
+        workspace,
+        &RunFormat::STUDIO,
+        cancel,
+        on_progress,
+    )
+}
+
+/// Runs one smart-filter generation with Opus at high effort, using only
+/// the same confined read tools as briefs and no delegated agents.
+pub fn run_smart_filter(
+    program: &Path,
+    prompt: &str,
+    workspace: Option<&Path>,
+    cancel: &AtomicBool,
+    on_progress: &mut dyn FnMut(AgentProgress),
+) -> Result<AgentAnswer, AgentRunError> {
+    run_configured(
+        program,
+        prompt,
+        workspace,
+        &RunFormat::SMART_FILTER,
+        cancel,
+        on_progress,
+    )
+}
+
+struct RunFormat {
+    schema: &'static str,
+    guide: &'static str,
+    tools: &'static str,
+    opus_high: bool,
+}
+
+impl RunFormat {
+    const STUDIO: Self = Self {
+        schema: STUDIO_SCHEMA,
+        guide: STUDIO_GUIDE,
+        tools: READ_ONLY_TOOLS,
+        opus_high: false,
+    };
+    const SMART_FILTER: Self = Self {
+        schema: SMART_FILTER_SCHEMA,
+        guide: SMART_FILTER_GUIDE,
+        tools: "Read,Grep,Glob",
+        opus_high: true,
+    };
+}
+
+fn run_configured(
+    program: &Path,
+    prompt: &str,
+    workspace: Option<&Path>,
+    format: &RunFormat,
+    cancel: &AtomicBool,
+    on_progress: &mut dyn FnMut(AgentProgress),
+) -> Result<AgentAnswer, AgentRunError> {
     if let Some(workspace) = workspace {
         return run_in(
             program,
             prompt,
             workspace,
-            READ_ONLY_TOOLS,
+            format.tools,
+            format,
             cancel,
             on_progress,
         );
@@ -67,7 +128,15 @@ pub fn run_claude(
     // An empty folder of its own, removed afterwards.
     let working_folder = new_process_folder(&std::env::temp_dir(), RUN_FOLDER_PREFIX)
         .map_err(AgentRunError::Start)?;
-    let outcome = run_in(program, prompt, &working_folder, "", cancel, on_progress);
+    let outcome = run_in(
+        program,
+        prompt,
+        &working_folder,
+        "",
+        format,
+        cancel,
+        on_progress,
+    );
     let _ = std::fs::remove_dir_all(&working_folder);
     outcome
 }
@@ -79,6 +148,7 @@ fn run_in(
     prompt: &str,
     working_folder: &Path,
     tools: &str,
+    format: &RunFormat,
     cancel: &AtomicBool,
     on_progress: &mut dyn FnMut(AgentProgress),
 ) -> Result<AgentAnswer, AgentRunError> {
@@ -102,10 +172,13 @@ fn run_in(
         "--max-budget-usd",
         MAX_BUDGET_USD,
         "--json-schema",
-        STUDIO_SCHEMA,
+        format.schema,
         "--append-system-prompt",
-        STUDIO_GUIDE,
+        format.guide,
     ]);
+    if format.opus_high {
+        command.args(["--model", "opus", "--effort", "high"]);
+    }
     if !tools.is_empty() {
         command.args(["--allowedTools", tools]);
     }

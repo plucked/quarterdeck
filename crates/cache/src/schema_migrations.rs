@@ -644,6 +644,44 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     ALTER TABLE appearance_settings ADD COLUMN folder_heatmap INTEGER NOT NULL DEFAULT 1
         CHECK (folder_heatmap IN (0, 1));
 ",
+    r"
+    -- Paid-for review plans belong to UI state and survive cache cleanup.
+    CREATE TABLE smart_filters (
+        id INTEGER PRIMARY KEY,
+        pr_id INTEGER,
+        repo_owner TEXT,
+        repo_name TEXT,
+        first_number INTEGER,
+        last_number INTEGER,
+        head_sha TEXT NOT NULL,
+        base_sha TEXT,
+        generated_at INTEGER NOT NULL,
+        CHECK ((pr_id IS NOT NULL AND repo_owner IS NULL AND repo_name IS NULL
+                    AND first_number IS NULL AND last_number IS NULL)
+            OR (pr_id IS NULL AND repo_owner IS NOT NULL AND repo_name IS NOT NULL
+                    AND first_number IS NOT NULL AND last_number IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX smart_filters_by_pr ON smart_filters (pr_id) WHERE pr_id IS NOT NULL;
+    CREATE UNIQUE INDEX smart_filters_by_range
+        ON smart_filters (repo_owner, repo_name, first_number, last_number) WHERE pr_id IS NULL;
+    CREATE TABLE smart_buckets (
+        filter_id INTEGER NOT NULL REFERENCES smart_filters (id) ON DELETE CASCADE,
+        order_id INTEGER NOT NULL CHECK (order_id > 0),
+        label TEXT NOT NULL,
+        description TEXT NOT NULL,
+        suggest_viewed INTEGER NOT NULL CHECK (suggest_viewed IN (0, 1)),
+        PRIMARY KEY (filter_id, order_id)
+    );
+    CREATE TABLE smart_bucket_files (
+        filter_id INTEGER NOT NULL,
+        order_id INTEGER NOT NULL,
+        position INTEGER NOT NULL CHECK (position >= 0),
+        filename TEXT NOT NULL,
+        PRIMARY KEY (filter_id, order_id, position),
+        FOREIGN KEY (filter_id, order_id) REFERENCES smart_buckets (filter_id, order_id)
+            ON DELETE CASCADE
+    );
+",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

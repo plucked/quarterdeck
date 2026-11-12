@@ -30,6 +30,7 @@ use super::review_pane::ReviewPane;
 use super::review_target::ReviewTarget;
 use super::scroll_anchor::ScrollAnchor;
 use super::show_change::ShowChange;
+use super::smart_filter_state::SmartFilterState;
 use super::stack_state::StackState;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
@@ -124,6 +125,8 @@ pub struct PullRequestDetail {
     /// The head commit of the shown files, when known: what a brief's
     /// version is compared with.
     pub(super) shown_head_sha: Option<String>,
+    pub(super) shown_base_sha: Option<String>,
+    pub(super) smart_filters: HashMap<ReviewScope, SmartFilterState>,
     /// The side panel's Checks tab, following the shown pull request.
     pub(super) checks: Entity<ChecksPanel>,
     /// Keep the observers of [`AppSettings`] and the avatars (header and
@@ -194,6 +197,8 @@ impl PullRequestDetail {
             action_panel: None,
             brief: BriefPane::new(detail_brief_handlers(cx)),
             shown_head_sha: None,
+            shown_base_sha: None,
+            smart_filters: HashMap::new(),
             checks,
             review: ReviewPane {
                 destination: layout.comment_destination,

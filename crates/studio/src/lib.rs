@@ -57,6 +57,7 @@
 //! - `shown_page.rs`: `ShownPage`, the page of a brief a reader had open when they reported it.
 //! - `tool_call.rs`: `ToolCall`, a tool call of a run as readable text, read from its transcript.
 //! - `find_claude.rs`: finds the `claude` executable.
+//! - `smart_filter.rs`, `smart_filter_guide.rs`: ordered review buckets, validation and the agent contract.
 //! - `run_claude.rs`: runs Claude Code headless, confined, and follows its event stream.
 //! - `text_tail.rs`: `tail`, the end of a tool's error output for an error message.
 //! - `output_lines.rs`: `OutputLines`, a child process's output as lines read on a thread, so waits notice a cancel.
@@ -101,6 +102,8 @@ mod run_claude;
 mod sequence_lane;
 mod sequence_message;
 mod shown_page;
+mod smart_filter;
+mod smart_filter_guide;
 mod step_weight;
 mod stop_child;
 mod studio;
@@ -158,15 +161,16 @@ pub use reader_familiarity::ReaderFamiliarity;
 pub use rejected_widget::RejectedWidget;
 pub use request_layer::RequestLayer;
 pub use review_workspace::ReviewWorkspace;
-pub use run_claude::run_claude;
+pub use run_claude::{run_claude, run_smart_filter};
 pub use sequence_lane::SequenceLane;
 pub use sequence_message::SequenceMessage;
 pub use shown_page::ShownPage;
+pub use smart_filter::{SmartBucket, SmartFilter, parse_smart_buckets};
 pub use step_weight::StepWeight;
 pub use studio::Studio;
 pub use studio_graph::StudioGraph;
 pub use studio_page::StudioPage;
-pub use studio_prompt::studio_prompt;
+pub use studio_prompt::{smart_filter_prompt, studio_prompt};
 pub use studio_prompt_message::StudioPrompt;
 pub use studio_request::StudioRequest;
 pub use studio_request_file::StudioRequestFile;

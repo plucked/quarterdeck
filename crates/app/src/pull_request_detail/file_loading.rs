@@ -45,6 +45,8 @@ struct FetchedChanges {
     brief: Option<PreparedBrief>,
     /// The head commit the shown files are of, when known.
     head_sha: Option<String>,
+    base_sha: Option<String>,
+    smart_filter: Option<qd_studio::SmartFilter>,
 }
 
 impl PullRequestDetail {
@@ -85,6 +87,7 @@ impl PullRequestDetail {
         self.viewed_scope = None;
         // The head is known again with the files; until then no brief is compared with it.
         self.shown_head_sha = None;
+        self.shown_base_sha = None;
         self.reset_review();
         self.syntax_task = None;
         self.context_loads = ContextLoads::default();
@@ -149,6 +152,7 @@ impl PullRequestDetail {
         self.review.comments.notes = fetched.notes;
         self.review.comments.summary = fetched.summary.unwrap_or_default();
         self.shown_head_sha = fetched.head_sha;
+        self.shown_base_sha = fetched.base_sha;
         if let Some(brief) = fetched.brief {
             self.show_stored_brief(brief);
         }
@@ -159,6 +163,7 @@ impl PullRequestDetail {
             self.show_side_panel_tab(SidePanelTab::Review, cx);
         }
         self.file_tree.reset_for(fetched.tree);
+        self.restore_smart_filter(fetched.smart_filter);
         ChangedFiles::Loaded(fetched.files)
     }
 }
@@ -252,6 +257,22 @@ fn fetch_changes(
         .resolve(&cache)
         .ok()
         .flatten();
+    let base_sha = match &target {
+        ReviewTarget::Combined(range) => Some(range.base_sha.clone()),
+        _ => cache
+            .lock()
+            .file_set_commits(pull_request.id)
+            .ok()
+            .flatten()
+            .map(|commits| commits.base_sha),
+    };
+    let smart_filter = ui_state
+        .lock()
+        .smart_filter(&scope)
+        .unwrap_or_else(|error| {
+            eprintln!("ui state: ignoring a stored smart filter: {error:#}");
+            None
+        });
     Ok(FetchedChanges {
         files: ordered,
         tree,
@@ -261,6 +282,8 @@ fn fetch_changes(
         scope,
         brief,
         head_sha,
+        base_sha,
+        smart_filter,
     })
 }
 
