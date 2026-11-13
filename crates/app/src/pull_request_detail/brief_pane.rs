@@ -45,7 +45,7 @@ pub struct ShownBrief {
     pub page: usize,
 }
 
-/// The detail's brief: whether the main column shows the diff or the
+/// The detail's brief: whether the main column shows the summary, diff or
 /// brief, the briefs written this session (by pull request and target, so
 /// a layer and its combined range each have their own) with their runs,
 /// and the rows of the shown brief as a virtualized list.

@@ -20,9 +20,11 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 **Stacked pull requests**
 - Review a stack layer by layer, or combined: every change from the bottom of the stack up to the layer you are on, as one diff.
+- In **Diff**, the view-tab bubble expands to show **Layer / Combined** on a second row. Summary and Brief tuck those options away. Choose individual layers in the sidebar.
 - Step through layers with `{` and `}`, switch between layer and combined with `c`, and ⇧-click a layer in the sidebar to start the combined range there.
 
 **Reading diffs**
+- The middle pane has **Summary**, **Diff** and **Brief** tabs. Summary shows the pull request's description, while Diff remains the default. The header keeps the repository on the left, view tabs centered, author and branch details on the right, and the PR title on its own row.
 - Eight color themes made for reading code, four light and four dark (Settings → Appearance, with a live preview; Graphite by default): every color readable against its background, and diffs in blue (added) and orange (removed), which stay distinct with red-green colour blindness. Interface in Schibsted Grotesk, code in JetBrains Mono (both built in).
 - Show the unchanged code above, below and between the changes: 20 lines at a time or all of it, from the bar over each gap. The file is fetched once, on the first click, and kept.
 - Unified or side-by-side diffs, syntax highlighting, changed words highlighted inside lines, wrapping or sideways scrolling, and whitespace changes folded away (all in Settings).

@@ -44,9 +44,9 @@ use crate::ui_state::UiStateRecorder;
 /// rarely shows rows before they are drawn.
 const LIST_OVERDRAW: f32 = 600.;
 
-/// The right pane: a sticky header with the shown pull request's title (and
-/// its description when expanded), the changed files as one virtualized
-/// list of rows (or the AI-written brief in their place), and the side
+/// The right pane: a sticky header with the shown pull request's title and
+/// view tabs, the changed files as one virtualized list of rows (or the
+/// summary or AI-written brief in their place), and the side
 /// panel beside them with its Files, Review, Actions and Checks tabs. Only
 /// rows in view are rendered, so its cost does not grow with the pull
 /// request. The tree and the diff share one file order and one filter; the
@@ -93,10 +93,8 @@ pub struct PullRequestDetail {
     pub(super) is_selecting: bool,
     /// The file tree panel: the files as a tree, the filter, folders, visibility.
     pub(super) file_tree: FileTreeState,
-    /// Whether the sticky header shows the description; collapsed for each new pull request.
-    is_description_expanded: bool,
-    /// The scroll of the description inside the expanded header.
-    description_scroll: ScrollHandle,
+    /// The Summary tab's scroll, reset for each new pull request.
+    summary_scroll: ScrollHandle,
     /// Whether stacked pull requests show one layer or combined layers: the
     /// reader's preference, restored at launch and kept when nothing shows.
     pub(super) review_mode: StackReviewMode,
@@ -120,7 +118,7 @@ pub struct PullRequestDetail {
     pub(super) review: ReviewPane,
     /// The merge or close panel in the Actions tab, while open.
     action_panel: Option<ActionPanel>,
-    /// The AI-written brief: diff or brief mode, briefs written, the run in flight.
+    /// The selected detail mode, AI-written briefs and the run in flight.
     pub(super) brief: BriefPane,
     /// The head commit of the shown files, when known: what a brief's
     /// version is compared with.
@@ -185,8 +183,7 @@ impl PullRequestDetail {
             diff_selection: None,
             is_selecting: false,
             file_tree: FileTreeState::new(layout.clone()),
-            is_description_expanded: false,
-            description_scroll: ScrollHandle::new(),
+            summary_scroll: ScrollHandle::new(),
             review_mode: layout.stack_review,
             target: ReviewTarget::Layer,
             viewed_scope: None,
@@ -470,12 +467,10 @@ impl PullRequestDetail {
                 self.show_new_version(pull_request, cx);
             }
             ShowChange::OtherPullRequest { is_other_stack } => {
-                // Another pull request starts with no panel open and its description folded.
+                // Another pull request starts with no action panel and its summary at the top.
                 self.pending_scroll = restore;
                 self.action_panel = None;
-                self.is_description_expanded = false;
-                self.description_scroll
-                    .set_offset(gpui::point(px(0.), px(0.)));
+                self.summary_scroll.set_offset(gpui::point(px(0.), px(0.)));
                 if is_other_stack {
                     self.stack.drop_layers();
                 }
@@ -537,16 +532,7 @@ impl PullRequestDetail {
         &self.file_tree
     }
 
-    pub(super) fn is_description_expanded(&self) -> bool {
-        self.is_description_expanded
-    }
-
-    pub(super) fn description_scroll(&self) -> &ScrollHandle {
-        &self.description_scroll
-    }
-
-    pub(super) fn toggle_description(&mut self, cx: &mut Context<Self>) {
-        self.is_description_expanded = !self.is_description_expanded;
-        cx.notify();
+    pub(super) fn summary_scroll(&self) -> &ScrollHandle {
+        &self.summary_scroll
     }
 }

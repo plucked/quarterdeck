@@ -34,8 +34,11 @@ impl PullRequestDetail {
         self.brief().state_of(&self.shown_brief_key()?)
     }
 
-    /// Shows the diff or the brief in the main column.
+    /// Shows the summary, diff or brief in the main column.
     pub(super) fn set_detail_mode(&mut self, mode: DetailMode, cx: &mut Context<Self>) {
+        if mode != DetailMode::Diff {
+            self.clear_diff_selection();
+        }
         self.brief_mut().mode = mode;
         self.refresh_brief_rows();
         cx.notify();

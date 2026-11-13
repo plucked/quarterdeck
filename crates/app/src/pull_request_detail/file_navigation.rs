@@ -178,9 +178,9 @@ impl PullRequestDetail {
     }
 
     /// Shows file `file`'s header in the diff (a file clicked in the file
-    /// tree), switching from the brief to the diff first.
+    /// tree), switching from the summary or brief to the diff first.
     pub(super) fn show_file_in_diff(&mut self, file: usize, cx: &mut Context<Self>) {
-        if self.brief().mode == DetailMode::Brief {
+        if self.brief().mode != DetailMode::Diff {
             self.set_detail_mode(DetailMode::Diff, cx);
         }
         self.reveal_file(file, cx);

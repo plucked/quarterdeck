@@ -83,6 +83,7 @@ impl Render for PullRequestDetail {
                     .flex_1()
                     .min_h_0()
                     .child(match self.brief().mode {
+                        DetailMode::Summary => self.render_summary_area(),
                         DetailMode::Diff => diff_area.into_any_element(),
                         DetailMode::Brief => self.render_brief_area(cx),
                     }),

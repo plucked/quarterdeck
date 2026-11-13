@@ -36,7 +36,8 @@ struct SegmentOption {
     on_select: SelectHandler,
 }
 
-/// A bordered row of options of which one is selected; clicking an option
+/// A row of options of which one is selected, bordered by default or a
+/// borderless capsule with [`Self::quiet`]; clicking an option
 /// calls its handler (the owner then re-renders with the new selection) and
 /// goes no further, like a [`Button`](crate::controls::Button) click.
 #[derive(IntoElement)]
@@ -45,6 +46,7 @@ pub struct SegmentedControl {
     options: Vec<SegmentOption>,
     width: ControlWidth,
     size: ControlSize,
+    quiet: bool,
 }
 
 impl SegmentedControl {
@@ -55,6 +57,7 @@ impl SegmentedControl {
             options: Vec::new(),
             width: ControlWidth::Fit,
             size: ControlSize::Small,
+            quiet: false,
         }
     }
 
@@ -65,10 +68,17 @@ impl SegmentedControl {
         self
     }
 
-    /// Draws it larger, for a view's main switch (the detail's Diff / Brief).
+    /// Draws it larger, for a view's main switch.
     #[must_use]
     pub fn large(mut self) -> Self {
         self.size = ControlSize::Large;
+        self
+    }
+
+    /// A borderless capsule for view navigation on an open canvas.
+    #[must_use]
+    pub fn quiet(mut self) -> Self {
+        self.quiet = true;
         self
     }
 
@@ -101,6 +111,9 @@ impl RenderOnce for SegmentedControl {
             .bg(theme::sidebar())
             .border_1()
             .border_color(theme::border())
+            .when(self.quiet, |control| {
+                control.border_0().rounded_full().bg(theme::panel())
+            })
             .map(|control| match self.size {
                 ControlSize::Small => control.text_xs(),
                 ControlSize::Large => control.text_sm(),
@@ -116,6 +129,7 @@ impl RenderOnce for SegmentedControl {
                         segment.flex_1().flex().justify_center()
                     })
                     .rounded(gpui::px(4.))
+                    .when(self.quiet, Styled::rounded_full)
                     .cursor_pointer()
                     .font_weight(gpui::FontWeight::MEDIUM)
                     .when(option.is_selected, |segment| {
@@ -126,8 +140,7 @@ impl RenderOnce for SegmentedControl {
                             .text_color(theme::muted())
                             .hover(|style| style.text_color(theme::text()))
                     })
-                    // The click is the option's alone: a clickable row around the
-                    // control (the detail's title row folds the description) ignores it.
+                    // A clickable row around the control ignores this click.
                     .on_click(move |_, window, cx| {
                         cx.stop_propagation();
                         (option.on_select)(window, cx);

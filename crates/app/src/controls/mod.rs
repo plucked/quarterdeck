@@ -2,6 +2,7 @@
 //! handler helper the option controls share.
 //!
 //! Files:
+//! - `animated_reveal.rs`: `AnimatedReveal`, an interruptible expanding row with Reduce Motion support.
 //! - `button.rs`: `Button`, a small text button.
 //! - `number_flow/`: `NumberFlow`, formatted labels whose digits roll when values change.
 //! - `progress_bar.rs`: `ProgressBar`, a smoothly changing progress fill.
@@ -17,6 +18,7 @@
 //! - `repo_monogram.rs`: `RepoMonogram`, a repository's colored letter (sidebar, settings).
 //! - `pill.rs`: `Pill` + `PillStyle`, a short label on a fully rounded shape (badges, counts, status).
 
+mod animated_reveal;
 mod button;
 mod checkbox;
 mod fold_chevron;
@@ -32,6 +34,7 @@ mod text_tooltip;
 mod value_motion;
 mod view_option;
 
+pub use animated_reveal::AnimatedReveal;
 pub use button::Button;
 pub use checkbox::{CheckState, Checkbox};
 pub use fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
