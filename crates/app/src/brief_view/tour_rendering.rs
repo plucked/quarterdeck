@@ -5,6 +5,7 @@ use super::brief_handlers::BriefHandlers;
 use super::brief_text_rendering::{caption_line, markdown};
 use super::code_excerpt_rendering::render_anchor_link;
 use super::prepared_step::PreparedStep;
+use crate::controls::NumberFlow;
 use crate::theme;
 
 /// Size of a step's number badge.
@@ -77,7 +78,7 @@ fn render_step(
                 .text_color(badge_text)
                 .text_xs()
                 .font_weight(FontWeight::SEMIBOLD)
-                .child((index + 1).to_string()),
+                .child(NumberFlow::label((index + 1).to_string())),
         )
         .child(
             div()

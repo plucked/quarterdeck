@@ -6,7 +6,7 @@ use qd_github::PullRequestFile;
 use super::FileDiffState;
 use super::file_status_badge::render_file_status_badge;
 use super::tree_locate_button::TreeLocateButton;
-use crate::controls::{CheckState, Checkbox, FoldChevron, FoldState};
+use crate::controls::{CheckState, Checkbox, FoldChevron, FoldState, NumberFlow};
 use crate::theme;
 
 /// A click handler shared by several elements of one file.
@@ -67,12 +67,12 @@ pub fn render_file_header(
                 .child(
                     div()
                         .text_color(theme::added())
-                        .child(format!("+{}", file.additions)),
+                        .child(NumberFlow::label(format!("+{}", file.additions))),
                 )
                 .child(
                     div()
                         .text_color(theme::removed())
-                        .child(format!("−{}", file.deletions)),
+                        .child(NumberFlow::label(format!("−{}", file.deletions))),
                 ),
         )
         .child(

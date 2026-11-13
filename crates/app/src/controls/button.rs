@@ -6,6 +6,7 @@ use gpui::{
     div, prelude::*,
 };
 
+use super::NumberFlow;
 use crate::theme;
 
 /// Opacity of a primary button under the pointer (it has no hover color).
@@ -133,7 +134,7 @@ impl RenderOnce for Button {
             .font_weight(FontWeight::MEDIUM)
             .text_color(text)
             .when_some(background, Styled::bg)
-            .child(self.label);
+            .child(NumberFlow::new("button-label", self.label));
         match (self.is_disabled, self.on_click) {
             (false, Some(handler)) => button
                 .cursor_pointer()

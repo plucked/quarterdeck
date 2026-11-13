@@ -8,7 +8,7 @@ use super::check_row::TreeDepth;
 use super::check_tally::CheckTally;
 use super::check_tree::CheckTree;
 use super::checks_panel::ChecksPanel;
-use crate::controls::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState, Pill, PillStyle};
+use crate::controls::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState, NumberFlow, Pill, PillStyle};
 use crate::display_text::{short_duration, unix_now, unix_seconds};
 use crate::markdown_view::is_openable;
 use crate::theme;
@@ -68,7 +68,7 @@ pub(super) fn render_node_row(row: NodeRow) -> Stateful<Div> {
                 .flex_none()
                 .text_xs()
                 .text_color(color)
-                .child(progress),
+                .child(NumberFlow::label(progress)),
         )
 }
 
@@ -109,7 +109,7 @@ pub(super) fn render_job_row(
                 .flex_none()
                 .text_xs()
                 .text_color(theme::subtle())
-                .child(timing(check, unix_now())),
+                .child(NumberFlow::label(timing(check, unix_now()))),
         )
         .map(|row| with_details_link(row, check, cx))
         .into_any_element()
@@ -171,7 +171,7 @@ pub(super) fn render_flagged_row(
                     div()
                         .text_xs()
                         .text_color(theme::subtle())
-                        .child(timing(check, unix_now())),
+                        .child(NumberFlow::label(timing(check, unix_now()))),
                 ),
         )
         .map(|row| with_details_link(row, check, cx))

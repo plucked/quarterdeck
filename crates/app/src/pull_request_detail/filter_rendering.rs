@@ -1,7 +1,7 @@
 use gpui::{AnyElement, ClickEvent, Context, IntoElement, div, prelude::*};
 
 use super::pull_request_detail::PullRequestDetail;
-use crate::controls::{Button, CheckState, Checkbox};
+use crate::controls::{Button, CheckState, Checkbox, NumberFlow};
 use crate::facet_chips::{
     CHIP_HINT, ChipClick, ChipRowClick, CollapsedChipRow, FacetChip, FacetChipRow,
     most_common_values, render_chip_row,
@@ -52,7 +52,11 @@ impl PullRequestDetail {
             .on_click(cx.listener(|detail, _, _, cx| detail.toggle_hide_viewed(cx)))
             .child(Checkbox::new(CheckState::from_bool(is_on)))
             .child("Hide viewed")
-            .child(div().text_color(theme::subtle()).child(viewed.to_string()))
+            .child(
+                div()
+                    .text_color(theme::subtle())
+                    .child(NumberFlow::label(viewed.to_string())),
+            )
     }
 
     /// `Collapse all` while a folder is expanded, else `Expand all`: folds
@@ -143,10 +147,16 @@ impl PullRequestDetail {
             .gap_1p5()
             .text_xs()
             .text_color(theme::muted())
-            .child(div().flex_1().min_w_0().truncate().child(format!(
-                "Showing {shown} of {total} · {}",
-                parts.join(" · ")
-            )))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .child(NumberFlow::label(format!(
+                        "Showing {shown} of {total} · {}",
+                        parts.join(" · ")
+                    ))),
+            )
             .when(self.file_tree().has_chips_set(), |summary| {
                 summary.child(
                     div()

@@ -4,7 +4,7 @@ use qd_github::{MergeMethod, MergeOptions, MergeQueueState, PullRequestState};
 use super::action_panel::{ActionPanel, ArmedAction, PanelAction};
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
-use crate::controls::{Button, CheckState, Checkbox};
+use crate::controls::{Button, CheckState, Checkbox, NumberFlow};
 use crate::theme;
 
 /// Corner radius of a merge method's row.
@@ -426,12 +426,13 @@ fn render_method_row(
 }
 
 /// One line of the panel in `color`.
+#[track_caller]
 fn render_line(text: impl Into<SharedString>, color: Rgba) -> AnyElement {
     let text: SharedString = text.into();
     div()
         .text_xs()
         .text_color(color)
-        .child(text)
+        .child(NumberFlow::label(text))
         .into_any_element()
 }
 
@@ -455,7 +456,7 @@ fn render_confirmation(
             div()
                 .text_xs()
                 .font_weight(FontWeight::SEMIBOLD)
-                .child(question),
+                .child(NumberFlow::label(question)),
         )
         .child(
             div()

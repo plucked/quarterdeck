@@ -1,3 +1,4 @@
+use crate::controls::NumberFlow;
 use gpui::{Div, FontWeight, IntoElement, Rgba, div, prelude::*, px};
 use qd_cache::ColorTheme;
 use qd_syntax::SyntaxKind;
@@ -311,9 +312,17 @@ fn render_preview_header(colors: &ThemeColors, theme_name: &str) -> Div {
                         .text_color(colors.muted)
                         .flex()
                         .gap_1()
-                        .child("#4821 · octocat · 2 h")
-                        .child(div().text_color(colors.added).child("+2"))
-                        .child(div().text_color(colors.removed).child("−1")),
+                        .child(NumberFlow::label("#4821 · octocat · 2 h"))
+                        .child(
+                            div()
+                                .text_color(colors.added)
+                                .child(NumberFlow::label("+2")),
+                        )
+                        .child(
+                            div()
+                                .text_color(colors.removed)
+                                .child(NumberFlow::label("−1")),
+                        ),
                 ),
         )
         .child(
@@ -360,14 +369,14 @@ fn render_preview_line(colors: &ThemeColors, line: &SampleLine) -> Div {
             colors.added_emphasis,
         ),
     };
-    let gutter = |number: Option<u32>| {
+    let gutter = |side: &'static str, number: Option<u32>| {
         div()
             .flex_none()
             .w(px(GUTTER_WIDTH))
             .pr_1()
             .text_right()
             .text_color(colors.line_number)
-            .children(number.map(|number| number.to_string()))
+            .children(number.map(|number| NumberFlow::new((side, number), number.to_string())))
     };
     div()
         .h(px(LINE_HEIGHT))
@@ -376,8 +385,8 @@ fn render_preview_line(colors: &ThemeColors, line: &SampleLine) -> Div {
         .whitespace_nowrap()
         .overflow_hidden()
         .bg(background)
-        .child(gutter(line.old))
-        .child(gutter(line.new))
+        .child(gutter("preview-old", line.old))
+        .child(gutter("preview-new", line.new))
         .child(
             div()
                 .flex_none()

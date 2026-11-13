@@ -1,6 +1,6 @@
 use gpui::{AnyElement, Div, FontWeight, SharedString, Stateful, div, prelude::*, px};
 
-use crate::controls::SectionLabel;
+use crate::controls::{NumberFlow, SectionLabel};
 use crate::theme;
 
 /// What a chip row says while no chip is set: how the chips work.
@@ -53,5 +53,5 @@ pub fn render_more_chip(
         .text_xs()
         .text_color(theme::accent())
         .cursor_pointer()
-        .child(label.into())
+        .child(NumberFlow::label(label))
 }

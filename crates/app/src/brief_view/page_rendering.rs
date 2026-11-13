@@ -2,7 +2,7 @@ use gpui::{AnyElement, FontWeight, IntoElement, SharedString, div, prelude::*, p
 
 use super::brief_handlers::BriefHandlers;
 use super::prepared_page::PreparedPage;
-use crate::controls::SectionLabel;
+use crate::controls::{NumberFlow, SectionLabel};
 use crate::theme;
 
 /// Height of the underline marking the shown page's tab.
@@ -53,7 +53,7 @@ pub fn render_page_tabs(
                     div()
                         .text_xs()
                         .text_color(theme::subtle())
-                        .child((index + 1).to_string()),
+                        .child(NumberFlow::label((index + 1).to_string())),
                 )
                 .child(page.title.clone())
                 .on_click(move |_, window, cx| show_page(index, window, cx))
@@ -150,11 +150,11 @@ fn navigation_card(
         // so a long summary wraps inside the border; the next card's are right-aligned.
         .when(is_next, Styled::text_right)
         .child(div().text_xs().text_color(theme::subtle()).child(direction))
-        .child(div().font_weight(FontWeight::SEMIBOLD).child(format!(
-            "{}  {}",
-            index + 1,
-            page.title
-        )))
+        .child(
+            div()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(NumberFlow::label(format!("{}  {}", index + 1, page.title))),
+        )
         .when(is_next && !page.summary.is_empty(), |card| {
             card.child(
                 div()

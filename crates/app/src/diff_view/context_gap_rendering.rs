@@ -7,6 +7,7 @@ use super::diff_cell_rendering::render_row;
 use super::file_card_rendering::frame_file_row;
 use super::gap_part::CONTEXT_STEP;
 use super::{FileTextLoad, GapPart};
+use crate::controls::NumberFlow;
 use crate::display_text::counted;
 use crate::theme;
 
@@ -81,7 +82,7 @@ fn render_gap_button(id: usize, button: GapButton, on_click: &GapClickHandler) -
         // A press here is a click, not the start of a code selection.
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(move |_, window, cx| on_click(&part, window, cx))
-        .child(button.label)
+        .child(NumberFlow::label(button.label))
 }
 
 /// The buttons a gap offers: a short gap shows whole in one click; a long

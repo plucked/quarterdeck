@@ -9,7 +9,7 @@ use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::note_key;
 use super::thread_resolution::ThreadResolution;
 use crate::avatar_images::Avatar;
-use crate::controls::{Button, Pill, PillStyle};
+use crate::controls::{Button, NumberFlow, Pill, PillStyle};
 use crate::diff_view::frame_file_row;
 use crate::display_text::short_date;
 use crate::markdown_view::MarkdownView;
@@ -75,7 +75,7 @@ impl PullRequestDetail {
                     .child(
                         div()
                             .font_weight(FontWeight::MEDIUM)
-                            .child(format!("New comment · {lines}")),
+                            .child(NumberFlow::label(format!("New comment · {lines}"))),
                     )
                     .child(destination)
                     .child(
@@ -190,7 +190,11 @@ impl PullRequestDetail {
 
     /// One GitHub comment: author, date, pending mark, body, and edit and
     /// delete when the viewer may; the editor while it is being edited.
-    fn render_thread_comment(&self, comment: &ThreadComment, cx: &mut Context<Self>) -> Div {
+    fn render_thread_comment(
+        &self,
+        comment: &ThreadComment,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<Div> {
         let editing = self.review().editor.as_ref().filter(|editor| {
             matches!(
                 &editor.target,
@@ -217,7 +221,7 @@ impl PullRequestDetail {
             .child(
                 div()
                     .text_color(theme::subtle())
-                    .child(short_date(&comment.created_at)),
+                    .child(NumberFlow::label(short_date(&comment.created_at))),
             );
         if comment.is_pending {
             header = header.child(render_badge("Pending on GitHub", theme::accent()));
@@ -258,6 +262,7 @@ impl PullRequestDetail {
             cx,
         );
         div()
+            .id(element_id("thread-comment", &comment.id))
             .flex()
             .flex_col()
             .gap_1()
@@ -284,7 +289,7 @@ impl PullRequestDetail {
         note: &ReviewNote,
         label: &'static str,
         cx: &mut Context<Self>,
-    ) -> Div {
+    ) -> gpui::Stateful<Div> {
         let id = note.id;
         let editing = self.review().editor.as_ref().filter(
             |editor| matches!(&editor.target, EditorTarget::EditNote(edited) if *edited == id),
@@ -309,7 +314,11 @@ impl PullRequestDetail {
             .gap_2()
             .text_xs()
             .child(render_badge(label, color))
-            .child(div().text_color(theme::subtle()).child(lines))
+            .child(
+                div()
+                    .text_color(theme::subtle())
+                    .child(NumberFlow::label(lines)),
+            )
             .child(div().flex_1());
         if !is_editing {
             let body = note.body.clone();
@@ -333,7 +342,13 @@ impl PullRequestDetail {
             &key,
             cx,
         );
-        div().flex().flex_col().gap_1().child(header).child(body)
+        div()
+            .id(element_id("note-body", &key))
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(header)
+            .child(body)
     }
 
     /// A comment's body: while `editing`, its editor with cancel and
@@ -423,6 +438,7 @@ fn card_frame() -> Div {
 }
 
 /// A small pill in `color` saying a comment's state.
+#[track_caller]
 fn render_badge(text: impl Into<SharedString>, color: gpui::Rgba) -> Pill {
     Pill::new(text, PillStyle::Tinted(color))
         .compact()

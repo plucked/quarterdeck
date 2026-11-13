@@ -5,6 +5,7 @@ use gpui::{
     App, ElementId, IntoElement, RenderOnce, SharedString, Styled, Window, div, prelude::*,
 };
 
+use super::NumberFlow;
 use crate::theme;
 
 /// What an option does when clicked.
@@ -131,7 +132,7 @@ impl RenderOnce for SegmentedControl {
                         cx.stop_propagation();
                         (option.on_select)(window, cx);
                     })
-                    .child(option.label)
+                    .child(NumberFlow::new("segment-label", option.label))
             }))
     }
 }

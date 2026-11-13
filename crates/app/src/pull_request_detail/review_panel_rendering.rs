@@ -5,6 +5,7 @@ use qd_github::{PullRequestReviewState, ReviewEvent};
 use super::comment_card_rendering::element_id;
 use super::lines_label::note_lines_label;
 use super::pull_request_detail::PullRequestDetail;
+use crate::controls::NumberFlow;
 use crate::controls::{Button, SectionLabel, SegmentedControl, view_option};
 use crate::theme;
 
@@ -239,7 +240,12 @@ impl PullRequestDetail {
                         detail.reveal_note(id);
                         cx.notify();
                     }))
-                    .child(div().flex_none().text_color(theme::subtle()).child(lines))
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_color(theme::subtle())
+                            .child(NumberFlow::label(lines)),
+                    )
                     .child(div().flex_1().min_w_0().truncate().child(first_line))
                     .child(
                         div()

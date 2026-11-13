@@ -7,7 +7,7 @@ use super::ReviewQueue;
 use super::chip_marks::ChipMarks;
 use super::others_facet::OthersFacet;
 use super::others_filtering::describe;
-use crate::controls::{CheckState, Checkbox, SegmentedControl};
+use crate::controls::{CheckState, Checkbox, NumberFlow, SegmentedControl};
 use crate::facet_chips::{
     CHIP_HINT, ChipClick, ChipRowClick, CollapsedChipRow, FacetChipRow, first_values,
     render_chip_row,
@@ -235,7 +235,7 @@ impl ReviewQueue {
                     .min_w_0()
                     .truncate()
                     .text_color(theme::subtle())
-                    .child(filter_summary_text(&parts)),
+                    .child(NumberFlow::label(filter_summary_text(&parts))),
             )
             .children(
                 filter.is_active().then(|| {
@@ -258,6 +258,10 @@ impl ReviewQueue {
             .filter(|pull_request| &pull_request.repo == repo)
             .count();
         let note = div()
+            .id(gpui::SharedString::from(format!(
+                "others-nothing-{}",
+                repo.full_name()
+            )))
             .px_4()
             .py_1p5()
             .flex()
@@ -273,7 +277,7 @@ impl ReviewQueue {
         note.child(
             div()
                 .flex_1()
-                .child(format!("The filter hides all {total}")),
+                .child(NumberFlow::label(format!("The filter hides all {total}"))),
         )
         .child(render_reset_link(
             "others-nothing-reset",

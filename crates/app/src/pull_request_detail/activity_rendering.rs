@@ -7,7 +7,7 @@ use gpui::{
 
 use super::batch_progress::BatchProgress;
 use super::pull_request_detail::PullRequestDetail;
-use crate::controls::{Pill, PillStyle, dot_pulse};
+use crate::controls::{NumberFlow, Pill, PillStyle, dot_pulse};
 use crate::count_as_f32::count_as_f32;
 use crate::theme;
 
@@ -115,7 +115,7 @@ impl PullRequestDetail {
                     .child(
                         div()
                             .font_weight(FontWeight::MEDIUM)
-                            .child(progress.label()),
+                            .child(NumberFlow::label(progress.label())),
                     )
                     .child(render_bar(
                         "loading-card-progress",

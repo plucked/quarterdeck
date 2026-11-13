@@ -16,8 +16,16 @@ pub fn render_unified_line(
 ) -> Div {
     frame_file_row(
         render_row(Some(line.kind))
-            .child(render_gutter(line.old_number, style.gutter_width))
-            .child(render_gutter(line.new_number, style.gutter_width))
+            .child(render_gutter(
+                "old-line",
+                line.old_number,
+                style.gutter_width,
+            ))
+            .child(render_gutter(
+                "new-line",
+                line.new_number,
+                style.gutter_width,
+            ))
             .child(render_marker(line.kind))
             .child(render_code(line, syntax, style, cells, DiffSide::Unified)),
     )

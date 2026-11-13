@@ -17,6 +17,7 @@ use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
 use super::selection_granularity::DOUBLE_CLICK;
 use crate::app_commands::Copy;
+use crate::controls::NumberFlow;
 use crate::diff_view::{
     DiffRowStyle, DiffSide, DiffSummary, DiffSummaryBar, FileClickHandler, GapClickHandler,
     GapPart, render_file_end, render_file_header, render_file_note, render_gap_bar,
@@ -140,6 +141,7 @@ impl PullRequestDetail {
         let Some(row) = self.rows().get(index) else {
             return div().into_any_element();
         };
+        let row_id = gpui::SharedString::from(format!("detail-row-{row:?}"));
         let is_last = index + 1 == self.rows().len();
         let content = match row {
             DetailRow::NoSelection => div()
@@ -215,6 +217,7 @@ impl PullRequestDetail {
             DetailRow::Composer { .. } => self.render_composer_row(cx),
         };
         div()
+            .id(row_id)
             .px_4()
             .when(index == 0, Styled::pt_4)
             .when(is_last, Styled::pb_4)
@@ -504,6 +507,6 @@ fn render_status_line(message: impl Into<gpui::SharedString>, color: gpui::Rgba)
     div()
         .pb_3()
         .text_color(color)
-        .child(message.into())
+        .child(NumberFlow::label(message))
         .into_any_element()
 }

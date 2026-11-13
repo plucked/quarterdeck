@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*};
 
 use super::DiffSummary;
-use crate::controls::Button;
+use crate::controls::{Button, NumberFlow};
 use crate::theme;
 
 /// What a summary bar link does when clicked.
@@ -50,16 +50,16 @@ impl RenderOnce for DiffSummaryBar {
             .gap_3()
             .text_xs()
             .text_color(theme::muted())
-            .child(format!("{} files", summary.file_count))
+            .child(NumberFlow::label(format!("{} files", summary.file_count)))
             .child(
                 div()
                     .text_color(theme::added())
-                    .child(format!("+{}", summary.additions)),
+                    .child(NumberFlow::label(format!("+{}", summary.additions))),
             )
             .child(
                 div()
                     .text_color(theme::removed())
-                    .child(format!("−{}", summary.deletions)),
+                    .child(NumberFlow::label(format!("−{}", summary.deletions))),
             )
             .child(div().flex_1())
             .child(

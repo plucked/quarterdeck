@@ -15,7 +15,7 @@ use super::check_tree::{CheckTree, TreeEntry};
 use super::checks_panel::ChecksPanel;
 use super::checks_summary::Summary;
 use super::shown_checks::ShownChecks;
-use crate::controls::{Button, FoldState, PulsingStatus, SectionLabel};
+use crate::controls::{Button, FoldState, NumberFlow, PulsingStatus, SectionLabel};
 use crate::count_as_f32::count_as_f32;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
@@ -106,13 +106,13 @@ impl ChecksPanel {
                                     .text_sm()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(theme::text())
-                                    .child(summary.verdict),
+                                    .child(NumberFlow::label(summary.verdict)),
                             )
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(theme::muted())
-                                    .child(summary.counts),
+                                    .child(NumberFlow::label(summary.counts)),
                             ),
                     )
                     .child(self.render_refresh_control(cx)),
@@ -122,7 +122,10 @@ impl ChecksPanel {
                 div()
                     .text_xs()
                     .text_color(theme::subtle())
-                    .child(footnote(shown, summary.required.as_ref())),
+                    .child(NumberFlow::label(footnote(
+                        shown,
+                        summary.required.as_ref(),
+                    ))),
             )
             .children(self.error().map(|error| {
                 render_inline_note(format!("Refresh failed: {error}"), theme::danger())
@@ -227,6 +230,7 @@ impl ChecksPanel {
         // label, and the row's right padding is trimmed by as much, so its
         // text lines up with the rows' right edge.
         div()
+            .id(SharedString::from(format!("check-heading-{section:?}")))
             .pl_3()
             .pr_1()
             .pt_3()

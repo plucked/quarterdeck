@@ -9,7 +9,7 @@ use super::pull_request_row_rendering::{VERDICT_BADGE_ID, render_brief_mark};
 use super::review_verdict_badge::ReviewVerdictBadge;
 use super::sidebar_rendering::{render_meta, row_frame};
 use super::stack_group::StackGroup;
-use crate::controls::{FoldChevron, FoldState, Pill, PillStyle};
+use crate::controls::{FoldChevron, FoldState, NumberFlow, Pill, PillStyle};
 use crate::theme;
 
 /// Width of the column holding a stack layer's position and rail.
@@ -24,17 +24,16 @@ const STACK_GLYPH_SQUARE_SIZE: f32 = STACK_GLYPH_SIZE - 5.;
 const STACK_GLYPH_CORNER_RADIUS: f32 = 3.;
 
 impl ReviewQueue {
-    /// What the row of a stack layer the shown list has (at `list_index`)
+    /// What the row of a stack layer in the shown list
     /// shows; `selected_id` is the selected pull request's.
     pub(super) fn listed_layer_row(
         &self,
         pull_request: &PullRequest,
-        list_index: usize,
         selected_id: Option<u64>,
     ) -> LayerRow {
         let draft_marker = if pull_request.draft { " · draft" } else { "" };
         LayerRow {
-            id: ("stack-layer", list_index).into(),
+            id: ("stack-layer", pull_request.id).into(),
             position: pull_request
                 .stack
                 .as_ref()
@@ -51,17 +50,21 @@ impl ReviewQueue {
         }
     }
 
-    /// What the row (sidebar row `row_index`) of `stack_layer`, layer
+    /// What the row of `stack_layer`, layer
     /// `layer` of a stack in `repo` that the shown list lacks, shows.
     pub(super) fn other_layer_row(
         &self,
-        row_index: usize,
         repo: &RepoRef,
         layer: usize,
         stack_layer: &StackLayer,
     ) -> LayerRow {
         LayerRow {
-            id: ("other-layer", row_index).into(),
+            id: SharedString::from(format!(
+                "other-layer-{}-{}",
+                repo.full_name(),
+                stack_layer.number
+            ))
+            .into(),
             position: u64::try_from(layer + 1).unwrap_or(u64::MAX),
             title: stack_layer.title.clone().into(),
             meta: format!("#{}{}", stack_layer.number, layer_state_marker(stack_layer)).into(),
@@ -117,7 +120,12 @@ pub(super) fn render_stack_header(
         (QueueTab::Others, true) => "all listed".to_owned(),
         (QueueTab::Others, false) => format!("{} listed", group.listed),
     };
-    row_frame(("stack-header", row_index), is_reviewed)
+    let row_id = SharedString::from(format!(
+        "stack-header-{}-{}",
+        group.key.repo.full_name(),
+        group.key.number
+    ));
+    row_frame(row_id, is_reviewed)
         .flex()
         .items_center()
         .gap_2p5()
@@ -140,7 +148,7 @@ pub(super) fn render_stack_header(
                             div()
                                 .flex_none()
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .child(format!("Stack #{}", group.key.number)),
+                                .child(NumberFlow::label(format!("Stack #{}", group.key.number))),
                         )
                         .child(
                             div()
@@ -243,7 +251,7 @@ pub(super) fn render_layer_row(
                 .gap_1p5()
                 .text_xs()
                 .text_color(theme::subtle())
-                .child(row.position.to_string())
+                .child(NumberFlow::label(row.position.to_string()))
                 .child(
                     div()
                         .w(px(2.))

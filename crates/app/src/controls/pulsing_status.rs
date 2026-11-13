@@ -8,6 +8,7 @@ use gpui::{
     Window, div, prelude::*, pulsating_between,
 };
 
+use super::NumberFlow;
 use crate::theme;
 
 /// One breath of every pulse: a status text or an activity dot.
@@ -55,7 +56,7 @@ impl RenderOnce for PulsingStatus {
         div()
             .text_xs()
             .text_color(theme::accent())
-            .child(self.text)
+            .child(NumberFlow::new("status-label", self.text))
             .with_animation(self.id, pulse_between(TEXT_LOWEST_OPACITY), Styled::opacity)
     }
 }

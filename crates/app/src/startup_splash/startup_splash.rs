@@ -14,6 +14,7 @@ use qd_update::AppVersion;
 use super::decode_splash_frames::decode_splash_frames;
 use super::splash_frame::SplashFrame;
 use super::splash_playback::{FramePoll, PlaybackStep, SplashPlayback, TimedFrame};
+use crate::controls::NumberFlow;
 use crate::main_window::MainWindow;
 use crate::theme;
 
@@ -233,7 +234,7 @@ impl Render for StartupSplash {
                         .font_family(theme::UI_FONT)
                         .text_xs()
                         .text_color(theme::on_splash())
-                        .child(format!("v{}", AppVersion::current())),
+                        .child(NumberFlow::label(format!("v{}", AppVersion::current()))),
                 )
             })
             // A click skips the rest of the movie.

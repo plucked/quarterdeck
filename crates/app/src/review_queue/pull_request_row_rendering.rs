@@ -67,7 +67,7 @@ pub(super) fn render_pull_request_row(
     cx: &mut Context<ReviewQueue>,
 ) -> AnyElement {
     let state = PullRequestState::of(pull_request);
-    row_frame(("pull-request", list_index), is_selected)
+    row_frame(("pull-request", pull_request.id), is_selected)
         .flex()
         .gap_2p5()
         .on_click(cx.listener(move |queue, _, _, cx| queue.select(list_index, cx)))

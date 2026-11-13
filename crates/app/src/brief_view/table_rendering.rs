@@ -5,6 +5,7 @@ use qd_markdown::MarkdownDocument;
 use qd_studio::TableRole;
 
 use super::brief_text_rendering::{caption_line, markdown};
+use crate::controls::NumberFlow;
 use crate::theme;
 
 /// Width of a trace's step-number column.
@@ -46,6 +47,7 @@ pub(super) fn render_table(
                 .child(column.clone())
         }));
     div()
+        .id(("brief-table", widget))
         .flex()
         .flex_col()
         .gap_1p5()
@@ -69,7 +71,13 @@ pub(super) fn render_table(
                             row.border_t_1().border_color(theme::border())
                         })
                         .when(is_trace, |row| {
-                            row.child(step_cell((row_index + 1).to_string().into_any_element()))
+                            row.child(step_cell(
+                                NumberFlow::new(
+                                    ("table-step", row_index),
+                                    (row_index + 1).to_string(),
+                                )
+                                .into_any_element(),
+                            ))
                         })
                         .children(cells.iter().enumerate().map(|(column, cell)| {
                             div().flex_1().min_w_0().child(markdown(

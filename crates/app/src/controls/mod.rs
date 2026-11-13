@@ -3,6 +3,9 @@
 //!
 //! Files:
 //! - `button.rs`: `Button`, a small text button.
+//! - `number_flow/`: `NumberFlow`, formatted labels whose digits roll when values change.
+//! - `progress_bar.rs`: `ProgressBar`, a smoothly changing progress fill.
+//! - `value_motion.rs`: shared numeric animation timing and Reduce Motion preference.
 //! - `checkbox.rs`: `Checkbox`, a drawn checkbox (checked, unchecked or mixed).
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
 //! - `view_option.rs`: `view_option`, an option's select handler passing its value to the view.
@@ -17,19 +20,24 @@
 mod button;
 mod checkbox;
 mod fold_chevron;
+mod number_flow;
 mod pill;
+mod progress_bar;
 mod pulsing_status;
 mod repo_monogram;
 mod resize_handle;
 mod section_label;
 mod segmented_control;
 mod text_tooltip;
+mod value_motion;
 mod view_option;
 
 pub use button::Button;
 pub use checkbox::{CheckState, Checkbox};
 pub use fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
+pub use number_flow::NumberFlow;
 pub use pill::{Pill, PillStyle};
+pub use progress_bar::ProgressBar;
 pub use pulsing_status::{PulsingStatus, dot_pulse};
 pub use repo_monogram::RepoMonogram;
 pub use resize_handle::{ResizeEdge, ResizeHandle};

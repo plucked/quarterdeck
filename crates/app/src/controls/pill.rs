@@ -6,6 +6,7 @@ use gpui::{
     prelude::*, px,
 };
 
+use super::NumberFlow;
 use crate::theme;
 
 /// Text size of a compact pill, the marks inside a dense row (Draft,
@@ -46,7 +47,7 @@ enum PillSize {
 /// [`Pill::weight`] sets one.
 #[derive(IntoElement)]
 pub struct Pill {
-    text: SharedString,
+    text: NumberFlow,
     style: PillStyle,
     size: PillSize,
     weight: Option<FontWeight>,
@@ -56,9 +57,10 @@ pub struct Pill {
 
 impl Pill {
     /// A pill of extra-small text reading `text`, colored by `style`.
+    #[track_caller]
     pub fn new(text: impl Into<SharedString>, style: PillStyle) -> Self {
         Self {
-            text: text.into(),
+            text: NumberFlow::label(text),
             style,
             size: PillSize::Small,
             weight: None,

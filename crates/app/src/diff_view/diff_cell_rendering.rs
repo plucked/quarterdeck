@@ -6,6 +6,7 @@ use qd_syntax::SyntaxSpan;
 use super::code_highlights::code_highlights;
 use super::file_card_rendering::frame_file_row;
 use super::{CodeCells, CodeSegment, DiffRowStyle, DiffSide};
+use crate::controls::NumberFlow;
 use crate::count_as_f32::count_as_f32;
 use crate::theme;
 
@@ -27,14 +28,14 @@ pub fn gutter_width(max_line_number: u32) -> f32 {
 }
 
 /// A right-aligned line number, or an empty gutter.
-pub fn render_gutter(number: Option<u32>, width: f32) -> Div {
+pub fn render_gutter(id: &'static str, number: Option<u32>, width: f32) -> Div {
     div()
         .flex_none()
         .w(px(width))
         .pr_2()
         .text_right()
         .text_color(theme::line_number())
-        .children(number.map(|number| number.to_string()))
+        .children(number.map(|number| NumberFlow::new(id, number.to_string())))
 }
 
 /// The `+`, `-` or blank marker column.
@@ -145,6 +146,6 @@ pub fn render_hunk_header(header: &str, indent: f32) -> Div {
             .text_color(theme::subtle())
             .whitespace_nowrap()
             .overflow_hidden()
-            .child(header.to_owned()),
+            .child(NumberFlow::label(header.to_owned())),
     )
 }

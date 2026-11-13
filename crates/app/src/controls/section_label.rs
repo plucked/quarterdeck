@@ -5,6 +5,7 @@ use gpui::{
     App, FontWeight, IntoElement, RenderOnce, SharedString, Styled, Window, div, prelude::*, px,
 };
 
+use super::NumberFlow;
 use crate::theme;
 
 /// Text size of a compact label, in panels where every pixel of height
@@ -33,7 +34,7 @@ enum LabelOverflow {
 /// below it. The text is given in any case and drawn in uppercase.
 #[derive(IntoElement)]
 pub struct SectionLabel {
-    text: SharedString,
+    text: NumberFlow,
     size: LabelSize,
     weight: FontWeight,
     overflow: LabelOverflow,
@@ -41,9 +42,10 @@ pub struct SectionLabel {
 
 impl SectionLabel {
     /// A semibold label of extra-small text reading `text` in uppercase.
+    #[track_caller]
     pub fn new(text: impl Into<SharedString>) -> Self {
         Self {
-            text: text.into(),
+            text: NumberFlow::label(text.into().to_uppercase()),
             size: LabelSize::Small,
             weight: FontWeight::SEMIBOLD,
             overflow: LabelOverflow::Wrap,
@@ -86,6 +88,6 @@ impl RenderOnce for SectionLabel {
         label
             .font_weight(self.weight)
             .text_color(theme::subtle())
-            .child(self.text.to_uppercase())
+            .child(self.text)
     }
 }

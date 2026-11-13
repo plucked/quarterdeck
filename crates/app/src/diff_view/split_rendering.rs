@@ -52,7 +52,11 @@ fn render_half(
         DiffSide::New => line.new_number,
     };
     let spans = syntax.map_or(&[][..], |syntax| syntax.spans(hunk_index, line_index));
-    half.child(render_gutter(number, style.gutter_width))
+    let gutter_id = match side {
+        DiffSide::Old | DiffSide::Unified => "old-line",
+        DiffSide::New => "new-line",
+    };
+    half.child(render_gutter(gutter_id, number, style.gutter_width))
         .child(render_marker(line.kind))
         .child(render_code(line, spans, style, cells, side))
 }

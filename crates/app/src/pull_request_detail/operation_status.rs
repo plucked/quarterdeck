@@ -1,5 +1,6 @@
 use gpui::{AnyElement, IntoElement, SharedString, div, prelude::*};
 
+use crate::controls::NumberFlow;
 use crate::theme;
 
 /// How the last operation on GitHub or the clipboard went: a review
@@ -18,6 +19,7 @@ pub enum OperationStatus {
 
 impl OperationStatus {
     /// One small line saying how it goes, colored by the outcome; nothing while idle.
+    #[track_caller]
     pub fn render(&self) -> Option<AnyElement> {
         let (text, color) = match self {
             Self::Idle => return None,
@@ -29,7 +31,7 @@ impl OperationStatus {
             div()
                 .text_xs()
                 .text_color(color)
-                .child(text)
+                .child(NumberFlow::label(text))
                 .into_any_element(),
         )
     }

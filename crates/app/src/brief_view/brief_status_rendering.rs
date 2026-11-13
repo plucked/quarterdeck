@@ -5,7 +5,7 @@ use super::brief_card::brief_card;
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::brief_state::BriefState;
 use super::familiarity_picker::render_familiarity_picker;
-use crate::controls::{Button, SectionLabel};
+use crate::controls::{Button, NumberFlow, SectionLabel};
 use crate::display_text::counted;
 use crate::theme;
 
@@ -95,7 +95,7 @@ pub fn render_brief_status(
             div()
                 .text_sm()
                 .text_color(content.text_color)
-                .child(content.text),
+                .child(NumberFlow::label(content.text)),
         )
         .when(
             matches!(content.reader_picker, ReaderPicker::Shown),

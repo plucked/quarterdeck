@@ -4,7 +4,7 @@ use qd_studio::{CodeAccess, ReaderFamiliarity, RejectedWidget};
 use super::brief_handlers::{BriefHandlers, on_click};
 use super::familiarity_picker::render_familiarity_picker;
 use super::prepared_brief::PreparedBrief;
-use crate::controls::Button;
+use crate::controls::{Button, NumberFlow};
 use crate::display_text::counted;
 use crate::theme;
 
@@ -31,7 +31,11 @@ pub fn render_brief_footer(
             div()
                 .text_xs()
                 .text_color(theme::subtle())
-                .child(written_from(&brief.record.code, brief.record.reader, &cost)),
+                .child(NumberFlow::label(written_from(
+                    &brief.record.code,
+                    brief.record.reader,
+                    &cost,
+                ))),
         )
         .child(
             div()
@@ -76,10 +80,10 @@ pub fn render_rejected(rejected: &[RejectedWidget]) -> AnyElement {
         .pt_3()
         .text_xs()
         .text_color(theme::subtle())
-        .child(format!(
+        .child(NumberFlow::label(format!(
             "Left out: {} of the brief pointed at lines outside the diff or was malformed.",
             counted(rejected.len(), "part", "parts")
-        ))
+        )))
         .children(
             rejected
                 .iter()

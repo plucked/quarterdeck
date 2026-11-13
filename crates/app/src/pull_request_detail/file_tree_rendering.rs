@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use gpui::{
     AnyElement, Context, Div, ImageSource, IntoElement, Resource, Rgba, Stateful, Styled, div, img,
-    prelude::*, px, relative, uniform_list,
+    prelude::*, px, uniform_list,
 };
 use qd_file_tree::{FileIcon, TreeNodeKind, TreeRow};
 
@@ -12,7 +12,8 @@ use super::pull_request_detail::PullRequestDetail;
 use crate::app_settings::AppSettings;
 use crate::bundled_assets::file_icon_path;
 use crate::controls::{
-    CheckState, Checkbox, FOLD_CHEVRON_SIZE, FoldChevron, FoldState, Pill, PillStyle, TextTooltip,
+    CheckState, Checkbox, FOLD_CHEVRON_SIZE, FoldChevron, FoldState, NumberFlow, Pill, PillStyle,
+    ProgressBar, TextTooltip,
 };
 use crate::diff_view::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
 use crate::display_text::counted;
@@ -26,8 +27,6 @@ const TREE_INDENT: f32 = 12.;
 /// Size of the line counts' monospace font, and the width of one of its characters.
 const COUNT_FONT_SIZE: f32 = 10.;
 const COUNT_CHARACTER_WIDTH: f32 = 6.1;
-/// Height of the viewed progress bar.
-const PROGRESS_BAR_HEIGHT: f32 = 4.;
 /// Edge length of a file's type icon, centered where a folder's chevron sits.
 const FILE_ICON_SIZE: f32 = 16.;
 /// How visible a viewed file's icon is, so it fades with the name.
@@ -83,7 +82,10 @@ impl PullRequestDetail {
                             .flex_none()
                             .text_xs()
                             .text_color(theme::muted())
-                            .child(format!("{viewed} of {} viewed", files.len())),
+                            .child(NumberFlow::label(format!(
+                                "{viewed} of {} viewed",
+                                files.len()
+                            ))),
                     )
                     .child(
                         div()
@@ -152,7 +154,10 @@ impl PullRequestDetail {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let base = div()
-            .id(index)
+            .id(gpui::SharedString::from(format!(
+                "tree-node-{}",
+                self.file_tree().tree().node(row.node).path
+            )))
             .flex()
             .items_center()
             .gap_1p5()
@@ -340,29 +345,24 @@ fn render_progress_bar(viewed: usize, total: usize) -> impl IntoElement {
         f32::from(u16::try_from(viewed).unwrap_or(u16::MAX))
             / f32::from(u16::try_from(total).unwrap_or(u16::MAX))
     };
-    div()
-        .h(px(PROGRESS_BAR_HEIGHT))
-        .rounded_md()
-        .bg(theme::border())
-        .child(
-            div()
-                .h_full()
-                .w(relative(fraction.min(1.)))
-                .rounded_md()
-                .bg(theme::success()),
-        )
+    ProgressBar::new(
+        "viewed-progress",
+        fraction,
+        theme::border(),
+        theme::success(),
+    )
 }
 
 /// `+12` and `−3` in their columns, right-aligned in a monospace font so
 /// digits line up from row to row; a zero leaves its column empty.
 fn render_line_counts(counts: LineCounts, columns: CountColumns) -> impl IntoElement {
-    let column = |width: f32, text: Option<String>, color: Rgba| {
+    let column = |id: &'static str, width: f32, text: Option<String>, color: Rgba| {
         div()
             .flex_none()
             .w(px(width))
             .text_right()
             .text_color(color)
-            .children(text)
+            .children(text.map(|text| NumberFlow::new(id, text)))
     };
     div()
         .flex_none()
@@ -371,11 +371,13 @@ fn render_line_counts(counts: LineCounts, columns: CountColumns) -> impl IntoEle
         .font_family(theme::MONO_FONT)
         .text_size(px(COUNT_FONT_SIZE))
         .child(column(
+            "tree-additions",
             columns.additions_width,
             (counts.additions > 0).then(|| format!("+{}", counts.additions)),
             theme::added(),
         ))
         .child(column(
+            "tree-deletions",
             columns.deletions_width,
             (counts.deletions > 0).then(|| format!("−{}", counts.deletions)),
             theme::removed(),

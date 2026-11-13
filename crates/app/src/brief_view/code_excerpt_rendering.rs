@@ -5,6 +5,7 @@ use qd_studio::CodeAnchor;
 use super::brief_excerpt::{ExcerptLine, brief_excerpt};
 use super::brief_handlers::{BriefHandlers, on_anchor_click};
 use super::brief_widget_context::BriefWidgetContext;
+use crate::controls::NumberFlow;
 use crate::diff_view::DIFF_ROW_HEIGHT;
 use crate::display_text::counted;
 use crate::theme;
@@ -54,7 +55,7 @@ pub(super) fn render_anchor_link(
         .text_xs()
         .text_color(theme::accent())
         .hover(Styled::underline)
-        .child(anchor.to_string())
+        .child(NumberFlow::label(anchor.to_string()))
         .on_click(on_anchor_click(&handlers.show_anchor, anchor))
         .into_any_element()
 }
@@ -79,7 +80,7 @@ fn render_code_lines(widget: usize, part: &str, lines: &[ExcerptLine]) -> AnyEle
         if let Some(hidden) = previous.and_then(|previous| line.number.checked_sub(previous + 1))
             && hidden > 0
         {
-            rows.push(render_gap_row(hidden));
+            rows.push(render_gap_row(line.number, hidden));
         }
         rows.push(render_code_line(line));
     }
@@ -103,7 +104,10 @@ fn render_code_line(line: &ExcerptLine) -> AnyElement {
                 .pr_2()
                 .text_right()
                 .text_color(theme::line_number())
-                .child(line.number.to_string()),
+                .child(NumberFlow::new(
+                    ("excerpt-line", line.number),
+                    line.number.to_string(),
+                )),
         )
         .child(div().flex_none().w_4().text_color(mark_color).child(mark))
         .child(
@@ -117,7 +121,7 @@ fn render_code_line(line: &ExcerptLine) -> AnyElement {
 }
 
 /// The row standing for `hidden` lines between two hunks.
-fn render_gap_row(hidden: u32) -> AnyElement {
+fn render_gap_row(next_line: u32, hidden: u32) -> AnyElement {
     code_row()
         .bg(theme::hunk_background())
         .text_color(theme::subtle())
@@ -129,9 +133,9 @@ fn render_gap_row(hidden: u32) -> AnyElement {
                 .text_right()
                 .child("⋯"),
         )
-        .child(format!(
-            "{} not in the diff",
-            counted(hidden, "line", "lines")
+        .child(NumberFlow::new(
+            ("excerpt-gap", next_line),
+            format!("{} not in the diff", counted(hidden, "line", "lines")),
         ))
         .into_any_element()
 }

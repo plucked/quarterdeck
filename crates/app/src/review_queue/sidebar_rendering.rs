@@ -9,8 +9,8 @@ use super::refresh_status::RefreshStatus;
 use super::repo_group::RepoGroup;
 use super::stack_row_rendering::{on_layer_click, render_layer_row, render_stack_header};
 use crate::controls::{
-    FoldChevron, FoldState, Pill, PillStyle, PulsingStatus, RepoMonogram, ResizeEdge, ResizeHandle,
-    SegmentedControl, view_option,
+    FoldChevron, FoldState, NumberFlow, Pill, PillStyle, PulsingStatus, RepoMonogram, ResizeEdge,
+    ResizeHandle, SegmentedControl, view_option,
 };
 use crate::display_text::unix_now;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
@@ -181,7 +181,7 @@ impl ReviewQueue {
             QueueRow::StackLayer(list_index) => {
                 let list_index = *list_index;
                 let pull_request = self.shown_list().get(list_index)?;
-                let row = self.listed_layer_row(pull_request, list_index, selected_id);
+                let row = self.listed_layer_row(pull_request, selected_id);
                 let on_click = on_layer_click(
                     pull_request.repo.clone(),
                     pull_request.number,
@@ -192,7 +192,7 @@ impl ReviewQueue {
             }
             QueueRow::OtherLayer { key, layer } => {
                 let stack_layer = self.stack(key)?.layers.get(*layer)?;
-                let row = self.other_layer_row(index, &key.repo, *layer, stack_layer);
+                let row = self.other_layer_row(&key.repo, *layer, stack_layer);
                 let (open_key, layer) = (key.clone(), *layer);
                 let on_click = on_layer_click(
                     key.repo.clone(),
@@ -255,13 +255,14 @@ pub(super) fn row_frame(
 }
 
 /// A row's second line: small and quiet.
+#[track_caller]
 pub(super) fn render_meta(text: impl Into<SharedString>) -> impl IntoElement {
     div()
         .min_w_0()
         .text_xs()
         .text_color(theme::subtle())
         .truncate()
-        .child(text.into())
+        .child(NumberFlow::label(text))
 }
 
 /// A repository's header: its monogram, name and owner, a pill with how
@@ -274,7 +275,10 @@ fn render_repo_header(
 ) -> AnyElement {
     let repo = group.repo.clone();
     div()
-        .id(("repo-header", row_index))
+        .id(SharedString::from(format!(
+            "repo-header-{}",
+            group.repo.full_name()
+        )))
         .flex()
         .items_center()
         .gap_2()

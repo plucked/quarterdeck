@@ -4,7 +4,7 @@ use gpui::{
 };
 use qd_file_tree::{FacetChoice, FacetCount};
 
-use crate::controls::TextTooltip;
+use crate::controls::{NumberFlow, TextTooltip};
 use crate::theme;
 
 /// Opacity of an open chip that would show nothing given the other rows.
@@ -96,11 +96,16 @@ impl RenderOnce for FacetChip {
             .children(self.leading)
             .min_w_0()
             .max_w_full()
-            .child(div().min_w_0().truncate().child(self.label))
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .child(NumberFlow::label(self.label)),
+            )
             .child(
                 div()
                     .text_color(theme::subtle())
-                    .child(self.number.to_string()),
+                    .child(NumberFlow::label(self.number.to_string())),
             )
             .when_some(self.tooltip, |chip, text| {
                 chip.tooltip(TextTooltip::builder(text))

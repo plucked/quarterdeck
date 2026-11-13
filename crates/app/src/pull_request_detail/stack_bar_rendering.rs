@@ -3,7 +3,7 @@ use qd_cache::StackReviewMode;
 
 use super::pull_request_detail::PullRequestDetail;
 use super::review_target::ReviewTarget;
-use crate::controls::{Button, Pill, PillStyle, SegmentedControl, view_option};
+use crate::controls::{Button, NumberFlow, Pill, PillStyle, SegmentedControl, view_option};
 use crate::theme;
 
 impl PullRequestDetail {
@@ -106,7 +106,7 @@ impl PullRequestDetail {
                 .min_w_0()
                 .truncate()
                 .text_color(theme::subtle())
-                .child(text)
+                .child(NumberFlow::label(text))
                 .into_any_element(),
         )
     }

@@ -6,7 +6,7 @@ use super::setting_row::SettingRow;
 use super::settings_window::SettingsWindow;
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
-use crate::controls::{Button, SegmentedControl};
+use crate::controls::{Button, NumberFlow, SegmentedControl};
 use crate::display_text::byte_size;
 use crate::theme;
 
@@ -85,16 +85,22 @@ fn describe_disk_use(usage: Option<CacheUsage>) -> String {
 fn render_cache_breakdown(usage: CacheUsage) -> impl IntoElement {
     let line = |name: &'static str, count: SharedString, data: CachedData| {
         div()
+            .id(name)
             .flex()
             .gap_3()
             .py_1()
             .text_xs()
             .child(div().w(gpui::px(BREAKDOWN_NAME_WIDTH)).child(name))
-            .child(div().flex_1().text_color(theme::muted()).child(count))
+            .child(
+                div()
+                    .flex_1()
+                    .text_color(theme::muted())
+                    .child(NumberFlow::label(count)),
+            )
             .child(
                 div()
                     .text_color(theme::muted())
-                    .child(byte_size(data.bytes)),
+                    .child(NumberFlow::label(byte_size(data.bytes))),
             )
     };
     div()

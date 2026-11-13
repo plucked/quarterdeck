@@ -6,7 +6,7 @@ use super::github_link::GitHubLink;
 use super::pull_request_detail::PullRequestDetail;
 use crate::avatar_images::Avatar;
 use crate::controls::{
-    FOLD_CHEVRON_SIZE, FoldChevron, FoldState, Pill, SegmentedControl, view_option,
+    FOLD_CHEVRON_SIZE, FoldChevron, FoldState, NumberFlow, Pill, SegmentedControl, view_option,
 };
 use crate::display_text::short_date;
 use crate::markdown_view::MarkdownView;
@@ -128,20 +128,20 @@ impl PullRequestDetail {
             .text_xs()
             .text_color(theme::muted())
             .when(pull_request.draft, |meta| meta.child(Pill::draft()))
-            .child(div().min_w_0().truncate().child(format!(
+            .child(div().min_w_0().truncate().child(NumberFlow::label(format!(
                 "{} #{}  ·",
                 pull_request.repo.full_name(),
                 pull_request.number,
-            )))
+            ))))
             .child(Avatar::new(
                 pull_request.author.avatar_url.clone(),
                 px(HEADER_AVATAR_SIZE),
             ))
-            .child(div().min_w_0().truncate().child(format!(
+            .child(div().min_w_0().truncate().child(NumberFlow::label(format!(
                 "{}  ·  updated {}",
                 pull_request.author.login,
                 short_date(&pull_request.updated_at),
-            )))
+            ))))
     }
 
     /// The description, scrolling inside the header past its maximum height.

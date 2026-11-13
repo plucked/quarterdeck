@@ -3,7 +3,7 @@ use qd_file_tree::FacetCount;
 use qd_studio::{AgentProgress, SmartBucket};
 
 use super::pull_request_detail::PullRequestDetail;
-use crate::controls::{Button, CheckState, Checkbox, PulsingStatus, TextTooltip};
+use crate::controls::{Button, CheckState, Checkbox, NumberFlow, PulsingStatus, TextTooltip};
 use crate::display_text::{short_sha, time_ago, unix_now};
 use crate::facet_chips::{ChipClick, FacetChip, render_chip_row};
 use crate::theme;
@@ -95,7 +95,7 @@ impl PullRequestDetail {
                             ""
                         }
                     )))
-                    .child(version),
+                    .child(NumberFlow::label(version)),
             );
         }
         if let Some(error) = state.and_then(|state| state.error.as_ref()) {
