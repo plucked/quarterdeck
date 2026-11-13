@@ -1,4 +1,4 @@
-use gpui::{ClipboardItem, Context};
+use gpui::{AppContext, ClipboardItem, Context, Focusable, Window};
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote};
 
 use super::comment_card::CommentCard;
@@ -6,6 +6,7 @@ use super::detail_row::DetailRow;
 use super::local_review_export::{ReviewExportHeader, local_review_markdown};
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
+use crate::claude_session_picker::ClaudeSessionPicker;
 use crate::display_text::unix_now;
 use crate::ui_state::{ReviewChange, UiStateRecorder};
 
@@ -34,6 +35,7 @@ impl PullRequestDetail {
             updated_at: now,
         };
         self.review_mut().comments.notes.push(note.clone());
+        self.review_mut().claude_picker = None;
         UiStateRecorder::record_review_change(cx, ReviewChange::PutNote(note));
     }
 
@@ -67,6 +69,7 @@ impl PullRequestDetail {
     /// Removes note `id` from the shown notes and from storage; the caller
     /// lays the rows out again.
     pub(super) fn forget_note(&mut self, id: NoteId, cx: &mut Context<Self>) {
+        self.review_mut().claude_picker = None;
         self.review_mut()
             .comments
             .notes
@@ -113,5 +116,43 @@ impl PullRequestDetail {
         if let Some(row) = row {
             self.scroll_to_row(row.saturating_sub(2));
         }
+    }
+}
+
+impl PullRequestDetail {
+    /// Opens a destination picker for the same Markdown used by copy/paste.
+    pub(super) fn toggle_claude_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .review()
+            .claude_picker
+            .as_ref()
+            .is_some_and(|picker| picker.read(cx).is_sending())
+        {
+            return;
+        }
+        if self.review().claude_picker.is_some() {
+            self.review_mut().claude_picker = None;
+            cx.notify();
+            return;
+        }
+        let Some(pull_request) = self.pull_request() else {
+            return;
+        };
+        // Capture the same context as copy/paste; edits close this picker.
+        let notes: Vec<_> = self
+            .review()
+            .comments
+            .notes_to(NoteDestination::Local)
+            .collect();
+        if notes.is_empty() {
+            return;
+        }
+        let count = notes.len();
+        let header = ReviewExportHeader::for_target(pull_request, self.target());
+        let markdown = local_review_markdown(&header, &notes, self.loaded_files());
+        let picker = cx.new(|cx| ClaudeSessionPicker::new(markdown, count, cx));
+        window.focus(&picker.focus_handle(cx));
+        self.review_mut().claude_picker = Some(picker);
+        cx.notify();
     }
 }

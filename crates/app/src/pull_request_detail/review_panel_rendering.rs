@@ -14,6 +14,8 @@ impl PullRequestDetail {
     /// submitting it to GitHub or copying it for an agent.
     pub(super) fn render_review_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let destination = self.active_destination();
+        let picker_open =
+            destination == NoteDestination::Local && self.review().claude_picker.is_some();
         let body = match destination {
             NoteDestination::GitHub => self.render_github_review(cx),
             NoteDestination::Local => self.render_local_review(cx),
@@ -22,15 +24,24 @@ impl PullRequestDetail {
             .id("review-panel")
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
+            .when(picker_open, gpui::Styled::overflow_hidden)
+            .when(
+                !picker_open,
+                gpui::StatefulInteractiveElement::overflow_y_scroll,
+            )
             .flex()
             .flex_col()
             .gap_4()
             .px_3()
             .pt_2()
             .pb_4()
-            .child(self.render_destination_switch(cx))
-            .children(self.review().status.render())
+            .child(div().flex_none().child(self.render_destination_switch(cx)))
+            .children(
+                self.review()
+                    .status
+                    .render()
+                    .map(|status| div().flex_none().child(status)),
+            )
             .child(body)
     }
 
@@ -156,7 +167,7 @@ impl PullRequestDetail {
             .into_any_element()
     }
 
-    /// The local review: the notes, and copying them for an agent.
+    /// The local review: notes, copying them or sending them to an active Claude session.
     fn render_local_review(&self, cx: &mut Context<Self>) -> AnyElement {
         let notes: Vec<&ReviewNote> = self
             .review()
@@ -164,15 +175,23 @@ impl PullRequestDetail {
             .notes_to(NoteDestination::Local)
             .collect();
         let count = notes.len();
+        let picker = self.review().claude_picker.clone();
+        let sending = picker
+            .as_ref()
+            .is_some_and(|picker| picker.read(cx).is_sending());
         div()
             .flex()
             .flex_col()
             .gap_3()
-            .child(SectionLabel::new(format!("Local notes ({count})")).compact())
-            .child(Self::render_note_list(&notes, "Click + beside a line in the diff to note something. Notes stay on this Mac.", cx))
+            .when(picker.is_some(), |panel| panel.flex_1().min_h_0())
+            .child(div().flex_none().child(SectionLabel::new(format!("Local notes ({count})")).compact()))
+            // The note count remains visible; closing sessions restores the full preview.
+            .when(picker.is_none(), |panel| panel.child(Self::render_note_list(&notes, "Click + beside a line in the diff to note something. Notes stay on this Mac.", cx)))
             .child(
                 div()
+                    .flex_none()
                     .flex()
+                    .flex_wrap()
                     .gap_2()
                     .justify_end()
                     .child(
@@ -186,9 +205,16 @@ impl PullRequestDetail {
                             .primary()
                             .disabled(count == 0)
                             .on_click(cx.listener(|detail, _, _, cx| detail.copy_local_review(cx))),
+                    )
+                    .child(
+                        Button::new("send-local-to-claude", if picker.is_some() { "Close sessions" } else { "Send to Claude…" })
+                            .selected(picker.is_some())
+                            .disabled(count == 0 || sending)
+                            .on_click(cx.listener(|detail, _, window, cx| detail.toggle_claude_picker(window, cx))),
                     ),
             )
-            .child(muted_line("Copies the notes as Markdown: file paths, line numbers, the code and your note, ready to paste to an agent."))
+            .when(picker.is_none(), |panel| panel.child(muted_line("Copy includes file paths, line numbers, code and your notes, ready to paste to an agent.")))
+            .children(picker)
             .into_any_element()
     }
 

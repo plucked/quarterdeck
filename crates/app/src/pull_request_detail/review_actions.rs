@@ -64,6 +64,7 @@ impl PullRequestDetail {
         review.load_task = None;
         review.action_task = None;
         review.status = OperationStatus::Idle;
+        review.claude_picker = None;
         review.drop_summary_editor();
     }
 }

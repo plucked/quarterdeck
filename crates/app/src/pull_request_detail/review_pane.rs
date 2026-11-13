@@ -7,6 +7,7 @@ use super::operation_status::OperationStatus;
 use super::placed_card::PlacedCard;
 use super::review_comments::ReviewComments;
 use super::side_panel_tab::SidePanelTab;
+use crate::claude_session_picker::ClaudeSessionPicker;
 use crate::text_area::TextArea;
 
 /// The review side of the detail pane: the comments of the shown files and
@@ -21,6 +22,8 @@ pub struct ReviewPane {
     pub destination: NoteDestination,
     pub editor: Option<CommentEditor>,
     pub status: OperationStatus,
+    /// An export snapshot; closed whenever notes or scope change.
+    pub claude_picker: Option<Entity<ClaudeSessionPicker>>,
     pub tab: SidePanelTab,
     /// The GitHub review's summary, while the review tab shows it.
     pub summary_editor: Option<Entity<TextArea>>,
@@ -54,6 +57,7 @@ impl Default for ReviewPane {
             destination: NoteDestination::GitHub,
             editor: None,
             status: OperationStatus::Idle,
+            claude_picker: None,
             tab: SidePanelTab::Files,
             summary_editor: None,
             summary_subscription: None,

@@ -312,6 +312,7 @@ impl PullRequestDetail {
                         note.clone()
                     });
                 if let Some(note) = edited {
+                    self.review_mut().claude_picker = None;
                     UiStateRecorder::record_review_change(cx, ReviewChange::PutNote(note));
                 }
             }

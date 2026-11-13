@@ -71,7 +71,7 @@
 //! - `review_actions.rs`: where new comments go, which cards show and where, starting the review over.
 //! - `comment_editing.rs`: the comment editor: opening it on a line, a reply or an edit, saving and closing it.
 //! - `github_review_actions.rs`: the GitHub review: loading the conversations, editing them on GitHub, submitting.
-//! - `local_note_actions.rs`: the user's notes: adding, deleting, copying the local ones for an agent, finding one in the diff.
+//! - `local_note_actions.rs`: Claude session picker creation and the user's notes: adding, deleting, copying the local ones for an agent, finding one in the diff.
 //! - `side_panel_actions.rs`: the side panel's tab, the review's verdict, summary and comment destination.
 //! - `lines_label.rs`: `lines_label`, the lines a comment is about (`Line 42`, `Lines 40–42`).
 //! - `local_review_export.rs`: the local notes as Markdown for an agent.

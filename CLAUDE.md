@@ -1,6 +1,6 @@
 # Quarterdeck
 
-macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: the viewer's own and review-requested ones, including GitHub stacks (layer by layer or combined), with line comments that either form a GitHub review (approve / request changes / comment) or stay local to copy for an AI agent. Personal tool shared with colleagues: macOS on Apple silicon only, distributed as signed, notarized GitHub releases that update themselves.
+macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: the viewer's own and review-requested ones, including GitHub stacks (layer by layer or combined), with line comments that either form a GitHub review (approve / request changes / comment) or stay local to copy for an AI agent or send to an active Claude Code session. Personal tool shared with colleagues: macOS on Apple silicon only, distributed as signed, notarized GitHub releases that update themselves.
 
 ## Workflow
 - Remote `origin`: `git@github.com:plucked/quarterdeck.git` (public). Work directly on `main` and push it. Small atomic commits, prefixed `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`/`style:`/`test:`.
@@ -13,6 +13,7 @@ macOS desktop app (Rust + gpui) for reviewing GitHub pull requests efficiently: 
 |---|---|---|
 | `quarterdeck` | `crates/app` | gpui binary: window, views, background tasks, UI state restore |
 | `qd-github` | `crates/github` | blocking GitHub client (`ureq`): REST, plus GraphQL for stacks and reviews (threads, submit, edit, resolve); its data shapes |
+| `qd-claude` | `crates/claude` | fresh local Claude session inventory and one-way review-note submission to a verified inbox |
 | `qd-cache` | `crates/cache` | the local SQLite database: cached GitHub data + UI state, with migrations |
 | `qd-markdown` | `crates/markdown` | GitHub-flavored Markdown → typed document (`pulldown-cmark`) |
 | `qd-syntax` | `crates/syntax` | syntax colors for diff hunks (`syntect` + bat's grammars via `two-face`, Graphite theme) |

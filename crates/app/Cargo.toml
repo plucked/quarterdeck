@@ -11,6 +11,7 @@ anyhow.workspace = true
 futures.workspace = true
 gpui.workspace = true
 qd-cache.workspace = true
+qd-claude.workspace = true
 qd-diff.workspace = true
 qd-file-tree.workspace = true
 qd-github.workspace = true
@@ -21,6 +22,9 @@ qd-update.workspace = true
 qd-video.workspace = true
 serde_json.workspace = true
 image = { workspace = true, features = ["png", "jpeg"] }
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }

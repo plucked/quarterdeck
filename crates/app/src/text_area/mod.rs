@@ -23,4 +23,5 @@ mod text_boundaries;
 
 pub use text_area::TextArea;
 pub use text_area_actions::bind_text_area_keys;
+pub(crate) use text_area_actions::{Down as TextAreaCursorDown, Up as TextAreaCursorUp};
 pub use text_area_event::TextAreaEvent;

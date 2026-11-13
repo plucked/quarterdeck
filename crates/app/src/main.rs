@@ -30,6 +30,7 @@
 //! - `review_queue/`: the main view, the queue of pull requests awaiting review.
 //! - `pull_request_detail/`: `PullRequestDetail`, the selected pull request as a virtualized list.
 //! - `checks_panel/`: `ChecksPanel`, the side panel's Checks tab: the shown pull request's CI checks.
+//! - `claude_session_picker/`: active Claude sessions and one-way review-note submission.
 //! - `ui_state/`: saves and restores what the UI showed across relaunches.
 
 mod app_commands;
@@ -41,6 +42,7 @@ mod brief_gallery;
 mod brief_view;
 mod bundled_assets;
 mod checks_panel;
+mod claude_session_picker;
 mod controls;
 mod count_as_f32;
 mod diff_line_sides;
