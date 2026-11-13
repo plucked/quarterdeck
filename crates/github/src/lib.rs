@@ -62,6 +62,7 @@
 //! - `file_text_location.rs`: `FileTextLocation`, a blob SHA or a path in a commit.
 //! - `file_text_query.rs`: the GraphQL query of a file at a path, and its answer.
 //! - `file_text_requests.rs`: `GitHubClient::file_text`, by blob (REST) or path (GraphQL).
+//! - `check_contexts.rs`: check contexts accumulated across GraphQL pages.
 //! - `check_outcome.rs`: `CheckOutcome`, where one check stands (failed, running, passed, …).
 //! - `expected_checks.rs`: marks the checks the base branch requires and adds those not reported yet as expected.
 //! - `status_check.rs`: `StatusCheck` and `CheckSource`, one check on a head commit and what produced it.
@@ -76,6 +77,7 @@
 mod aliased_pull_requests_query;
 mod api_usage;
 mod changed_file_requests;
+mod check_contexts;
 mod check_outcome;
 mod conditional_response;
 mod download_avatar;

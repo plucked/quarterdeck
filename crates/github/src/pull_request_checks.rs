@@ -18,7 +18,8 @@ pub struct PullRequestChecks {
 /// The single checks, or why they cannot be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CheckDetails {
-    /// Every check, as GitHub's rollup lists it, with which are required,
+    /// Current checks from GitHub's rollup (only the newest run of each Actions
+    /// workflow), with which are required,
     /// then the required ones not reported yet ([`CheckOutcome::Expected`]).
     Listed(Vec<StatusCheck>),
     /// The token may not read check runs (GitHub refuses them to

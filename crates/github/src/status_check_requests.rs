@@ -1,3 +1,4 @@
+use crate::check_contexts::CheckContexts;
 use crate::expected_checks::{RequiredMarks, add_expected_checks};
 use crate::github_client::graphql_error;
 use crate::layer_conflicts_query::{LayerConflictsData, layer_conflicts_query};
@@ -34,7 +35,7 @@ impl GitHubClient {
         number: u64,
         layers_below: &[u64],
     ) -> Result<PullRequestChecks, GitHubError> {
-        let mut checks = Vec::new();
+        let mut checks = CheckContexts::default();
         let mut after: Option<String> = None;
         for _ in 0..MAX_CHECK_PAGES {
             // Read one page; withheld checks come back as gaps, not as a failure.
@@ -70,7 +71,7 @@ impl GitHubClient {
                     number,
                     layers_below,
                     page,
-                    CheckDetails::Listed(checks),
+                    CheckDetails::Listed(checks.into_checks()),
                 );
             }
         }

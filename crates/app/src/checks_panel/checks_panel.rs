@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use gpui::{Context, ListAlignment, ListState, SharedString, Task, px};
-use qd_github::CheckOutcome;
 
 use super::check_row::{CheckRow, SkippedChecks};
 use super::checks_target::ChecksTarget;
@@ -202,8 +201,7 @@ impl ChecksPanel {
         let is_pending = self
             .shown
             .as_ref()
-            .and_then(|shown| shown.rollup)
-            .is_some_and(CheckOutcome::is_pending);
+            .is_some_and(ShownChecks::has_pending_checks);
         if !self.is_visible || !is_pending {
             self.refresh_task = None;
             return;

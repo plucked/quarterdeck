@@ -3,7 +3,8 @@
 
 use serde::Deserialize;
 
-use crate::{CheckOutcome, CheckSource, StatusCheck};
+use crate::CheckOutcome;
+use crate::check_contexts::CheckContexts;
 
 /// Checks per page: GraphQL's largest.
 pub(crate) const CHECKS_PAGE_SIZE: u32 = 100;
@@ -46,7 +47,7 @@ query StatusChecks($owner: String!, $name: String!, $number: Int!, $pageSize: In
                   ... on CheckRun {
                     name status conclusion detailsUrl startedAt completedAt
                     isRequired(pullRequestNumber: $number)
-                    checkSuite { app { name } workflowRun { workflow { name } } }
+                    checkSuite { app { name } workflowRun { databaseId workflow { id name } } }
                   }
                   ... on StatusContext {
                     context state targetUrl createdAt
@@ -170,7 +171,7 @@ struct ContextConnection {
     total_count: usize,
     page_info: PageInfo,
     /// `None` entries are checks the token may not read.
-    nodes: Vec<Option<ContextNode>>,
+    nodes: CheckContexts,
 }
 
 #[derive(Deserialize)]
@@ -178,53 +179,6 @@ struct ContextConnection {
 struct PageInfo {
     has_next_page: bool,
     end_cursor: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "__typename")]
-enum ContextNode {
-    CheckRun(CheckRunNode),
-    StatusContext(StatusContextNode),
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CheckRunNode {
-    name: String,
-    status: String,
-    conclusion: Option<String>,
-    details_url: Option<String>,
-    started_at: Option<String>,
-    completed_at: Option<String>,
-    is_required: bool,
-    check_suite: Option<CheckSuiteNode>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CheckSuiteNode {
-    app: Option<NameNode>,
-    workflow_run: Option<WorkflowRunNode>,
-}
-
-#[derive(Deserialize)]
-struct WorkflowRunNode {
-    workflow: NameNode,
-}
-
-#[derive(Deserialize)]
-struct NameNode {
-    name: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StatusContextNode {
-    context: String,
-    state: String,
-    target_url: Option<String>,
-    created_at: Option<String>,
-    is_required: bool,
 }
 
 /// One page of a head commit's checks, as read.
@@ -240,8 +194,8 @@ pub(crate) struct StatusChecksPage {
     /// GitHub's verdict over all checks; `None` when there are none.
     pub rollup: Option<CheckOutcome>,
     pub total_count: usize,
-    /// The readable checks of the page.
-    pub checks: Vec<StatusCheck>,
+    /// Raw contexts, retaining run identities until every page has been read.
+    pub checks: CheckContexts,
     /// How many checks of the page the token may not read.
     pub unreadable_count: usize,
     /// Where the next page starts, when there is one.
@@ -276,21 +230,16 @@ impl StatusChecksData {
                 head_sha: commit.oid,
                 rollup: None,
                 total_count: 0,
-                checks: Vec::new(),
+                checks: CheckContexts::default(),
                 unreadable_count: 0,
                 next_cursor: None,
             });
         };
 
-        // Readable entries become checks; withheld ones are only counted.
+        // Keep the contexts for selection across pages; count withheld entries.
         let contexts = rollup.contexts;
-        let unreadable_count = contexts.nodes.iter().filter(|node| node.is_none()).count();
-        let checks = contexts
-            .nodes
-            .into_iter()
-            .flatten()
-            .map(ContextNode::into_check)
-            .collect();
+        let unreadable_count = contexts.nodes.unreadable_count();
+        let checks = contexts.nodes;
         let next_cursor = contexts
             .page_info
             .end_cursor
@@ -309,46 +258,10 @@ impl StatusChecksData {
     }
 }
 
-impl ContextNode {
-    /// The check this entry describes.
-    fn into_check(self) -> StatusCheck {
-        match self {
-            Self::CheckRun(run) => {
-                // An Actions job names its workflow; another app's check names the app.
-                let source = match run.check_suite {
-                    Some(CheckSuiteNode {
-                        workflow_run: Some(workflow_run),
-                        ..
-                    }) => CheckSource::Workflow(workflow_run.workflow.name),
-                    Some(CheckSuiteNode { app: Some(app), .. }) => CheckSource::App(app.name),
-                    _ => CheckSource::App("Checks".to_owned()),
-                };
-                StatusCheck {
-                    outcome: CheckOutcome::from_check_run(&run.status, run.conclusion.as_deref()),
-                    name: run.name,
-                    source,
-                    is_required: run.is_required,
-                    details_url: run.details_url,
-                    started_at: run.started_at,
-                    completed_at: run.completed_at,
-                }
-            }
-            Self::StatusContext(status) => StatusCheck {
-                outcome: CheckOutcome::from_status_state(&status.state),
-                name: status.context,
-                source: CheckSource::CommitStatus,
-                is_required: status.is_required,
-                details_url: status.target_url,
-                started_at: status.created_at,
-                completed_at: None,
-            },
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CheckSource;
     use crate::graphql_response::GraphQlResponse;
 
     /// A page with a workflow job, another app's check and a commit status.
@@ -366,7 +279,7 @@ mod tests {
             {"__typename":"CheckRun","name":"Unit Tests / test","status":"IN_PROGRESS","conclusion":null,
              "detailsUrl":"https://github.com/o/r/actions/runs/1/job/2","startedAt":"2026-11-09T15:32:36Z",
              "completedAt":null,"isRequired":true,
-             "checkSuite":{"app":{"name":"GitHub Actions"},"workflowRun":{"workflow":{"name":"CI"}}}},
+             "checkSuite":{"app":{"name":"GitHub Actions"},"workflowRun":{"databaseId":1,"workflow":{"id":"workflow","name":"CI"}}}},
             {"__typename":"CheckRun","name":"Preview","status":"COMPLETED","conclusion":"FAILURE",
              "detailsUrl":null,"startedAt":null,"completedAt":null,"isRequired":false,
              "checkSuite":{"app":{"name":"Vercel"},"workflowRun":null}},
@@ -401,8 +314,8 @@ mod tests {
         assert_eq!(page.head_sha, "abc123");
         assert_eq!(page.rollup, Some(CheckOutcome::Running));
         assert_eq!(page.next_cursor, None);
-        let summary: Vec<_> = page
-            .checks
+        let checks = page.checks.into_checks();
+        let summary: Vec<_> = checks
             .iter()
             .map(|check| (check.name.as_str(), check.source.clone(), check.outcome))
             .collect();
@@ -422,7 +335,7 @@ mod tests {
                 ("ci/legacy", CheckSource::CommitStatus, CheckOutcome::Passed),
             ]
         );
-        assert!(page.checks[0].is_required);
+        assert!(checks[0].is_required);
         assert_eq!(
             page.required_contexts,
             ["lfs", "Build Result", "Unit Tests / test"]
@@ -436,7 +349,7 @@ mod tests {
         assert_eq!(page.rollup, Some(CheckOutcome::Failed));
         assert_eq!(page.total_count, 148);
         assert_eq!(page.unreadable_count, 2);
-        assert_eq!(page.checks.len(), 0);
+        assert_eq!(page.checks.into_checks().len(), 0);
         assert_eq!(page.next_cursor.as_deref(), Some("MTAw"));
     }
 
