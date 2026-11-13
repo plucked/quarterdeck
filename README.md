@@ -139,3 +139,9 @@ bacon
 ## Data
 
 The cache and what the app remembers (viewed files, notes, layout) live in `~/Library/Application Support/Quarterdeck/`. Development builds (`bacon`, `cargo run`) keep their own copy in `Quarterdeck Dev/`, started from the installed app's data the first time, so trying a newer build never changes what the installed app uses. Settings → GitHub shows how much space it takes and clears the cache. Deleting the folder resets everything.
+
+## License
+
+Quarterdeck's original code and assets are released under the [Unlicense](LICENSE). You can use, copy, modify, redistribute, and sell them for any purpose, with no attribution required.
+
+Third-party dependencies and bundled assets retain their own licenses, including [JetBrains Mono](crates/app/assets/fonts/JetBrainsMono-OFL.txt), [Schibsted Grotesk](crates/app/assets/fonts/SchibstedGrotesk-OFL.txt), [Octicons](crates/app/assets/icons/LICENSE-octicons.txt), and [Material Icon Theme](crates/app/assets/icons/LICENSE-material-icon-theme.txt).
