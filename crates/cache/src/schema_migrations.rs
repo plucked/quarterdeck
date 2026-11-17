@@ -682,6 +682,133 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
             ON DELETE CASCADE
     );
 ",
+    r"
+    CREATE TABLE smart_review_items (
+        filter_id INTEGER NOT NULL,
+        order_id INTEGER NOT NULL,
+        position INTEGER NOT NULL CHECK (position >= 0),
+        label TEXT NOT NULL,
+        description TEXT NOT NULL,
+        PRIMARY KEY (filter_id, order_id, position),
+        FOREIGN KEY (filter_id, order_id) REFERENCES smart_buckets (filter_id, order_id) ON DELETE CASCADE
+    );
+    CREATE TABLE smart_review_item_files (
+        filter_id INTEGER NOT NULL,
+        order_id INTEGER NOT NULL,
+        item_position INTEGER NOT NULL,
+        position INTEGER NOT NULL CHECK (position >= 0),
+        filename TEXT NOT NULL,
+        PRIMARY KEY (filter_id, order_id, item_position, position),
+        UNIQUE (filter_id, order_id, filename),
+        FOREIGN KEY (filter_id, order_id, item_position)
+            REFERENCES smart_review_items (filter_id, order_id, position) ON DELETE CASCADE
+    );
+    -- Existing plans keep their original sequence as single-file stops.
+    INSERT INTO smart_review_items SELECT filter_id, order_id, position, filename, '' FROM smart_bucket_files;
+    INSERT INTO smart_review_item_files SELECT filter_id, order_id, position, 0, filename FROM smart_bucket_files;
+    ALTER TABLE review_layout ADD COLUMN files_mode TEXT NOT NULL DEFAULT 'tree'
+        CHECK (files_mode IN ('tree', 'plan'));
+",
+    r"
+    -- One current publication owner per review scope; drafts remain ephemeral.
+    CREATE TABLE guided_review_runs (
+        pr_id INTEGER,
+        repo_owner TEXT,
+        repo_name TEXT,
+        first_number INTEGER,
+        last_number INTEGER,
+        run_id TEXT NOT NULL,
+        head_sha TEXT NOT NULL,
+        base_sha TEXT,
+        CHECK ((pr_id IS NOT NULL AND repo_owner IS NULL AND repo_name IS NULL
+                    AND first_number IS NULL AND last_number IS NULL)
+            OR (pr_id IS NULL AND repo_owner IS NOT NULL AND repo_name IS NOT NULL
+                    AND first_number IS NOT NULL AND last_number IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX guided_review_runs_by_pr ON guided_review_runs (pr_id) WHERE pr_id IS NOT NULL;
+    CREATE UNIQUE INDEX guided_review_runs_by_range
+        ON guided_review_runs (repo_owner, repo_name, first_number, last_number) WHERE pr_id IS NULL;
+",
+    r"
+    -- Published guides own their receipt and typed agent diagnostics.
+    CREATE TABLE guided_review_publications (
+        filter_id INTEGER PRIMARY KEY REFERENCES smart_filters (id) ON DELETE CASCADE,
+        run_id TEXT NOT NULL CHECK (length(run_id) BETWEEN 1 AND 2048),
+        snapshot_id TEXT NOT NULL CHECK (length(snapshot_id) BETWEEN 1 AND 2048),
+        validation_receipt TEXT NOT NULL UNIQUE CHECK (length(validation_receipt) BETWEEN 1 AND 2048),
+        cost_usd REAL CHECK (cost_usd IS NULL OR cost_usd >= 0),
+        session_id TEXT CHECK (session_id IS NULL OR length(session_id) <= 512),
+        model TEXT CHECK (model IS NULL OR length(model) <= 512),
+        duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0)
+    );
+    CREATE TABLE guided_review_tool_audit (
+        filter_id INTEGER NOT NULL REFERENCES guided_review_publications (filter_id) ON DELETE CASCADE,
+        position INTEGER NOT NULL CHECK (position BETWEEN 0 AND 511),
+        tool_name TEXT NOT NULL CHECK (length(tool_name) BETWEEN 1 AND 128),
+        status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected', 'valid', 'ready')),
+        revision INTEGER NOT NULL CHECK (revision >= 0),
+        PRIMARY KEY (filter_id, position)
+    );
+    CREATE TABLE guided_review_tool_issues (
+        filter_id INTEGER NOT NULL,
+        event_position INTEGER NOT NULL,
+        position INTEGER NOT NULL CHECK (position BETWEEN 0 AND 63),
+        issue_code TEXT NOT NULL CHECK (length(issue_code) BETWEEN 1 AND 128),
+        PRIMARY KEY (filter_id, event_position, position),
+        FOREIGN KEY (filter_id, event_position)
+            REFERENCES guided_review_tool_audit (filter_id, position) ON DELETE CASCADE
+    );
+",
+    r"
+    -- Brief authoring reserves an immutable snapshot before launching its agent.
+    CREATE TABLE brief_runs (
+        pr_id INTEGER,
+        repo_owner TEXT,
+        repo_name TEXT,
+        first_number INTEGER,
+        last_number INTEGER,
+        run_id TEXT NOT NULL,
+        snapshot_id TEXT NOT NULL,
+        head_sha TEXT,
+        base_sha TEXT,
+        CHECK ((pr_id IS NOT NULL AND repo_owner IS NULL AND repo_name IS NULL
+                    AND first_number IS NULL AND last_number IS NULL)
+            OR (pr_id IS NULL AND repo_owner IS NOT NULL AND repo_name IS NOT NULL
+                    AND first_number IS NOT NULL AND last_number IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX brief_runs_by_pr ON brief_runs (pr_id) WHERE pr_id IS NOT NULL;
+    CREATE UNIQUE INDEX brief_runs_by_range
+        ON brief_runs (repo_owner, repo_name, first_number, last_number) WHERE pr_id IS NULL;
+    CREATE TABLE brief_publications (
+        brief_id INTEGER PRIMARY KEY REFERENCES briefs (id) ON DELETE CASCADE,
+        run_id TEXT NOT NULL CHECK (length(run_id) BETWEEN 1 AND 2048),
+        snapshot_id TEXT NOT NULL CHECK (length(snapshot_id) BETWEEN 1 AND 2048),
+        validation_receipt TEXT NOT NULL UNIQUE CHECK (length(validation_receipt) BETWEEN 1 AND 2048),
+        cost_usd REAL CHECK (cost_usd IS NULL OR cost_usd >= 0),
+        session_id TEXT CHECK (session_id IS NULL OR length(session_id) <= 512),
+        model TEXT CHECK (model IS NULL OR length(model) <= 512),
+        duration_ms INTEGER NOT NULL CHECK (duration_ms >= 0)
+    );
+    CREATE TABLE brief_tool_audit (
+        brief_id INTEGER NOT NULL REFERENCES brief_publications (brief_id) ON DELETE CASCADE,
+        position INTEGER NOT NULL CHECK (position BETWEEN 0 AND 511),
+        tool_name TEXT NOT NULL CHECK (length(tool_name) BETWEEN 1 AND 128),
+        status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected', 'valid', 'ready')),
+        revision INTEGER NOT NULL CHECK (revision >= 0),
+        PRIMARY KEY (brief_id, position)
+    );
+    CREATE TABLE brief_tool_issues (
+        brief_id INTEGER NOT NULL,
+        event_position INTEGER NOT NULL,
+        position INTEGER NOT NULL CHECK (position BETWEEN 0 AND 63),
+        issue_code TEXT NOT NULL CHECK (length(issue_code) BETWEEN 1 AND 128),
+        PRIMARY KEY (brief_id, event_position, position),
+        FOREIGN KEY (brief_id, event_position)
+            REFERENCES brief_tool_audit (brief_id, position) ON DELETE CASCADE
+    );
+",
+    // Retain the comparison base independently of the opaque MCP snapshot identity.
+    "ALTER TABLE brief_publications ADD COLUMN base_sha TEXT;",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in
@@ -751,12 +878,53 @@ mod tests {
         assert_eq!(appearance, ("vellum".into(), true));
     }
 
+    /// Upgrading a saved plan preserves its file sequence and starts each file as one stop.
+    #[test]
+    fn walkthrough_migration_preserves_legacy_plan_membership() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        let before = SCHEMA_MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("CREATE TABLE smart_review_items"))
+            .unwrap();
+        for sql in &SCHEMA_MIGRATIONS[..before] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection
+            .pragma_update(None, "user_version", i64::try_from(before).unwrap())
+            .unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO smart_filters (id,pr_id,head_sha,generated_at) VALUES (1,9,'head',10);
+            INSERT INTO smart_buckets VALUES (1,2,'Core','Read this first',0);
+            INSERT INTO smart_bucket_files VALUES (1,2,0,'b.rs'), (1,2,1,'a.rs');",
+            )
+            .unwrap();
+        apply_schema_migrations(&mut connection).unwrap();
+        let mut statement = connection.prepare("SELECT filename FROM smart_review_item_files WHERE filter_id=1 ORDER BY item_position,position").unwrap();
+        let members: Vec<String> = statement
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(members, ["b.rs", "a.rs"]);
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM smart_review_items", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+    }
+
     /// Widening the queue tab's CHECK for Others keeps the saved tab.
     #[test]
     fn keeps_the_saved_tab_when_others_is_added() {
         // Set up: a database at the version before Others, showing the Review tab.
         let mut connection = Connection::open_in_memory().unwrap();
-        let before_others = SCHEMA_MIGRATIONS.len() - 1;
+        let before_others = SCHEMA_MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("'others'") && sql.contains("review_queue_view"))
+            .unwrap();
         for sql in &SCHEMA_MIGRATIONS[..before_others] {
             connection.execute_batch(sql).unwrap();
         }

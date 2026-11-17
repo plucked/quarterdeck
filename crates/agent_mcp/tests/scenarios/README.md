@@ -1,0 +1,1 @@
+These scenarios check observable MCP behavior across actual loopback HTTP requests, including malformed traffic and server ownership races. They share synthetic public-API fixtures but never call private transport implementation details.

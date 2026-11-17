@@ -92,6 +92,13 @@ pub fn smart_filter_prompt(request: &StudioRequest) -> StudioPrompt {
     change_prompt(request, true)
 }
 
+/// The shared change context with explicit authoring and sealed-completion instructions.
+pub fn guided_review_prompt(request: &StudioRequest) -> StudioPrompt {
+    let mut prompt = smart_filter_prompt(request);
+    prompt.text.push_str("Author the review through the quarterdeck_run MCP tools, repair any validation diagnostics, and call guide_finish. Your final structured answer contains only the returned validation_receipt.\n");
+    prompt
+}
+
 fn change_prompt(request: &StudioRequest, smart: bool) -> StudioPrompt {
     let mut prompt = StudioPrompt {
         text: String::new(),
@@ -714,7 +721,7 @@ Write the brief for this pull request in the required structure.
         );
     }
 
-    /// Smart plans use the same complete inventory for a PR and a stack,
+    /// Guided reviews use the same complete inventory for a PR and a stack,
     /// but never ask for a brief or tools unavailable to their runner.
     #[test]
     fn smart_prompts_cover_layers_and_omitted_files_without_brief_instructions() {

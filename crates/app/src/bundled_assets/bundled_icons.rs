@@ -13,10 +13,24 @@ use super::file_icon_svgs::{file_icon_paths, file_icon_svg};
 pub const GITHUB_MARK: &str = "icons/github-mark.svg";
 
 /// Every bundled icon: its asset path and its SVG.
-const ICONS: [(&str, &[u8]); 1] = [(
-    GITHUB_MARK,
-    include_bytes!("../../assets/icons/github-mark.svg"),
-)];
+const ICONS: [(&str, &[u8]); 4] = [
+    (
+        "icons/file-group.svg",
+        include_bytes!("../../assets/icons/file-group.svg"),
+    ),
+    (
+        GITHUB_MARK,
+        include_bytes!("../../assets/icons/github-mark.svg"),
+    ),
+    (
+        "icons/filter.svg",
+        include_bytes!("../../assets/icons/filter.svg"),
+    ),
+    (
+        "icons/reset.svg",
+        include_bytes!("../../assets/icons/reset.svg"),
+    ),
+];
 
 /// Serves the icons compiled into the binary (`assets/icons`, the file
 /// icons under `icons/files/`); any other path has no asset.

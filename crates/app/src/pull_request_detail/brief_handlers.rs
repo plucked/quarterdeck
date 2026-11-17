@@ -23,6 +23,7 @@ pub(super) fn detail_brief_handlers(cx: &mut Context<PullRequestDetail>) -> Brie
             }
         }),
         write: view_action(&detail, |detail, _, cx| detail.write_brief(cx)),
+        retry_save: view_action(&detail, |detail, _, cx| detail.retry_brief_save(cx)),
         cancel: view_action(&detail, |detail, _, cx| detail.cancel_brief(cx)),
         show_page: view_handler(&detail, |detail, page, _, cx| {
             detail.show_brief_page(page, cx);

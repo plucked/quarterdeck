@@ -71,7 +71,8 @@ impl SavedQueueState {
 ///
 /// The tab, selection and detail scroll are recorded as UI state on every
 /// change and restored after a relaunch; a selected pull request that left
-/// the lists falls back to no selection, unless it was opened from a stack.
+/// the lists falls back to no selection after startup, unless it was opened from a stack.
+/// Launch without a restorable selection opens the first Mine stack, else its first PR.
 ///
 /// Its impl is split by topic over this module's files (refresh, selection,
 /// stacks, layer opening, actions, rendering); the fields those files change
@@ -110,6 +111,8 @@ pub struct ReviewQueue {
     brief_index_task: Option<Task<()>>,
     /// The saved selection, until the lists it is in have loaded.
     pub(super) pending_restore: Option<PendingRestore>,
+    /// Launch may choose Mine until a user choice or the first refreshed queue settles it.
+    pub(super) startup_selection_pending: bool,
     /// The in-flight refresh; a new one starts only after it finished.
     pub(super) refresh_task: Option<Task<()>>,
     /// A refresh was asked for while one ran; it runs once that one finishes.
@@ -185,6 +188,7 @@ impl ReviewQueue {
             queue_list: ListState::new(0, ListAlignment::Top, px(QUEUE_LIST_OVERDRAW)),
             detail,
             pending_restore: PendingRestore::from_saved(&saved.view_state),
+            startup_selection_pending: true,
             refresh_task: None,
             is_refresh_requested: false,
             auto_refresh_task: None,
@@ -213,7 +217,8 @@ impl ReviewQueue {
         queue.update_others_shown();
         queue.request_author_avatars(cx);
         queue.rebuild_rows();
-        queue.restore_selection(RestorePhase::CachedQueue, cx);
+        queue.restore_selection(RestorePhase::Cached, cx);
+        queue.select_startup_default(RestorePhase::Cached, cx);
         queue.refresh(cx);
         queue.load_brief_index(cx);
         queue
@@ -397,6 +402,7 @@ impl ReviewQueue {
 
     /// Shows the list of `tab` and records it.
     pub(super) fn show_tab(&mut self, tab: QueueTab, cx: &mut Context<Self>) {
+        self.startup_selection_pending = false;
         if self.tab == tab {
             return;
         }

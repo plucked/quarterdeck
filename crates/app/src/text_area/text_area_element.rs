@@ -1,7 +1,7 @@
 use gpui::{
-    App, AvailableSpace, Bounds, ElementId, ElementInputHandler, Entity, Focusable,
-    GlobalElementId, Hsla, IntoElement, LayoutId, PaintQuad, Pixels, SharedString, Size, Style,
-    TextAlign, TextRun, TextStyle, Window, fill, point, prelude::*, px, relative, size,
+    App, AvailableSpace, Bounds, ContentMask, ElementId, ElementInputHandler, Entity, Focusable,
+    GlobalElementId, Hsla, IntoElement, LayoutId, PaintQuad, Pixels, Point, SharedString, Size,
+    Style, TextAlign, TextRun, TextStyle, Window, fill, point, prelude::*, px, relative, size,
 };
 
 use super::text_area::TextArea;
@@ -29,6 +29,7 @@ impl TextAreaElement {
 /// What prepaint computed for paint.
 pub struct TextAreaPaint {
     layout: TextAreaLayout,
+    origin: Point<Pixels>,
     selection: Vec<PaintQuad>,
     caret: Option<PaintQuad>,
 }
@@ -63,6 +64,7 @@ impl Element for TextAreaElement {
         // As wide as the parent, as tall as the text wrapped to that width.
         let (text, color) = shown_text(self.area.read(cx), window);
         let text_style = window.text_style();
+        let single_line = self.area.read(cx).is_single_line();
         let mut style = Style::default();
         style.size.width = relative(1.).into();
         let layout_id =
@@ -71,7 +73,8 @@ impl Element for TextAreaElement {
                     AvailableSpace::Definite(width) => width,
                     AvailableSpace::MinContent | AvailableSpace::MaxContent => px(FALLBACK_WIDTH),
                 });
-                let layout = shape(&text, color, &text_style, width, window);
+                let wrap_width = (!single_line).then_some(width);
+                let layout = shape(&text, color, &text_style, wrap_width, window);
                 Size {
                     width,
                     height: layout.height,
@@ -96,10 +99,14 @@ impl Element for TextAreaElement {
             &text,
             color,
             &window.text_style(),
-            bounds.size.width,
+            (!area.is_single_line()).then_some(bounds.size.width),
             window,
         );
         let is_empty = area.text().is_empty();
+        // Single-line fields keep the caret visible without changing their measured height.
+        let caret_offset = if is_empty { 0 } else { area.cursor_offset() };
+        let caret_position = layout.position_for_offset(caret_offset);
+        let origin = visible_origin(area, bounds, caret_position);
         let selected = area.selected_range.clone();
         let selection = if selected.is_empty() || is_empty {
             Vec::new()
@@ -109,18 +116,16 @@ impl Element for TextAreaElement {
                 .into_iter()
                 .map(|rect| {
                     fill(
-                        Bounds::new(bounds.origin + rect.origin, rect.size),
+                        Bounds::new(origin + rect.origin, rect.size),
                         theme::text_selection(),
                     )
                 })
                 .collect()
         };
-        let caret_offset = if is_empty { 0 } else { area.cursor_offset() };
-        let caret_position = layout.position_for_offset(caret_offset);
         let caret = (selected.is_empty() && area.is_focused(window)).then(|| {
             fill(
                 Bounds::new(
-                    bounds.origin + caret_position,
+                    origin + caret_position,
                     size(px(CARET_WIDTH), layout.line_height),
                 ),
                 theme::accent(),
@@ -128,6 +133,7 @@ impl Element for TextAreaElement {
         });
         TextAreaPaint {
             layout,
+            origin,
             selection,
             caret,
         }
@@ -151,25 +157,27 @@ impl Element for TextAreaElement {
             cx,
         );
 
-        // The selection under the text, then each line, then the caret.
-        for quad in prepaint.selection.drain(..) {
-            window.paint_quad(quad);
-        }
-        let layout = &prepaint.layout;
-        for (line, top) in layout.lines.iter().zip(&layout.tops) {
-            line.paint(
-                point(bounds.origin.x, bounds.origin.y + *top),
-                layout.line_height,
-                TextAlign::Left,
-                None,
-                window,
-                cx,
-            )
-            .ok();
-        }
-        if let Some(caret) = prepaint.caret.take() {
-            window.paint_quad(caret);
-        }
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            // The selection under the text, then each line, then the caret.
+            for quad in prepaint.selection.drain(..) {
+                window.paint_quad(quad);
+            }
+            let layout = &prepaint.layout;
+            for (line, top) in layout.lines.iter().zip(&layout.tops) {
+                line.paint(
+                    point(prepaint.origin.x, prepaint.origin.y + *top),
+                    layout.line_height,
+                    TextAlign::Left,
+                    None,
+                    window,
+                    cx,
+                )
+                .ok();
+            }
+            if let Some(caret) = prepaint.caret.take() {
+                window.paint_quad(caret);
+            }
+        });
 
         // Keep this frame's layout for hit tests and the input method.
         let layout = std::mem::replace(
@@ -184,7 +192,7 @@ impl Element for TextAreaElement {
         );
         self.area.update(cx, |area, _| {
             area.last_layout = Some(layout);
-            area.last_bounds = Some(bounds);
+            area.last_bounds = Some(Bounds::new(prepaint.origin, bounds.size));
         });
     }
 }
@@ -206,7 +214,7 @@ fn shape(
     text: &str,
     color: Hsla,
     style: &TextStyle,
-    width: Pixels,
+    width: Option<Pixels>,
     window: &mut Window,
 ) -> TextAreaLayout {
     let font_size = style.font_size.to_pixels(window.rem_size());
@@ -236,7 +244,7 @@ fn shape(
                 SharedString::from(line_text.to_owned()),
                 font_size,
                 &[run],
-                Some(width),
+                width,
                 None,
             )
             .ok()
@@ -252,4 +260,13 @@ fn shape(
     }
     layout.height = layout.height.max(line_height);
     layout
+}
+
+/// Shifts a single-line field just enough to reveal its caret inside the clipping bounds.
+fn visible_origin(area: &TextArea, bounds: Bounds<Pixels>, caret: Point<Pixels>) -> Point<Pixels> {
+    if !area.is_single_line() {
+        return bounds.origin;
+    }
+    let offset = (caret.x + px(CARET_WIDTH) - bounds.size.width).max(px(0.));
+    bounds.origin - point(offset, px(0.))
 }

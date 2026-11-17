@@ -12,6 +12,15 @@ pub enum AgentProgress {
     Thinking,
     /// The model is reading the checked-out code; this many tool calls so far.
     Exploring { tool_calls: usize },
+    /// The private guide draft changed or validation returned repair diagnostics.
+    ReviewingGuide {
+        buckets: usize,
+        covered_files: usize,
+        total_files: usize,
+        issues: usize,
+    },
+    /// Brief page validation accepted an update or returned repair diagnostics.
+    ReviewingBrief { pages: usize, issues: usize },
     /// The model is writing its structured answer; this many characters so far.
     Writing { characters: usize },
 }

@@ -3,6 +3,7 @@ use qd_studio::{AgentProgress, ReaderFamiliarity};
 
 use super::brief_card::brief_card;
 use super::brief_handlers::{BriefHandlers, on_click};
+use super::brief_save_status::BriefSaveStatus;
 use super::brief_state::BriefState;
 use super::familiarity_picker::render_familiarity_picker;
 use crate::controls::{Button, NumberFlow, SectionLabel};
@@ -57,19 +58,21 @@ enum StatusButtonLook {
 /// What a status card's button does.
 enum StatusAction {
     Write,
+    RetrySave,
     Cancel,
 }
 
 /// No brief yet (what it is, and a button), one being written (how far,
-/// and Cancel) or a failed run (why, and Try again). `can_write` is false
-/// while there are no files to send.
+/// and Cancel), a failed run, or an accepted brief waiting to be saved.
+/// `can_write` is false while there are no files to send to a new run.
 pub fn render_brief_status(
     state: Option<&BriefState>,
+    save_status: BriefSaveStatus,
     can_write: bool,
     reader: ReaderFamiliarity,
     handlers: &BriefHandlers,
 ) -> AnyElement {
-    let Some(content) = status_card_content(state, can_write) else {
+    let Some(content) = status_card_content(state, save_status, can_write) else {
         return div().into_any_element();
     };
     // The button, styled and wired as the state asks.
@@ -77,6 +80,7 @@ pub fn render_brief_status(
         .disabled(content.button.is_disabled)
         .on_click(on_click(match content.button.action {
             StatusAction::Write => &handlers.write,
+            StatusAction::RetrySave => &handlers.retry_save,
             StatusAction::Cancel => &handlers.cancel,
         }));
     let button = match content.button.look {
@@ -101,13 +105,80 @@ pub fn render_brief_status(
             matches!(content.reader_picker, ReaderPicker::Shown),
             |card| card.child(render_familiarity_picker("brief-reader", reader, handlers)),
         )
-        .child(div().flex().child(button))
+        .when(save_status == BriefSaveStatus::Pending, |card| {
+            card.child(
+                div()
+                    .text_xs()
+                    .text_color(theme::muted())
+                    .child("Retry save uses the brief already written."),
+            )
+        })
+        .child(div().flex().flex_wrap().gap_2().child(button).when(
+            save_status == BriefSaveStatus::Pending,
+            |actions| {
+                actions
+                    .child(
+                        Button::new("discard-brief-save", "Discard")
+                            .ghost()
+                            .on_click(on_click(&handlers.cancel)),
+                    )
+                    .child(
+                        Button::new("rewrite-unsaved-brief", "Write again")
+                            .ghost()
+                            .disabled(!can_write)
+                            .on_click(on_click(&handlers.write)),
+                    )
+            },
+        ))
         .into_any_element()
 }
 
 /// What the status card shows for `state`; `None` once a brief is written,
 /// which shows in its place.
-fn status_card_content(state: Option<&BriefState>, can_write: bool) -> Option<StatusCardContent> {
+fn status_card_content(
+    state: Option<&BriefState>,
+    save_status: BriefSaveStatus,
+    can_write: bool,
+) -> Option<StatusCardContent> {
+    // Saving has its own recovery actions and never reports a new agent run.
+    match save_status {
+        BriefSaveStatus::Pending => {
+            return Some(StatusCardContent {
+                label: "Brief not saved",
+                text: match state {
+                    Some(BriefState::Failed(message)) => message.clone(),
+                    _ => "The brief is ready, but could not be saved.".into(),
+                },
+                text_color: theme::danger(),
+                reader_picker: ReaderPicker::Hidden,
+                button: StatusButton {
+                    id: "retry-brief-save",
+                    label: "Retry save",
+                    look: StatusButtonLook::Plain,
+                    action: StatusAction::RetrySave,
+                    is_disabled: false,
+                },
+            });
+        }
+        BriefSaveStatus::Saving => {
+            return Some(StatusCardContent {
+                label: "Saving the brief",
+                text: "Saving brief…".into(),
+                text_color: theme::muted(),
+                reader_picker: ReaderPicker::Hidden,
+                button: StatusButton {
+                    id: "cancel-brief-save",
+                    label: "Cancel",
+                    look: StatusButtonLook::Ghost,
+                    action: StatusAction::Cancel,
+                    is_disabled: false,
+                },
+            });
+        }
+        BriefSaveStatus::None => {}
+    }
+
+    // Generation keeps the existing introduction, progress and failure states.
     match state {
         None => Some(StatusCardContent {
             label: "Brief",
@@ -153,7 +224,7 @@ fn status_card_content(state: Option<&BriefState>, can_write: bool) -> Option<St
 }
 
 /// What the status row says while the agent works.
-fn progress_text(progress: Option<AgentProgress>) -> String {
+pub(super) fn progress_text(progress: Option<AgentProgress>) -> String {
     match progress {
         None => "Starting Claude Code…".to_owned(),
         Some(AgentProgress::FetchingCode { percent: None }) => {
@@ -169,6 +240,26 @@ fn progress_text(progress: Option<AgentProgress>) -> String {
             "Claude is reading the code… {} so far",
             counted(tool_calls, "look", "looks")
         ),
+        Some(AgentProgress::ReviewingBrief { pages, issues }) => {
+            if issues > 0 {
+                format!(
+                    "Repairing the brief… {}",
+                    counted(issues, "issue", "issues")
+                )
+            } else {
+                format!(
+                    "Building the brief… {} checked",
+                    counted(pages, "page", "pages")
+                )
+            }
+        }
+        Some(AgentProgress::ReviewingGuide {
+            covered_files,
+            total_files,
+            ..
+        }) => {
+            format!("Checking review coverage… {covered_files}/{total_files} files")
+        }
         Some(AgentProgress::Writing { characters }) => {
             let thousands =
                 f64::from(u32::try_from(characters).unwrap_or(u32::MAX)) / CHARACTERS_PER_THOUSAND;

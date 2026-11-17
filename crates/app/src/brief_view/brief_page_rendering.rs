@@ -31,7 +31,12 @@ pub fn render_brief_page_row(
         BriefPageRow::Rejected => render_rejected(&brief.record.rejected),
         BriefPageRow::Footer => div()
             .pb_6()
-            .child(render_brief_footer(brief, context.reader, context.handlers))
+            .child(render_brief_footer(
+                brief,
+                context.reader,
+                context.is_writing,
+                context.handlers,
+            ))
             .into_any_element(),
     }
 }

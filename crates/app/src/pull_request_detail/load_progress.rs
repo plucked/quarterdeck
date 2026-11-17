@@ -19,7 +19,7 @@ pub enum LoadProgress {
     /// Fetching the pull request's files, page by page.
     FetchingFiles { fetched: usize, total: Option<u64> },
     /// Downloading a whole diff: a combined range of layers, or a pull
-    /// request with more files than GitHub lists.
+    /// request whose file count favors a single download over paginated requests.
     DownloadingDiff(DownloadProgress),
     /// Building the diffs of this many files.
     BuildingDiffs { files: usize },

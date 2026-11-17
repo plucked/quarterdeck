@@ -21,6 +21,8 @@ pub struct DetailRowList {
     rows: Vec<DetailRow>,
     /// Row range of each loaded file, by file index.
     file_ranges: Vec<Range<usize>>,
+    /// Loaded file indexes in display order, including hidden files in the normal diff.
+    file_order: Vec<usize>,
 }
 
 impl DetailRowList {
@@ -51,11 +53,48 @@ impl DetailRowList {
                         ));
                     }
                     list.file_ranges.push(start..list.rows.len());
+                    list.file_order.push(index);
                 }
                 if !files.is_empty() && !content.shown_files.contains(&true) {
                     list.rows.push(DetailRow::AllFilesHidden);
                 }
             }
+        }
+        list
+    }
+
+    /// Builds a group's files in saved order, expanding only the files opened in this overview.
+    pub fn group(
+        members: &[usize],
+        expanded: &HashSet<usize>,
+        files: &[LoadedFile],
+        review: &super::file_review_state::FileReviewState,
+        settings: DiffViewSettings,
+        comments: &CommentPlacement,
+    ) -> Self {
+        let mut list = Self {
+            file_ranges: vec![0..0; files.len()],
+            ..Self::default()
+        };
+        // Keep membership independent of the main diff's filters and collapsed state.
+        for &file in members {
+            let Some(loaded) = files.get(file) else {
+                continue;
+            };
+            let start = list.rows.len();
+            if expanded.contains(&file) {
+                let state = FileDiffState {
+                    is_collapsed: false,
+                    ..review.state_of(loaded)
+                };
+                list.rows
+                    .extend(Self::file_rows(file, loaded, state, settings, comments));
+            } else {
+                list.rows
+                    .extend([DetailRow::FileHeader { file }, DetailRow::FileEnd { file }]);
+            }
+            list.file_ranges[file] = start..list.rows.len();
+            list.file_order.push(file);
         }
         list
     }
@@ -164,24 +203,30 @@ impl DetailRowList {
     /// ranges follow each other in order, so this is a binary search (the
     /// tree asks on every frame, and a pull request can have 17k files).
     pub fn file_at_row(&self, row: usize) -> Option<usize> {
-        let file = self.file_ranges.partition_point(|range| range.end <= row);
-        self.file_ranges
-            .get(file)
-            .filter(|range| range.contains(&row))
-            .map(|_| file)
+        let position = self
+            .file_order
+            .partition_point(|file| self.file_ranges[*file].end <= row);
+        let file = *self.file_order.get(position)?;
+        self.file_ranges[file].contains(&row).then_some(file)
     }
 
     /// Replaces the rows of file `file` with `rows`, moving the later files'
     /// ranges. Returns the replaced range, for splicing the list the same way.
     pub fn replace_file(&mut self, file: usize, rows: Vec<DetailRow>) -> Option<Range<usize>> {
         let old_range = self.file_ranges.get(file)?.clone();
+        let position = self
+            .file_order
+            .iter()
+            .position(|candidate| *candidate == file)?;
+
         let new_length = rows.len();
         self.rows.splice(old_range.clone(), rows);
 
         // Later files start where this one now ends.
         let shift = new_length.cast_signed() - old_range.len().cast_signed();
         self.file_ranges[file] = old_range.start..old_range.start + new_length;
-        for range in &mut self.file_ranges[file + 1..] {
+        for &later in &self.file_order[position + 1..] {
+            let range = &mut self.file_ranges[later];
             range.start = range.start.saturating_add_signed(shift);
             range.end = range.end.saturating_add_signed(shift);
         }
@@ -291,6 +336,179 @@ mod tests {
         })
     }
 
+    /// Groups retain saved order, open viewed files on request, and show patchless files in place.
+    #[test]
+    fn group_disclosures_keep_membership_order_and_shared_diff_behavior() {
+        let files = [
+            loaded("a.rs", Some(PATCH)),
+            loaded("b.bin", None),
+            loaded("c.rs", Some(PATCH)),
+        ];
+        let mut review = FileReviewState::for_loaded(&files, &[]);
+        review.set_viewed(&files[2], true);
+        let members = [2, 0, 1];
+        let settings = DiffViewSettings::default();
+        let comments = CommentPlacement::default();
+        let collapsed = DetailRowList::group(
+            &members,
+            &HashSet::new(),
+            &files,
+            &review,
+            settings,
+            &comments,
+        );
+        assert_eq!(collapsed.len(), 6);
+        assert_eq!(collapsed.file_at_row(0), Some(2));
+        assert_eq!(collapsed.file_at_row(2), Some(0));
+        assert_eq!(collapsed.file_at_row(4), Some(1));
+
+        // Explicit disclosure overrides the full diff's collapsed/viewed state without changing it.
+        let mut expanded = DetailRowList::group(
+            &members,
+            &HashSet::from([2, 1]),
+            &files,
+            &review,
+            settings,
+            &comments,
+        );
+        assert!(
+            expanded
+                .rows
+                .iter()
+                .any(|row| matches!(row, DetailRow::UnifiedLine { file: 2, .. }))
+        );
+        assert!(expanded.rows.contains(&DetailRow::FileNote {
+            file: 1,
+            note: FileNote::NoPatch
+        }));
+        assert!(review.state_of(&files[2]).is_collapsed);
+        assert!(review.state_of(&files[2]).is_viewed);
+
+        // Replacement shifts later displayed files even when loaded indexes are in a different order.
+        expanded.replace_file(
+            2,
+            vec![
+                DetailRow::FileHeader { file: 2 },
+                DetailRow::FileEnd { file: 2 },
+            ],
+        );
+        assert_eq!(expanded.file_start(0), Some(2));
+        assert_eq!(expanded.file_at_row(4), Some(1));
+    }
+
+    /// A single-file guided step opens its diff without including any other changed files.
+    #[test]
+    fn single_file_step_has_only_its_expanded_diff() {
+        use crate::pull_request_detail::group_diff::GroupDiff;
+
+        let files = [loaded("a.rs", Some(PATCH)), loaded("b.rs", Some(PATCH))];
+        let mut review = FileReviewState::for_loaded(&files, &[]);
+        review.set_viewed(&files[1], true);
+        let group = GroupDiff::for_members(&[1], &files, &review);
+        let rows = DetailRowList::group(
+            &[1],
+            &group.expanded,
+            &files,
+            &review,
+            DiffViewSettings::default(),
+            &CommentPlacement::default(),
+        );
+
+        assert_eq!(rows.file_start(0), None);
+        assert_eq!(rows.file_start(1), Some(0));
+        assert!(
+            rows.rows
+                .iter()
+                .any(|row| matches!(row, DetailRow::UnifiedLine { file: 1, .. }))
+        );
+        assert!(!rows.rows.contains(&DetailRow::SummaryBar));
+    }
+
+    /// Reopening a collapsed guided member restores its line note while preserving the viewed mark.
+    #[test]
+    fn reopening_guided_member_restores_its_comment_card() {
+        use crate::pull_request_detail::comment_card::CommentCard;
+        use crate::pull_request_detail::group_diff::GroupDiff;
+        use crate::pull_request_detail::placed_card::PlacedCard;
+
+        let files = [loaded("a.rs", Some(PATCH)), loaded("b.rs", Some(PATCH))];
+        let mut review = FileReviewState::for_loaded(&files, &[]);
+        let comments = CommentPlacement::build(
+            &[PlacedCard {
+                card: CommentCard::Note(qd_cache::NoteId::generate()),
+                path: "b.rs".into(),
+                anchor: Some((LineSide::New, 2)),
+                start_line: None,
+            }],
+            |path| files.iter().position(|file| file.filename() == path),
+            None,
+        );
+        let mut group = GroupDiff::for_members(&[1, 0], &files, &review);
+        let build = |expanded: &HashSet<usize>, review: &FileReviewState| {
+            DetailRowList::group(
+                &[1, 0],
+                expanded,
+                &files,
+                review,
+                DiffViewSettings::default(),
+                &comments,
+            )
+        };
+        let note = DetailRow::CommentCard { file: 1, card: 0 };
+
+        // Viewing the file folds its inline diff, removing its comment rows too.
+        review.set_viewed(&files[1], true);
+        group.reconcile_viewed(&[1, 0], &files, &review);
+        assert!(!build(&group.expanded, &review).rows.contains(&note));
+
+        // Explicit note navigation reopens the member, with the note under its original line.
+        group.expanded.insert(1);
+        let opened = build(&group.expanded, &review);
+        assert!(opened.rows.contains(&note));
+        assert!(review.is_viewed("b.rs"));
+        assert_eq!(opened.file_at_row(0), Some(1));
+    }
+
+    /// Expanding an earlier group file keeps the visible later file anchored, and collapsing keeps its header.
+    #[test]
+    fn group_scroll_stays_with_the_reviewed_file() {
+        use crate::pull_request_detail::group_diff::GroupDiff;
+        use gpui::{ListOffset, px};
+        let files = [loaded("a.rs", Some(PATCH)), loaded("b.rs", Some(PATCH))];
+        let review = FileReviewState::for_loaded(&files, &[]);
+        let build = |expanded| {
+            DetailRowList::group(
+                &[0, 1],
+                &expanded,
+                &files,
+                &review,
+                DiffViewSettings::default(),
+                &CommentPlacement::default(),
+            )
+        };
+        let mut group = GroupDiff::default();
+        group.replace_rows(build(HashSet::new()));
+        group.list.scroll_to(ListOffset {
+            item_ix: 2,
+            offset_in_item: px(0.),
+        });
+        group.replace_rows(build(HashSet::from([0, 1])));
+        assert_eq!(
+            group.list.logical_scroll_top().item_ix,
+            group.rows.file_start(1).unwrap()
+        );
+        let line = group.rows.file_start(1).unwrap() + 2;
+        group.list.scroll_to(ListOffset {
+            item_ix: line,
+            offset_in_item: px(0.),
+        });
+        group.replace_rows(build(HashSet::from([0])));
+        assert_eq!(
+            group.list.logical_scroll_top().item_ix,
+            group.rows.file_start(1).unwrap()
+        );
+    }
+
     /// A unified file is its header, a hunk header, one row per line, the
     /// bar over the lines below its hunk, and its end.
     #[test]
@@ -334,6 +552,7 @@ mod tests {
         let list = DetailRowList {
             rows: vec![DetailRow::SummaryBar; 9],
             file_ranges: vec![1..5, 5..5, 5..9],
+            file_order: vec![0, 1, 2],
         };
         assert_eq!(list.file_at_row(0), None);
         assert_eq!(list.file_at_row(1), Some(0));

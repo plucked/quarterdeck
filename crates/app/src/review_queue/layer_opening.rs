@@ -17,6 +17,7 @@ impl ReviewQueue {
     /// Shows the stack layer the detail asked for: from a list when listed,
     /// otherwise fetched from GitHub (one request) and cached.
     pub(super) fn open_layer(&mut self, request: &LayerRequest, cx: &mut Context<Self>) {
+        self.startup_selection_pending = false;
         if let Some(listed) = self
             .lists
             .find_by_number(&request.repo, request.number)

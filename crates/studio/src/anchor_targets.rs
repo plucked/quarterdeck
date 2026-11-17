@@ -11,7 +11,7 @@ use super::code_side::CodeSide;
 const MAX_ANCHOR_LINES: u32 = 80;
 
 /// The line numbers a file's diff shows on each side.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct ShownLines {
     base: BTreeSet<u32>,
     head: BTreeSet<u32>,
@@ -29,12 +29,26 @@ impl ShownLines {
 /// Which lines of which files an anchor may point at: the lines the pull
 /// request's diffs show, on each side. A file is found by its path and, for
 /// a rename, by its previous path too.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct AnchorTargets {
     files: HashMap<String, ShownLines>,
 }
 
 impl AnchorTargets {
+    /// Exact citable paths, including rename aliases, in deterministic lexical order.
+    pub fn paths(&self) -> Vec<String> {
+        let mut paths: Vec<_> = self.files.keys().cloned().collect();
+        paths.sort();
+        paths
+    }
+
+    /// The visible runs on one side, or no entry when this file cannot be cited.
+    pub fn ranges(&self, path: &str, side: CodeSide) -> Option<Vec<RangeInclusive<u32>>> {
+        self.files
+            .get(path)
+            .map(|shown| line_ranges(shown.of_side(side)))
+    }
+
     /// Adds the lines of `diff`, the diff of the file at `path` (previously
     /// at `previous_path` when renamed).
     pub fn add_file(&mut self, path: &str, previous_path: Option<&str>, diff: &FileDiff) {
@@ -90,13 +104,7 @@ impl AnchorTargets {
 
 /// `12–20, 40–52`: the runs of consecutive numbers in `lines`.
 fn describe_ranges(lines: &BTreeSet<u32>) -> String {
-    let mut runs: Vec<RangeInclusive<u32>> = Vec::new();
-    for &line in lines {
-        match runs.last_mut() {
-            Some(run) if *run.end() + 1 == line => *run = *run.start()..=line,
-            Some(_) | None => runs.push(line..=line),
-        }
-    }
+    let runs = line_ranges(lines);
     if runs.is_empty() {
         return "none".to_owned();
     }
@@ -108,6 +116,18 @@ fn describe_ranges(lines: &BTreeSet<u32>) -> String {
         let _ = write!(described, "{}–{}", run.start(), run.end());
     }
     described
+}
+
+/// Groups visible line numbers without overflowing at the largest line number.
+fn line_ranges(lines: &BTreeSet<u32>) -> Vec<RangeInclusive<u32>> {
+    let mut runs: Vec<RangeInclusive<u32>> = Vec::new();
+    for &line in lines {
+        match runs.last_mut() {
+            Some(run) if run.end().checked_add(1) == Some(line) => *run = *run.start()..=line,
+            Some(_) | None => runs.push(line..=line),
+        }
+    }
+    runs
 }
 
 #[cfg(test)]

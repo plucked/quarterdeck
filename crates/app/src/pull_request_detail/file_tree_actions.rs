@@ -82,21 +82,19 @@ impl PullRequestDetail {
     /// Marks every file a folder covers as viewed, or, when all already
     /// are, as not viewed; saves the marks.
     pub(super) fn toggle_folder_viewed(&mut self, folder: NodeId, cx: &mut Context<Self>) {
-        let Some(scope) = self.viewed_scope.clone() else {
-            return;
-        };
-        let files = self.loaded_files().to_vec();
-        let mark_viewed = self
-            .file_tree
-            .folder_viewed_state(folder, &files, &self.file_review)
-            != FolderViewedState::All;
-        for file in self.file_tree.folder_files(folder, &files) {
-            if let Some(toggle) = self.file_review.set_viewed(&files[file], mark_viewed) {
-                toggle.record(scope.clone(), cx);
-            }
-        }
-        self.rebuild_rows(self.anchor_at_top());
-        cx.notify();
+        let files = self.file_tree.folder_files(folder, self.loaded_files());
+        let mark_viewed =
+            self.file_tree
+                .folder_viewed_state(folder, self.loaded_files(), &self.file_review)
+                != FolderViewedState::All;
+        self.set_files_viewed(&files, mark_viewed, cx);
+    }
+
+    /// Clears every viewed mark in the loaded review scope, including files
+    /// hidden by filters, and saves each removal through the usual recorder.
+    pub(super) fn reset_viewed_files(&mut self, cx: &mut Context<Self>) {
+        let files: Vec<_> = (0..self.loaded_files().len()).collect();
+        self.set_files_viewed(&files, false, cx);
     }
 
     /// Shows file `file` in the file tree (the file header's tree button):
@@ -118,6 +116,7 @@ impl PullRequestDetail {
         if self.review().tab != SidePanelTab::Files {
             self.show_side_panel_tab(SidePanelTab::Files, cx);
         }
+        self.return_to_file_diff(cx);
         // Unfold the folders above the file, so its row exists.
         self.file_tree.expand_folders_above(&filename);
         self.refresh_tree_rows();
@@ -138,5 +137,29 @@ impl PullRequestDetail {
             .as_ref()
             .map_or(&[][..], ChangedFiles::loaded);
         self.file_tree.refresh_rows(files, &self.file_review);
+        let shown = self.file_tree.shown_files(files, &self.file_review);
+        self.focus_drawer.search_files = shown
+            .iter()
+            .enumerate()
+            .filter(|(_, shown)| **shown)
+            .map(|(index, _)| index)
+            .collect();
+        self.focus_drawer.search_files.sort_by_key(|index| {
+            std::cmp::Reverse(
+                self.file_tree
+                    .search
+                    .matches
+                    .get(files[*index].filename())
+                    .map_or(0, |found| found.score),
+            )
+        });
+        let plan = self
+            .viewed_scope
+            .as_ref()
+            .and_then(|scope| self.smart_filters.get(scope))
+            .and_then(|state| state.filter.as_ref());
+        self.walkthrough
+            .refresh(plan, files, &shown, &self.file_review);
+        self.refresh_group_diff();
     }
 }

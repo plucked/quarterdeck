@@ -13,7 +13,7 @@ use crate::app_settings::AppSettings;
 use crate::bundled_assets::file_icon_path;
 use crate::controls::{
     CheckState, Checkbox, FOLD_CHEVRON_SIZE, FoldChevron, FoldState, NumberFlow, Pill, PillStyle,
-    ProgressBar, TextTooltip,
+    TextTooltip,
 };
 use crate::diff_view::{FILE_STATUS_BADGE_SIZE, render_file_status_badge};
 use crate::display_text::counted;
@@ -24,6 +24,8 @@ use crate::theme;
 const TREE_ROW_HEIGHT: f32 = 24.;
 /// Indent per tree level.
 const TREE_INDENT: f32 = 12.;
+/// Compact drawers reserve their width for names and viewed controls.
+const TREE_DETAILS_WIDTH: f32 = 360.;
 /// Size of the line counts' monospace font, and the width of one of its characters.
 const COUNT_FONT_SIZE: f32 = 10.;
 const COUNT_CHARACTER_WIDTH: f32 = 6.1;
@@ -59,43 +61,6 @@ impl CountColumns {
 }
 
 impl PullRequestDetail {
-    /// Title, viewed progress and the filter controls.
-    pub(super) fn render_tree_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let files = self.loaded_files();
-        let viewed = self.file_review().viewed_count();
-        div()
-            .flex()
-            .flex_col()
-            .gap_2p5()
-            .px_3()
-            .pt_2p5()
-            .pb_3()
-            .border_b_1()
-            .border_color(theme::border())
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        div()
-                            .flex_none()
-                            .text_xs()
-                            .text_color(theme::muted())
-                            .child(NumberFlow::label(format!(
-                                "{viewed} of {} viewed",
-                                files.len()
-                            ))),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .child(render_progress_bar(viewed, files.len())),
-                    ),
-            )
-            .child(self.render_filter_controls(cx))
-    }
-
     /// The tree rows as a uniform list with its scrollbar, or a note when
     /// the filters hide everything.
     pub(super) fn render_tree_body(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -201,7 +166,8 @@ impl PullRequestDetail {
         let heat_color = AppSettings::folder_heatmap(cx).then(|| theme::folder_heat(heat));
         let name_color = heat_color.unwrap_or_else(theme::muted);
         let folder = row.node;
-        base.hover(|style| style.bg(theme::hover()))
+        base.tooltip(TextTooltip::builder(node.path.clone()))
+            .hover(|style| style.bg(theme::hover()))
             .on_click(cx.listener(move |detail, _, _, cx| detail.toggle_folder(&path, cx)))
             .child(FoldChevron::new(
                 ("folder-fold", index),
@@ -215,25 +181,34 @@ impl PullRequestDetail {
                     .text_color(name_color)
                     .child(node.name.clone()),
             )
-            .child(
-                div()
-                    .id(("folder-count", index))
-                    .flex_none()
-                    .tooltip(TextTooltip::builder(format!(
-                        "{} in this folder and its subfolders matching the current filters",
-                        counted(file_count, "changed file", "changed files")
-                    )))
-                    .child(
-                        Pill::new(counted(file_count, "file", "files"), PillStyle::Filled)
-                            .compact()
-                            .text_color(name_color),
-                    ),
-            )
-            .child(render_line_counts(counts, columns))
-            .child(div().flex_none().w(px(FILE_STATUS_BADGE_SIZE)))
+            .when(self.side_panel_width() >= 300., |row| {
+                row.child(
+                    div()
+                        .id(("folder-count", index))
+                        .flex_none()
+                        .tooltip(TextTooltip::builder(format!(
+                            "{} in this folder and its subfolders matching the current filters",
+                            counted(file_count, "changed file", "changed files")
+                        )))
+                        .child(
+                            Pill::new(counted(file_count, "file", "files"), PillStyle::Filled)
+                                .compact()
+                                .text_color(name_color),
+                        ),
+                )
+            })
+            .when(self.side_panel_width() >= TREE_DETAILS_WIDTH, |row| {
+                row.child(render_line_counts(counts, columns))
+            })
+            .when(self.side_panel_width() >= TREE_DETAILS_WIDTH, |row| {
+                row.child(div().flex_none().w(px(FILE_STATUS_BADGE_SIZE)))
+            })
             .child(
                 div()
                     .id(("folder-viewed", index))
+                    .tooltip(TextTooltip::builder(
+                        "Toggle every file in this folder viewed, including hidden files",
+                    ))
                     .flex_none()
                     .on_click(cx.listener(move |detail, _, _, cx| {
                         cx.stop_propagation();
@@ -279,42 +254,50 @@ impl PullRequestDetail {
         } else {
             theme::hover()
         };
-        base.when(is_current, |row| row.bg(theme::selected()))
-            .hover(move |style| style.bg(hover_background))
-            .on_click(cx.listener(move |detail, _, _, cx| detail.show_file_in_diff(file, cx)))
-            .child(render_file_icon(loaded.facets.icon, is_viewed))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .when(is_viewed, |name| name.text_color(theme::subtle()))
-                    .child(name),
-            )
-            .child(render_line_counts(counts, columns))
-            .child(
-                div()
-                    .flex_none()
-                    .w(px(FILE_STATUS_BADGE_SIZE))
-                    .children(badge),
-            )
-            .child(
-                div()
-                    .id(("file-viewed", index))
-                    .flex_none()
-                    .on_click(cx.listener(move |detail, _, _, cx| {
-                        cx.stop_propagation();
-                        detail.toggle_file_viewed(file, cx);
-                    }))
-                    .child(Checkbox::new(CheckState::from_bool(is_viewed))),
-            )
-            .into_any_element()
+        base.tooltip(TextTooltip::builder(format!(
+            "{} · +{} −{}",
+            loaded.filename(),
+            counts.additions,
+            counts.deletions
+        )))
+        .when(is_current, |row| row.bg(theme::selected()))
+        .hover(move |style| style.bg(hover_background))
+        .on_click(cx.listener(move |detail, _, _, cx| detail.show_file_in_diff(file, cx)))
+        .child(render_file_icon(loaded.facets.icon, is_viewed))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .when(is_viewed, |name| name.text_color(theme::subtle()))
+                .child(name),
+        )
+        .when(self.side_panel_width() >= TREE_DETAILS_WIDTH, |row| {
+            row.child(render_line_counts(counts, columns))
+        })
+        .child(
+            div()
+                .flex_none()
+                .w(px(FILE_STATUS_BADGE_SIZE))
+                .children(badge),
+        )
+        .child(
+            div()
+                .id(("file-viewed", index))
+                .flex_none()
+                .on_click(cx.listener(move |detail, _, _, cx| {
+                    cx.stop_propagation();
+                    detail.toggle_file_viewed(file, cx);
+                }))
+                .child(Checkbox::new(CheckState::from_bool(is_viewed))),
+        )
+        .into_any_element()
     }
 }
 
 /// A file's type icon, centered in a column as wide as a fold chevron;
 /// faded once the file is viewed.
-fn render_file_icon(icon: FileIcon, is_viewed: bool) -> impl IntoElement {
+pub(super) fn render_file_icon(icon: FileIcon, is_viewed: bool) -> impl IntoElement {
     let source = ImageSource::Resource(Resource::Embedded(file_icon_path(icon).into()));
     div()
         .flex_none()
@@ -335,22 +318,6 @@ fn folder_check_state(state: FolderViewedState) -> CheckState {
         FolderViewedState::Some => CheckState::Mixed,
         FolderViewedState::All => CheckState::Checked,
     }
-}
-
-/// The share of files viewed, as a thin bar.
-fn render_progress_bar(viewed: usize, total: usize) -> impl IntoElement {
-    let fraction = if total == 0 {
-        0.
-    } else {
-        f32::from(u16::try_from(viewed).unwrap_or(u16::MAX))
-            / f32::from(u16::try_from(total).unwrap_or(u16::MAX))
-    };
-    ProgressBar::new(
-        "viewed-progress",
-        fraction,
-        theme::border(),
-        theme::success(),
-    )
 }
 
 /// `+12` and `−3` in their columns, right-aligned in a monospace font so

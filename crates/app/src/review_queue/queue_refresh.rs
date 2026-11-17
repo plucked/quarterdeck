@@ -98,6 +98,8 @@ impl ReviewQueue {
             Ok(client) => Some(client.clone()),
             Err(reason) => {
                 self.refresh_status = RefreshStatus::Failed(reason.clone().into());
+                self.restore_selection(RestorePhase::Unavailable, cx);
+                self.select_startup_default(RestorePhase::Unavailable, cx);
                 cx.notify();
                 None
             }
@@ -161,8 +163,12 @@ impl ReviewQueue {
         // The outcome; a successful one checks the listed stacks with GitHub.
         if let Some(error) = failure {
             self.refresh_status = RefreshStatus::Failed(format!("{error:#}").into());
+            self.restore_selection(RestorePhase::Unavailable, cx);
+            self.select_startup_default(RestorePhase::Unavailable, cx);
         } else {
             self.refresh_status = RefreshStatus::Idle;
+            self.restore_selection(RestorePhase::Refreshed, cx);
+            self.select_startup_default(RestorePhase::Refreshed, cx);
             self.refresh_stacks(cx);
         }
 
@@ -259,8 +265,9 @@ impl ReviewQueue {
             }
         }
 
-        // A selection saved before the relaunch gets its last chance here.
-        self.restore_selection(RestorePhase::RefreshedQueue, cx);
+        // Lists arrive in stages, and local filters also rebuild them; neither settles startup.
+        self.restore_selection(RestorePhase::Refreshing, cx);
+        self.select_startup_default(RestorePhase::Refreshing, cx);
         cx.notify();
     }
 }

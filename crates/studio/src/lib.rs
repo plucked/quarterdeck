@@ -27,7 +27,7 @@
 //! - `anchor_targets.rs`: `AnchorTargets`, the lines a diff shows, which anchors are checked against.
 //! - `checked_studio.rs`: `CheckedStudio`, a studio and the widgets left out of it.
 //! - `rejected_widget.rs`: `RejectedWidget`, a widget left out and why.
-//! - `parse_studio.rs`: reads an agent's structured output into a checked studio.
+//! - `parse_studio.rs`: legacy checked studio parsing and strict `check_brief_page` validation for atomic MCP page replacement.
 //! - `wire_graph.rs`: `WireGraph`, a graph as the agent writes it, and its checks (ids to indexes, sizes, labels, anchors, arrows only where both boxes are).
 //! - `wire_sequence.rs`: `WireSequence`, a sequence as the agent writes it, and its checks.
 //! - `wire_role.rs`: `WireRole`, a box's or lane's role as the agent writes it.
@@ -58,6 +58,18 @@
 //! - `tool_call.rs`: `ToolCall`, a tool call of a run as readable text, read from its transcript.
 //! - `find_claude.rs`: finds the `claude` executable.
 //! - `smart_filter.rs`, `smart_filter_guide.rs`: ordered review buckets, validation and the agent contract.
+//! - `brief_draft/`: strict page drafts, anchored repair diagnostics and sealed brief receipts.
+//! - `brief_mcp_handler.rs`, `brief_mcp_guide.rs`: brief tools and page-authoring instructions.
+//! - `brief_run.rs`, `brief_run_answer.rs`, `run_brief_review.rs`: frozen brief invocation and sealed result.
+//! - `brief_mcp_record.rs`: accepted run identity and validation audit retained in reports.
+//! - `run_mcp_review.rs`, `run_mcp_handler.rs`: shared Claude process, pipe, endpoint and cancellation lifecycle.
+//! - `mcp_run_format.rs`, `mcp_model.rs`: artifact-specific guide/tool grants and retained model selection.
+//! - `mcp_json_page.rs`: bounded typed or fragmented recovery reads shared by both artifacts.
+//! - `guided_review/`: revisioned bucket drafts, repair diagnostics, and sealed receipts.
+//! - `guided_mcp_handler.rs`: bounded MCP schemas and per-run draft dispatch.
+//! - `wire_bucket_candidate.rs`: private MCP candidate decoding, recovery encoding and wire-size bounds.
+//! - `guided_review_run.rs`, `guided_review_answer.rs`, `guided_tool_audit.rs`: guided run inputs, sealed result, and bounded validation audit.
+//! - `guided_review_guide.rs`, `run_guided_review.rs`: repair instructions and MCP-compatible Claude lifecycle.
 //! - `run_claude.rs`: runs Claude Code headless, confined, and follows its event stream.
 //! - `text_tail.rs`: `tail`, the end of a tool's error output for an error message.
 //! - `output_lines.rs`: `OutputLines`, a child process's output as lines read on a thread, so waits notice a cancel.
@@ -68,11 +80,19 @@
 //! - `agent_answer.rs`: `AgentAnswer`, a finished run's output, cost and session.
 //! - `agent_run_error.rs`: `AgentRunError`, why a run produced nothing.
 
+//! - `smart_review_item.rs`: one guided reading stop, possibly grouping related files.
+
 mod agent_answer;
 mod agent_progress;
 mod agent_run_error;
 mod anchor_targets;
+pub mod brief_draft;
+mod brief_mcp_guide;
+mod brief_mcp_handler;
+mod brief_mcp_record;
 mod brief_record;
+mod brief_run;
+mod brief_run_answer;
 mod callout_tone;
 mod change_scope;
 mod checked_studio;
@@ -88,6 +108,15 @@ mod file_listing;
 mod find_claude;
 mod graph_edge;
 mod graph_node;
+mod guided_mcp_handler;
+pub mod guided_review;
+mod guided_review_answer;
+mod guided_review_guide;
+mod guided_review_run;
+mod guided_tool_audit;
+mod mcp_json_page;
+mod mcp_model;
+mod mcp_run_format;
 mod message_style;
 mod new_process_folder;
 mod node_role;
@@ -98,12 +127,17 @@ mod reader_familiarity;
 mod rejected_widget;
 mod request_layer;
 mod review_workspace;
+mod run_brief_review;
 mod run_claude;
+mod run_guided_review;
+mod run_mcp_handler;
+mod run_mcp_review;
 mod sequence_lane;
 mod sequence_message;
 mod shown_page;
 mod smart_filter;
 mod smart_filter_guide;
+mod smart_review_item;
 mod step_weight;
 mod stop_child;
 mod studio;
@@ -125,6 +159,7 @@ mod tool_call;
 mod tour_step;
 mod utc_stamp;
 mod wire_anchor;
+mod wire_bucket_candidate;
 mod wire_graph;
 mod wire_role;
 mod wire_sequence;
@@ -139,7 +174,11 @@ pub use agent_answer::AgentAnswer;
 pub use agent_progress::AgentProgress;
 pub use agent_run_error::AgentRunError;
 pub use anchor_targets::AnchorTargets;
+pub use brief_mcp_guide::{BRIEF_MCP_GUIDE, brief_mcp_system_prompt};
+pub use brief_mcp_record::BriefMcpRecord;
 pub use brief_record::BriefRecord;
+pub use brief_run::BriefRun;
+pub use brief_run_answer::BriefRunAnswer;
 pub use callout_tone::CalloutTone;
 pub use change_scope::ChangeScope;
 pub use checked_studio::CheckedStudio;
@@ -153,6 +192,10 @@ pub use file_listing::FileListing;
 pub use find_claude::find_claude;
 pub use graph_edge::GraphEdge;
 pub use graph_node::GraphNode;
+pub use guided_review_answer::GuidedReviewAnswer;
+pub use guided_review_run::GuidedReviewRun;
+pub use guided_tool_audit::GuidedToolAudit;
+pub use mcp_run_format::MCP_COMPLETION_SCHEMA;
 pub use message_style::MessageStyle;
 pub use node_role::NodeRole;
 pub use parse_studio::parse_studio;
@@ -161,16 +204,19 @@ pub use reader_familiarity::ReaderFamiliarity;
 pub use rejected_widget::RejectedWidget;
 pub use request_layer::RequestLayer;
 pub use review_workspace::ReviewWorkspace;
+pub use run_brief_review::run_brief_review;
 pub use run_claude::{run_claude, run_smart_filter};
+pub use run_guided_review::run_guided_review;
 pub use sequence_lane::SequenceLane;
 pub use sequence_message::SequenceMessage;
 pub use shown_page::ShownPage;
 pub use smart_filter::{SmartBucket, SmartFilter, parse_smart_buckets};
+pub use smart_review_item::SmartReviewItem;
 pub use step_weight::StepWeight;
 pub use studio::Studio;
 pub use studio_graph::StudioGraph;
 pub use studio_page::StudioPage;
-pub use studio_prompt::{smart_filter_prompt, studio_prompt};
+pub use studio_prompt::{guided_review_prompt, smart_filter_prompt, studio_prompt};
 pub use studio_prompt_message::StudioPrompt;
 pub use studio_request::StudioRequest;
 pub use studio_request_file::StudioRequestFile;

@@ -47,7 +47,7 @@ impl PullRequestDetail {
         // One click starts a drag; more select a word or the line at once.
         let granularity = SelectionGranularity::of(click_count);
         let text = self
-            .rows
+            .rows()
             .get(position.row)
             .and_then(|row| row_code_text(row, side, self.loaded_files()))
             .unwrap_or_default();
@@ -80,12 +80,12 @@ impl PullRequestDetail {
         };
 
         // Scroll toward the pointer when it left the pane vertically.
-        let viewport = self.list.viewport_bounds();
+        let viewport = self.list().viewport_bounds();
         if point.y < viewport.top() {
-            self.list
+            self.list()
                 .scroll_by((point.y - viewport.top()) * AUTOSCROLL_SHARE);
         } else if point.y > viewport.bottom() {
-            self.list
+            self.list()
                 .scroll_by((point.y - viewport.bottom()) * AUTOSCROLL_SHARE);
         }
 
@@ -120,7 +120,7 @@ impl PullRequestDetail {
         else {
             return;
         };
-        let text = selected_diff_text(&selection, &self.rows, self.loaded_files());
+        let text = selected_diff_text(&selection, self.rows(), self.loaded_files());
         cx.write_to_clipboard(ClipboardItem::new_string(text));
     }
 

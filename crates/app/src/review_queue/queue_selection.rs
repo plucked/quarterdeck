@@ -1,11 +1,14 @@
 use gpui::{App, Context};
-use qd_cache::{DetailScrollPosition, ReviewQueueViewState};
+use qd_cache::{DetailScrollPosition, QueueTab, ReviewQueueViewState};
 use qd_github::PullRequest;
 
 use super::ReviewQueue;
+use super::queue_row::QueueRow;
 use super::restore_phase::RestorePhase;
 use super::selection_origin::SelectionOrigin;
 use super::selection_restore::SelectionRestore;
+use super::stack_key::StackKey;
+use super::startup_selection::StartupSelection;
 use crate::ui_state::UiStateRecorder;
 
 /// A selection saved before the last relaunch, not yet matched to the lists.
@@ -41,6 +44,7 @@ impl ReviewQueue {
         origin: SelectionOrigin,
         cx: &mut Context<Self>,
     ) {
+        self.startup_selection_pending = false;
         if self.selected.as_ref().map(|selected| selected.id) == Some(pull_request.id) {
             return;
         }
@@ -51,6 +55,45 @@ impl ReviewQueue {
         self.set_selected(Some(pull_request), origin, None, cx);
         self.scroll_to_selection();
         self.record_view_state(cx);
+    }
+
+    /// Fills an empty launch from Mine after saved-selection restoration has had its chance.
+    pub(super) fn select_startup_default(&mut self, phase: RestorePhase, cx: &mut Context<Self>) {
+        if !self.startup_selection_pending {
+            return;
+        }
+        // A cached selection may disappear on the first refresh; keep the fallback ready until then.
+        let selection = StartupSelection::decide(
+            self.selected.as_ref(),
+            self.pending_restore
+                .as_ref()
+                .map(|pending| pending.pull_request_id),
+            phase,
+            &self.lists.authored,
+        );
+        let repo = match &selection {
+            StartupSelection::Wait => return,
+            StartupSelection::Complete => {
+                self.startup_selection_pending = false;
+                return;
+            }
+            StartupSelection::Stack(key) => key.repo.clone(),
+            StartupSelection::PullRequest(index) => self.lists.authored[*index].repo.clone(),
+        };
+
+        // Use the same navigation as a user choice, with the selected repository visible.
+        self.startup_selection_pending = false;
+        self.show_tab(QueueTab::Authored, cx);
+        if self.is_repository_collapsed(&repo) {
+            self.toggle_repository_group(&repo, cx);
+        }
+        match selection {
+            StartupSelection::Stack(key) => self.open_stack(&key, cx),
+            StartupSelection::PullRequest(index) => self.select(index, cx),
+            StartupSelection::Wait | StartupSelection::Complete => {}
+        }
+        // These helpers also serve explicit clicks; only an automatic pick keeps waiting.
+        self.startup_selection_pending = phase.is_provisional();
     }
 
     /// Shows `pull_request` (or nothing) in the detail pane, at `restore`
@@ -80,7 +123,7 @@ impl ReviewQueue {
         let listed = self.lists.find_by_id(pending.pull_request_id).cloned();
         let (found, origin) = match (listed, phase) {
             (Some(listed), _) => (Some(listed), SelectionOrigin::Listed),
-            (None, RestorePhase::CachedQueue) => (
+            (None, RestorePhase::Cached) => (
                 self.services
                     .cache
                     .lock()
@@ -89,7 +132,10 @@ impl ReviewQueue {
                     .flatten(),
                 SelectionOrigin::StackLayer,
             ),
-            (None, RestorePhase::RefreshedQueue) => (None, SelectionOrigin::Listed),
+            (
+                None,
+                RestorePhase::Refreshing | RestorePhase::Refreshed | RestorePhase::Unavailable,
+            ) => (None, SelectionOrigin::Listed),
         };
         match SelectionRestore::decide(found.as_ref(), phase) {
             SelectionRestore::Select(pull_request) => {
@@ -141,12 +187,22 @@ impl ReviewQueue {
             return;
         };
         let list = self.shown_list();
-        let row = self.rows().iter().position(|row| {
-            row.pull_request_index().is_some_and(|index| {
-                list.get(index)
-                    .is_some_and(|pull_request| pull_request.id == selected_id)
+        let row = self
+            .rows()
+            .iter()
+            .position(|row| {
+                row.pull_request_index().is_some_and(|index| {
+                    list.get(index)
+                        .is_some_and(|pull_request| pull_request.id == selected_id)
+                })
             })
-        });
+            .or_else(|| {
+                // A folded stack still has a selectable header to reveal.
+                let key = self.selected.as_ref().and_then(StackKey::of)?;
+                self.rows()
+                    .iter()
+                    .position(|row| matches!(row, QueueRow::StackHeader(group) if group.key == key))
+            });
         if let Some(row) = row {
             self.queue_list().scroll_to_reveal_item(row);
         }

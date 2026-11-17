@@ -21,19 +21,19 @@ impl PullRequestDetail {
             .jumped_to_file
             .filter(|file| self.is_file_header_in_view(*file));
         jumped.or_else(|| {
-            self.rows
-                .file_at_row(self.list.logical_scroll_top().item_ix)
+            self.rows()
+                .file_at_row(self.list().logical_scroll_top().item_ix)
         })
     }
 
     /// Whether file `file`'s header row lay wholly inside the diff's
     /// viewport in the last frame.
     fn is_file_header_in_view(&self, file: usize) -> bool {
-        let Some(row) = self.rows.file_start(file) else {
+        let Some(row) = self.rows().file_start(file) else {
             return false;
         };
-        let viewport = self.list.viewport_bounds();
-        self.list.bounds_for_item(row).is_some_and(|header| {
+        let viewport = self.list().viewport_bounds();
+        self.list().bounds_for_item(row).is_some_and(|header| {
             header.top() >= viewport.top() && header.bottom() <= viewport.bottom()
         })
     }
@@ -41,8 +41,8 @@ impl PullRequestDetail {
     /// Scrolls the diff to file `file`'s header (as far as the diff goes)
     /// and makes it the current file; nothing while it is hidden.
     pub(super) fn reveal_file(&mut self, file: usize, cx: &mut Context<Self>) {
-        if let Some(row) = self.rows.file_start(file) {
-            self.list.scroll_to(ListOffset {
+        if let Some(row) = self.rows().file_start(file) {
+            self.list().scroll_to(ListOffset {
                 item_ix: row,
                 offset_in_item: px(0.),
             });
@@ -51,23 +51,21 @@ impl PullRequestDetail {
         }
     }
 
-    /// The shown file after (or before) the current one, in diff order.
+    /// The shown file after (or before) the current one, in this surface's reading order.
     fn neighbour_file(&self, direction: FileDirection) -> Option<usize> {
-        let shown: Vec<usize> = (0..self.loaded_files().len())
-            .filter(|file| self.rows.file_start(*file).is_some())
+        let order = match self
+            .walkthrough
+            .selected_group
+            .filter(|_| self.guided_diff_active())
+        {
+            Some(id) => self.walkthrough.item(id)?.files.clone(),
+            None => (0..self.loaded_files().len()).collect(),
+        };
+        let shown: Vec<usize> = order
+            .into_iter()
+            .filter(|file| self.rows().file_start(*file).is_some())
             .collect();
-        let current = self.current_file();
-        match direction {
-            FileDirection::Next => shown
-                .iter()
-                .copied()
-                .find(|file| current.is_none_or(|current| *file > current)),
-            FileDirection::Previous => shown
-                .iter()
-                .rev()
-                .copied()
-                .find(|file| current.is_some_and(|current| *file < current)),
-        }
+        neighbour_in_order(&shown, self.current_file(), direction)
     }
 
     /// Scrolls to the next shown file (`]`).
@@ -87,6 +85,15 @@ impl PullRequestDetail {
     /// Marks the current file viewed and moves on to the next file not yet
     /// viewed (`v`); on a viewed file, only unmarks it.
     pub fn mark_current_viewed_and_advance(&mut self, cx: &mut Context<Self>) {
+        if !self.brief().mode.shows_diff() {
+            return;
+        }
+        if self.guided_diff_active()
+            && let Some(id) = self.walkthrough.selected_group
+        {
+            self.mark_walkthrough_viewed_and_advance(id, cx);
+            return;
+        }
         let Some(file) = self.current_file() else {
             return;
         };
@@ -98,8 +105,14 @@ impl PullRequestDetail {
         if was_viewed {
             return;
         }
+        if self.focus_drawer.mode == qd_cache::FilesMode::Plan
+            && let Some(current) = self.walkthrough.current_item
+        {
+            self.advance_walkthrough(current, cx);
+            return;
+        }
         let next_unviewed = (file + 1..self.loaded_files().len()).find(|next| {
-            self.rows.file_start(*next).is_some()
+            self.rows().file_start(*next).is_some()
                 && !self
                     .file_review
                     .is_viewed(self.loaded_files()[*next].filename())
@@ -131,6 +144,7 @@ impl PullRequestDetail {
         let Some(loaded) = self.loaded_files().get(file).cloned() else {
             return;
         };
+        self.viewed_undo.clear();
         self.file_review.toggle_viewed(&loaded).record(scope, cx);
         self.rebuild_file_rows(file);
         cx.notify();
@@ -180,6 +194,13 @@ impl PullRequestDetail {
     /// Shows file `file`'s header in the diff (a file clicked in the file
     /// tree), switching from the summary or brief to the diff first.
     pub(super) fn show_file_in_diff(&mut self, file: usize, cx: &mut Context<Self>) {
+        if self.brief().mode == DetailMode::GuidedReview && self.open_guided_file(file, cx) {
+            return;
+        }
+        self.clear_diff_selection();
+        self.row_tops_width = None;
+        self.focus_drawer.preview = None;
+        self.focus_drawer.preview_task = None;
         if self.brief().mode != DetailMode::Diff {
             self.set_detail_mode(DetailMode::Diff, cx);
         }
@@ -190,7 +211,7 @@ impl PullRequestDetail {
     /// is expanded when collapsed; when the line has no row (a filter hides
     /// the file) the diff shows the file's header, or stays where it was.
     pub(super) fn show_anchor_in_diff(&mut self, anchor: &CodeAnchor, cx: &mut Context<Self>) {
-        self.set_detail_mode(DetailMode::Diff, cx);
+        self.return_to_file_diff(cx);
         let Some(file) = file_index_of(self.loaded_files(), &anchor.path) else {
             return;
         };
@@ -229,5 +250,53 @@ impl PullRequestDetail {
                 _ => false,
             })
             .map(|offset| start + offset)
+    }
+}
+
+/// Finds neighbours by displayed position, since guided member indexes need not be sorted.
+fn neighbour_in_order(
+    shown: &[usize],
+    current: Option<usize>,
+    direction: FileDirection,
+) -> Option<usize> {
+    let position = current.and_then(|current| shown.iter().position(|file| *file == current));
+    match (direction, position) {
+        (FileDirection::Next, None) => shown.first().copied(),
+        (FileDirection::Next, Some(position)) => shown.get(position + 1).copied(),
+        (FileDirection::Previous, Some(position)) => position
+            .checked_sub(1)
+            .and_then(|position| shown.get(position).copied()),
+        (FileDirection::Previous, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FileDirection, neighbour_in_order};
+
+    /// Keyboard navigation follows authored order even when it reverses the ordinary diff order.
+    #[test]
+    fn navigates_authored_member_order() {
+        let order = [4, 1, 7, 0];
+        assert_eq!(
+            neighbour_in_order(&order, None, FileDirection::Next),
+            Some(4)
+        );
+        assert_eq!(
+            neighbour_in_order(&order, Some(4), FileDirection::Next),
+            Some(1)
+        );
+        assert_eq!(
+            neighbour_in_order(&order, Some(1), FileDirection::Previous),
+            Some(4)
+        );
+        assert_eq!(
+            neighbour_in_order(&order, Some(0), FileDirection::Next),
+            None
+        );
+        assert_eq!(
+            neighbour_in_order(&order, Some(4), FileDirection::Previous),
+            None
+        );
     }
 }

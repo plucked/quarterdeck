@@ -13,6 +13,7 @@ use crate::theme;
 pub fn render_brief_footer(
     brief: &PreparedBrief,
     reader: ReaderFamiliarity,
+    is_writing: bool,
     handlers: &BriefHandlers,
 ) -> AnyElement {
     let cost = brief
@@ -51,6 +52,7 @@ pub fn render_brief_footer(
                 ))
                 .child(
                     Button::new("rewrite-brief", "Write again")
+                        .disabled(is_writing)
                         .ghost()
                         .on_click(on_click(&handlers.write)),
                 ),

@@ -18,11 +18,9 @@ impl<'found> SelectionRestore<'found> {
     /// on its own) and which lists were searched.
     pub fn decide(found: Option<&'found PullRequest>, phase: RestorePhase) -> Self {
         match (found, phase) {
-            (Some(pull_request), RestorePhase::CachedQueue | RestorePhase::RefreshedQueue) => {
-                Self::Select(pull_request)
-            }
-            (None, RestorePhase::CachedQueue) => Self::WaitForRefresh,
-            (None, RestorePhase::RefreshedQueue) => Self::Abandon,
+            (Some(pull_request), _) => Self::Select(pull_request),
+            (None, RestorePhase::Cached | RestorePhase::Refreshing) => Self::WaitForRefresh,
+            (None, RestorePhase::Refreshed | RestorePhase::Unavailable) => Self::Abandon,
         }
     }
 }
@@ -62,7 +60,7 @@ mod tests {
     fn found_pull_request_is_selected() {
         let found = pull_request(2);
         assert_eq!(
-            SelectionRestore::decide(Some(&found), RestorePhase::CachedQueue),
+            SelectionRestore::decide(Some(&found), RestorePhase::Cached),
             SelectionRestore::Select(&found)
         );
     }
@@ -71,7 +69,7 @@ mod tests {
     #[test]
     fn missing_from_cache_waits_for_refresh() {
         assert_eq!(
-            SelectionRestore::decide(None, RestorePhase::CachedQueue),
+            SelectionRestore::decide(None, RestorePhase::Cached),
             SelectionRestore::WaitForRefresh
         );
     }
@@ -80,7 +78,16 @@ mod tests {
     #[test]
     fn missing_after_refresh_is_abandoned() {
         assert_eq!(
-            SelectionRestore::decide(None, RestorePhase::RefreshedQueue),
+            SelectionRestore::decide(None, RestorePhase::Refreshed),
+            SelectionRestore::Abandon
+        );
+    }
+
+    /// A missing saved selection stops waiting when GitHub cannot refresh this launch.
+    #[test]
+    fn missing_offline_selection_is_abandoned() {
+        assert_eq!(
+            SelectionRestore::decide(None, RestorePhase::Unavailable),
             SelectionRestore::Abandon
         );
     }

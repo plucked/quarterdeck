@@ -93,6 +93,9 @@ pub struct PullRequestDetail {
     pub(super) is_selecting: bool,
     /// The file tree panel: the files as a tree, the filter, folders, visibility.
     pub(super) file_tree: FileTreeState,
+    pub(super) focus_drawer: super::focus_drawer::FocusDrawer,
+    pub(super) walkthrough: super::review_walkthrough::ReviewWalkthrough,
+    pub(super) viewed_undo: Vec<super::viewed_change::ViewedChange>,
     /// The Summary tab's scroll, reset for each new pull request.
     summary_scroll: ScrollHandle,
     /// Whether stacked pull requests show one layer or combined layers: the
@@ -162,6 +165,7 @@ impl PullRequestDetail {
             .saved_review_layout()
             .unwrap_or_default();
         let checks = cx.new(|_| ChecksPanel::new(services.clone()));
+        let search_input = cx.new(|cx| crate::text_area::TextArea::single_line("Find files…", cx));
         let mut detail = Self {
             services,
             pull_request: None,
@@ -183,6 +187,12 @@ impl PullRequestDetail {
             diff_selection: None,
             is_selecting: false,
             file_tree: FileTreeState::new(layout.clone()),
+            focus_drawer: super::focus_drawer::FocusDrawer::new(
+                layout.files_mode,
+                search_input.clone(),
+            ),
+            walkthrough: super::review_walkthrough::ReviewWalkthrough::default(),
+            viewed_undo: Vec::new(),
             summary_scroll: ScrollHandle::new(),
             review_mode: layout.stack_review,
             target: ReviewTarget::Layer,
@@ -219,16 +229,40 @@ impl PullRequestDetail {
                 ),
             ],
         };
+        detail.focus_drawer.subscription = Some(cx.subscribe(
+            &search_input,
+            |detail, _, event: &crate::text_area::TextAreaEvent, cx| {
+                detail.on_file_search(*event, cx);
+            },
+        ));
+        detail.brief.mode = match layout.files_mode {
+            qd_cache::FilesMode::Tree => super::detail_mode::DetailMode::Diff,
+            qd_cache::FilesMode::Plan => super::detail_mode::DetailMode::GuidedReview,
+        };
         detail.rebuild_rows(ScrollAnchor::Top);
         detail
     }
 
+    /// Guided rows stay isolated from ordinary browsing even when a selected step is retained.
+    pub(super) fn guided_diff_active(&self) -> bool {
+        self.brief.mode == super::detail_mode::DetailMode::GuidedReview
+            && self.walkthrough.selected_group.is_some()
+    }
+
     pub(super) fn list(&self) -> &ListState {
-        &self.list
+        if self.guided_diff_active() {
+            &self.walkthrough.group_diff.list
+        } else {
+            &self.list
+        }
     }
 
     pub(super) fn rows(&self) -> &DetailRowList {
-        &self.rows
+        if self.guided_diff_active() {
+            &self.walkthrough.group_diff.rows
+        } else {
+            &self.rows
+        }
     }
 
     pub(super) fn focus(&self) -> &FocusHandle {
@@ -410,6 +444,7 @@ impl PullRequestDetail {
     /// The layout to save: the file tree's part and the review mode.
     pub(super) fn review_layout(&self) -> ReviewLayoutState {
         ReviewLayoutState {
+            files_mode: self.focus_drawer.mode,
             stack_review: self.review_mode,
             comment_destination: self.review.destination,
             ..self.file_tree.layout()
@@ -427,6 +462,8 @@ impl PullRequestDetail {
         cx: &mut Context<Self>,
     ) {
         let Some(pull_request) = pull_request else {
+            self.focus_drawer.reset_contents();
+            self.viewed_undo.clear();
             self.pull_request = None;
             self.description = None;
             self.changed_files = None;

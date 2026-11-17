@@ -24,6 +24,6 @@ pub use review_change::ReviewChange;
 pub use shared_ui_state_store::SharedUiStateStore;
 pub use ui_state_recorder::UiStateRecorder;
 pub use ui_state_store_reads::{
-    read_brief, read_brief_index, read_review_notes, read_viewed_files, write_brief,
+    read_brief, read_brief_index, read_review_notes, read_viewed_files,
 };
 pub use window_placement_conversion::{placement_from_window, window_bounds_from_placement};

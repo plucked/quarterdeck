@@ -23,7 +23,9 @@ pub struct BriefHandlers {
     pub show_anchor: AnchorHandler,
     /// Write brief, Try again and Write again.
     pub write: ActionHandler,
-    /// Cancel, while the brief is written.
+    /// Retry saving the accepted brief without generating another one.
+    pub retry_save: ActionHandler,
+    /// Cancel generation or saving, or discard a brief waiting to be saved.
     pub cancel: ActionHandler,
     /// A page tab or a previous / next button: show page `index`.
     pub show_page: WidgetHandler,

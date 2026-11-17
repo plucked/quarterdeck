@@ -1,0 +1,1 @@
+This folder holds bounded local HTTP requests and a synthetic tool shared by protocol scenarios. It only exists in integration-test executables and never reads application state, credentials or remote services.

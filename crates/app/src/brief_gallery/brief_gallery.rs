@@ -58,6 +58,7 @@ impl BriefGallery {
         let handlers = BriefHandlers {
             show_anchor: Rc::new(|_, _, _| {}),
             write: Rc::new(|_, _| {}),
+            retry_save: Rc::new(|_, _| {}),
             cancel: Rc::new(|_, _| {}),
             show_page: view_handler(&gallery, |gallery, page, _, cx| gallery.show_page(page, cx)),
             choose_reader: view_handler(&gallery, |gallery, familiarity, _, cx| {

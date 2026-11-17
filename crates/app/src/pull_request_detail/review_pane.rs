@@ -25,6 +25,8 @@ pub struct ReviewPane {
     /// An export snapshot; closed whenever notes or scope change.
     pub claude_picker: Option<Entity<ClaudeSessionPicker>>,
     pub tab: SidePanelTab,
+    /// The last tab with secondary options, kept while its bubble closes.
+    pub options_tab: SidePanelTab,
     /// The GitHub review's summary, while the review tab shows it.
     pub summary_editor: Option<Entity<TextArea>>,
     pub summary_subscription: Option<Subscription>,
@@ -59,6 +61,7 @@ impl Default for ReviewPane {
             status: OperationStatus::Idle,
             claude_picker: None,
             tab: SidePanelTab::Files,
+            options_tab: SidePanelTab::Files,
             summary_editor: None,
             summary_subscription: None,
             load_task: None,

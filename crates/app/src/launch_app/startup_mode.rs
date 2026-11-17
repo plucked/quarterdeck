@@ -10,13 +10,19 @@ pub enum StartupMode {
     /// Behind the startup splash playing this movie: opened hidden and
     /// see-through, revealed when the movie ends.
     Splash(PathBuf),
-    /// At once (the movie is missing).
+    /// At once (the movie is missing or `--no-splash` was passed).
     Direct,
 }
 
 impl StartupMode {
-    /// The splash when its movie is there.
+    /// The splash when its movie is there, unless `--no-splash` was passed.
     pub fn detect() -> Self {
+        if std::env::args_os()
+            .skip(1)
+            .any(|argument| argument == "--no-splash")
+        {
+            return Self::Direct;
+        }
         startup_video_path().map_or(Self::Direct, Self::Splash)
     }
 

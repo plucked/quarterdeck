@@ -86,6 +86,7 @@ impl SampleBrief {
 /// transcript).
 fn sample_record(answer: serde_json::Value, rejected: Vec<RejectedWidget>) -> BriefRecord {
     BriefRecord {
+        mcp: None,
         repository: "plucked/quarterdeck".into(),
         number: 0,
         url: "https://github.com/plucked/quarterdeck/commit/75b165e".into(),

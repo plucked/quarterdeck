@@ -83,11 +83,11 @@ impl PullRequestDetail {
         )
     }
 
-    /// Summary, Diff or Brief: what the main column shows.
+    /// Separate ordinary browsing and the guided walkthrough in the main navigation.
     fn render_mode_switch(&self, cx: &mut Context<Self>) -> AnyElement {
         let mode = self.brief().mode;
         let detail = cx.entity().downgrade();
-        let pick = |mode| view_option(&detail, mode, PullRequestDetail::set_detail_mode);
+        let pick = |mode| view_option(&detail, mode, PullRequestDetail::select_detail_mode);
         let tabs = SegmentedControl::new("detail-mode")
             .large()
             .quiet()
@@ -97,6 +97,11 @@ impl PullRequestDetail {
                 pick(DetailMode::Summary),
             )
             .option("Diff", mode == DetailMode::Diff, pick(DetailMode::Diff))
+            .option(
+                "Guided review",
+                mode == DetailMode::GuidedReview,
+                pick(DetailMode::GuidedReview),
+            )
             .option("Brief", mode == DetailMode::Brief, pick(DetailMode::Brief));
         let is_stacked = self.pull_request().is_some_and(|pr| pr.stack.is_some());
         div()
@@ -111,7 +116,7 @@ impl PullRequestDetail {
             .when(is_stacked, |bubble| {
                 bubble.child(AnimatedReveal::new(
                     "stack-mode-reveal",
-                    mode == DetailMode::Diff,
+                    mode.shows_diff(),
                     px(STACK_MODE_HEIGHT),
                     self.render_stack_mode_switch(cx),
                 ))

@@ -7,7 +7,7 @@ use super::changed_rows::ChangedRows;
 use super::detail_content::DetailContent;
 use super::detail_row_list::DetailRowList;
 use super::pull_request_detail::PullRequestDetail;
-use super::row_height_estimate::estimate_row_tops;
+use super::row_height_estimate::{estimate_group_row_tops, estimate_row_tops};
 use super::scroll_anchor::ScrollAnchor;
 use crate::scrollbar::ListRowTops;
 
@@ -58,6 +58,7 @@ impl PullRequestDetail {
         self.jumped_to_file = None;
         self.row_tops_width = None;
         self.refresh_tree_rows();
+        self.walkthrough.group_diff.reset_measurements();
         // The shown pull request or target may have changed, and with it the brief.
         self.refresh_brief_rows();
 
@@ -164,13 +165,17 @@ impl PullRequestDetail {
     /// The rows' estimated tops for the scrollbar, estimated again when the
     /// rows changed or the pane's width did (wrapped lines depend on it).
     pub(super) fn current_row_tops(&mut self) -> ListRowTops {
-        let width = f32::from(self.list.viewport_bounds().size.width);
+        let width = f32::from(self.list().viewport_bounds().size.width);
         let is_current = self
             .row_tops_width
             .is_some_and(|estimated| (estimated - width).abs() < 1.);
         if !is_current {
-            self.row_tops =
-                estimate_row_tops(&self.rows, self.loaded_files(), self.diff_settings, width);
+            let estimate = if self.guided_diff_active() {
+                estimate_group_row_tops
+            } else {
+                estimate_row_tops
+            };
+            self.row_tops = estimate(self.rows(), self.loaded_files(), self.diff_settings, width);
             self.row_tops_width = Some(width);
         }
         self.row_tops.clone()
@@ -178,12 +183,12 @@ impl PullRequestDetail {
 
     /// Measures row `row` again (a growing comment editor).
     pub(super) fn remeasure_row(&mut self, row: usize) {
-        self.list.splice(row..row + 1, 1);
+        self.list().splice(row..row + 1, 1);
     }
 
     /// Scrolls the diff so row `row` is at the top.
     pub(super) fn scroll_to_row(&mut self, row: usize) {
-        self.list.scroll_to(ListOffset {
+        self.list().scroll_to(ListOffset {
             item_ix: row,
             offset_in_item: px(0.),
         });

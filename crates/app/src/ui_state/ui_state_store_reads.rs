@@ -1,7 +1,6 @@
 use qd_cache::{
     BriefIndex, NoteDestination, ReviewNote, ReviewScope, ReviewSummary, StoredBrief, ViewedFile,
 };
-use qd_studio::{BriefRecord, Studio};
 
 use super::SharedUiStateStore;
 
@@ -39,20 +38,6 @@ pub fn read_brief(store: &SharedUiStateStore, scope: &ReviewScope) -> Option<Sto
         eprintln!("ui state: ignoring a stored brief: {error:#}");
         None
     })
-}
-
-/// Stores the brief `studio` with its `record` as the brief of `scope`,
-/// through the shared store on the background executor; a failure is
-/// reported on stderr (the brief still shows for the session).
-pub fn write_brief(
-    store: &SharedUiStateStore,
-    scope: &ReviewScope,
-    studio: &Studio,
-    record: &BriefRecord,
-) {
-    if let Err(error) = store.lock().put_brief(scope, studio, record) {
-        eprintln!("ui state: cannot store a brief: {error:#}");
-    }
 }
 
 /// Which pull requests have a stored brief, read through the shared store

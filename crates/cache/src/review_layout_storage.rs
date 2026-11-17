@@ -10,6 +10,7 @@ use crate::{NoteDestination, PanelVisibility, ReviewLayoutState, StackReviewMode
 /// The columns of the `review_layout` row, read before decoding.
 struct StoredReviewLayout {
     file_tree_visible: i64,
+    files_mode: String,
     stack_review: String,
     comment_destination: String,
     hide_viewed: bool,
@@ -27,7 +28,7 @@ fn kind_column(kind: FileKind) -> &'static str {
 }
 
 /// Columns read before the kind columns.
-const FIXED_COLUMNS: usize = 4;
+const FIXED_COLUMNS: usize = 5;
 
 impl UiStateStore {
     /// The last saved review layout.
@@ -40,7 +41,7 @@ impl UiStateStore {
             .connection()
             .query_row(
                 &format!(
-                    "SELECT file_tree_visible, stack_review, hide_viewed, comment_destination, {}
+                    "SELECT file_tree_visible, stack_review, hide_viewed, comment_destination, files_mode, {}
                      FROM review_layout WHERE id = ?1",
                     kind_columns.join(", ")
                 ),
@@ -57,6 +58,7 @@ impl UiStateStore {
                         stack_review: row.get(1)?,
                         hide_viewed: row.get(2)?,
                         comment_destination: row.get(3)?,
+                        files_mode: row.get(4)?,
                         hidden_kinds,
                     })
                 },
@@ -80,6 +82,8 @@ impl UiStateStore {
             })?;
         Ok(Some(ReviewLayoutState {
             comment_destination,
+            files_mode: crate::FilesMode::from_sql_text(&stored.files_mode)
+                .ok_or_else(|| anyhow!("unknown Files mode {:?}", stored.files_mode))?,
             file_tree,
             hide_viewed: stored.hide_viewed,
             hidden_kinds: stored.hidden_kinds,
@@ -92,8 +96,8 @@ impl UiStateStore {
         let hides = |kind| layout.hidden_kinds.contains(&kind);
         self.connection().execute(
             "INSERT INTO review_layout (id, file_tree_visible, stack_review, hide_viewed,
-                hide_code, hide_tests, hide_generated, hide_unchanged_moves, comment_destination)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                hide_code, hide_tests, hide_generated, hide_unchanged_moves, comment_destination, files_mode)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT (id) DO UPDATE SET
                 file_tree_visible = excluded.file_tree_visible,
                 stack_review = excluded.stack_review,
@@ -101,7 +105,8 @@ impl UiStateStore {
                 hide_code = excluded.hide_code, hide_tests = excluded.hide_tests,
                 hide_generated = excluded.hide_generated,
                 hide_unchanged_moves = excluded.hide_unchanged_moves,
-                comment_destination = excluded.comment_destination",
+                comment_destination = excluded.comment_destination,
+                files_mode = excluded.files_mode",
             params![
                 SINGLE_ROW_ID,
                 layout.file_tree.as_sql_integer(),
@@ -111,7 +116,8 @@ impl UiStateStore {
                 hides(FileKind::Tests),
                 hides(FileKind::Generated),
                 hides(FileKind::Moved),
-                layout.comment_destination.as_sql_text()
+                layout.comment_destination.as_sql_text(),
+                layout.files_mode.as_sql_text()
             ],
         )?;
         Ok(())
@@ -129,6 +135,7 @@ mod tests {
         assert_eq!(store.review_layout().unwrap(), None);
         let layout = ReviewLayoutState {
             file_tree: PanelVisibility::Hidden,
+            files_mode: crate::FilesMode::Plan,
             hide_viewed: true,
             hidden_kinds: BTreeSet::from([FileKind::Code, FileKind::Moved]),
             stack_review: StackReviewMode::Combined,

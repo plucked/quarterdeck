@@ -24,6 +24,7 @@
 //! - `activation_refresh.rs`: `ActivationRefresh`, whether a window activation refreshes.
 //! - `selection_after_refresh.rs`: decides what stays selected when the queue is replaced.
 //! - `selection_restore.rs`: decides how a selection saved before a relaunch is restored.
+//! - `startup_selection.rs`: chooses the first Mine stack or standalone PR when launch has no selection.
 //! - `restore_phase.rs`: `RestorePhase`, which queue a saved selection is matched against.
 //! - `queue_lists.rs`: `QueueLists`, the authored, review-requested, reviewed and others' lists.
 //! - `hidden_branches.rs`: whether the hidden branch rules hide a pull request, and the lists without those.
@@ -78,6 +79,7 @@ mod sidebar_rendering;
 mod stack_group;
 mod stack_key;
 mod stack_row_rendering;
+mod startup_selection;
 mod top_bar_rendering;
 
 pub use review_queue::ReviewQueue;

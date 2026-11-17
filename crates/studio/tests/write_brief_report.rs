@@ -13,34 +13,7 @@ use serde_json::json;
 fn writes_every_part_of_a_report() {
     let root = std::env::temp_dir().join(format!("qd-studio-report-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    let record = BriefRecord {
-        repository: "plucked/quarterdeck".into(),
-        number: 42,
-        url: "https://github.com/plucked/quarterdeck/pull/42".into(),
-        subject: "Pull request #42: Hold refreshes".into(),
-        layers: Vec::new(),
-        head_sha: Some("bbb222".into()),
-        reader: ReaderFamiliarity::Newcomer,
-        code: CodeAccess::Workspace,
-        prompt: "# Pull request\n…".into(),
-        answer: Some(json!({ "lead": "L", "pages": [{ "title": "Overview", "summary": "S", "widgets": [] }] })),
-        transcript: Some(vec![
-            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"head/src/lib.rs"}}]}}"#.into(),
-        ]),
-        tool_calls: vec![ToolCall {
-            tool: "Read".into(),
-            input: "file_path: head/src/lib.rs".into(),
-        }],
-        rejected: vec![RejectedWidget {
-            widget: "Overview: graph “Owners”".into(),
-            reason: "an edge names an unknown node “x”".into(),
-        }],
-        cost_usd: Some(0.42),
-        session_id: Some("session-1".into()),
-        model: Some("claude-opus-5-5".into()),
-        duration: Duration::from_secs(65),
-        written_at: 1_794_148_320,
-    };
+    let record = sample_record();
 
     let shown_page = ShownPage {
         number: 1,
@@ -96,5 +69,76 @@ fn writes_every_part_of_a_report() {
     assert_ne!(again.parent(), report.parent());
     let first = std::fs::read_to_string(&report).expect("the first report.md");
     assert!(first.contains("The lead is too long."), "{first}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The same original artifact can be reported through legacy and MCP generation paths.
+fn sample_record() -> BriefRecord {
+    BriefRecord {
+            mcp: None,
+        repository: "plucked/quarterdeck".into(),
+        number: 42,
+        url: "https://github.com/plucked/quarterdeck/pull/42".into(),
+        subject: "Pull request #42: Hold refreshes".into(),
+        layers: Vec::new(),
+        head_sha: Some("bbb222".into()),
+        reader: ReaderFamiliarity::Newcomer,
+        code: CodeAccess::Workspace,
+        prompt: "# Pull request\n…".into(),
+        answer: Some(json!({ "lead": "L", "pages": [{ "title": "Overview", "summary": "S", "widgets": [] }] })),
+        transcript: Some(vec![
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"head/src/lib.rs"}}]}}"#.into(),
+        ]),
+        tool_calls: vec![ToolCall {
+            tool: "Read".into(),
+            input: "file_path: head/src/lib.rs".into(),
+        }],
+        rejected: vec![RejectedWidget {
+            widget: "Overview: graph “Owners”".into(),
+            reason: "an edge names an unknown node “x”".into(),
+        }],
+        cost_usd: Some(0.42),
+        session_id: Some("session-1".into()),
+        model: Some("claude-opus-5-5".into()),
+        duration: Duration::from_secs(65),
+        written_at: 1_794_148_320,
+    }
+}
+
+#[test]
+fn mcp_report_keeps_the_full_artifact_separate_from_its_receipt() {
+    let root =
+        std::env::temp_dir().join(format!("qd-studio-mcp-report-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let mut record = sample_record();
+    let shown_page = ShownPage {
+        number: 1,
+        count: 1,
+        title: "Overview".into(),
+    };
+    // MCP reports preserve the complete artifact and put publication evidence beside it.
+    record.mcp = Some(qd_studio::BriefMcpRecord {
+        base_sha: Some("base".into()),
+        run_id: "run-test".into(),
+        snapshot_id: "head:base".into(),
+        validation_receipt: "sealed-receipt".into(),
+        audit: vec![qd_studio::GuidedToolAudit {
+            tool_name: "brief_replace_page".into(),
+            status: "rejected".into(),
+            revision: 0,
+            issue_codes: vec!["invalid_anchor".into()],
+        }],
+    });
+    let modern =
+        write_brief_report(&root, &record, "Repair worked", &shown_page, "0.14.0").unwrap();
+    let modern_folder = modern.parent().unwrap();
+    let artifact: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(modern_folder.join("answer.json")).unwrap())
+            .unwrap();
+    assert_eq!(artifact["lead"], "L");
+    assert!(artifact.get("validation_receipt").is_none());
+    let audit = std::fs::read_to_string(modern_folder.join("mcp-repair.md")).unwrap();
+    assert!(audit.contains("sealed-receipt") && audit.contains("invalid_anchor"));
+    assert!(modern_folder.join("completion-schema.json").exists());
     let _ = std::fs::remove_dir_all(&root);
 }

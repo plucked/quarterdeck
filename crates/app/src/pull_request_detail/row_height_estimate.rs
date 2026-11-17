@@ -31,10 +31,34 @@ pub fn estimate_row_tops(
     settings: DiffViewSettings,
     pane_width: f32,
 ) -> ListRowTops {
+    row_tops_with_header(rows, files, settings, pane_width, FILE_HEADER_HEIGHT)
+}
+
+/// Group disclosures reuse the compact navigation header's 48-point height.
+pub fn estimate_group_row_tops(
+    rows: &DetailRowList,
+    files: &[LoadedFile],
+    settings: DiffViewSettings,
+    pane_width: f32,
+) -> ListRowTops {
+    row_tops_with_header(rows, files, settings, pane_width, 48.)
+}
+
+/// Uses the active surface's header height while sharing all code and comment estimates.
+fn row_tops_with_header(
+    rows: &DetailRowList,
+    files: &[LoadedFile],
+    settings: DiffViewSettings,
+    pane_width: f32,
+    header_height: f32,
+) -> ListRowTops {
     ListRowTops::from_heights(
         (0..rows.len())
             .filter_map(|index| rows.get(index))
-            .map(|row| estimated_height(row, files, settings, pane_width)),
+            .map(|row| match row {
+                DetailRow::FileHeader { .. } => header_height,
+                _ => estimated_height(row, files, settings, pane_width),
+            }),
     )
 }
 

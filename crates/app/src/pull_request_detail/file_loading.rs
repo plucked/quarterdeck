@@ -84,6 +84,13 @@ impl PullRequestDetail {
         };
         self.changed_files = Some(ChangedFiles::Loading(first_step));
         self.file_review = FileReviewState::default();
+        self.viewed_undo.clear();
+        self.walkthrough = super::review_walkthrough::ReviewWalkthrough::default();
+        self.focus_drawer.reset_contents();
+        self.file_tree.search = super::file_search::FileSearch::default();
+        self.focus_drawer
+            .input
+            .update(cx, |input, cx| input.set_text(String::new(), cx));
         self.viewed_scope = None;
         // The head is known again with the files; until then no brief is compared with it.
         self.shown_head_sha = None;
@@ -131,6 +138,7 @@ impl PullRequestDetail {
                         Err(error) => ChangedFiles::Failed(format!("{error:#}").into()),
                     });
                     detail.rebuild_rows(ScrollAnchor::Top);
+                    detail.resume_guided_review(cx);
                     detail.highlight_syntax(cx);
                     detail.load_github_review(cx);
                     cx.notify();
@@ -147,6 +155,16 @@ impl PullRequestDetail {
         fetched: FetchedChanges,
         cx: &mut Context<Self>,
     ) -> ChangedFiles {
+        self.invalidate_guided_review(
+            &fetched.scope,
+            fetched.head_sha.as_deref(),
+            fetched.base_sha.as_deref(),
+        );
+        self.brief_mut().invalidate_runs(
+            &fetched.scope,
+            fetched.head_sha.as_deref(),
+            fetched.base_sha.as_deref(),
+        );
         self.file_review = FileReviewState::for_loaded(&fetched.files, &fetched.viewed_marks);
         self.viewed_scope = Some(fetched.scope);
         self.review.comments.notes = fetched.notes;

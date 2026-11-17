@@ -1,15 +1,18 @@
 use std::collections::HashMap;
 
-use gpui::{ListAlignment, ListState, Task, px};
-use qd_studio::ReaderFamiliarity;
+use gpui::{ListAlignment, ListState, px};
+use qd_cache::ReviewScope;
+use qd_studio::{AgentProgress, ReaderFamiliarity};
 
 use super::brief_key::BriefKey;
 use super::brief_row::BriefRow;
 use super::detail_mode::DetailMode;
-use super::run_cancel::RunCancel;
+use super::pending_brief::PendingBrief;
+use super::review_agent_task::ReviewAgentTask;
+use super::review_job_error::ReviewJobError;
 use crate::brief_view::{
-    BriefHandlers, BriefPageRow, BriefReport, BriefState, DEFAULT_DIAGRAM_WIDTH, PreparedBrief,
-    ReportState,
+    BriefHandlers, BriefPageRow, BriefReport, BriefSaveStatus, BriefState, DEFAULT_DIAGRAM_WIDTH,
+    PreparedBrief, ReportState,
 };
 
 /// How far beyond the visible area the brief's rows are laid out.
@@ -23,17 +26,13 @@ struct BriefEntry {
     page: usize,
     /// The agent run writing this brief, while one was started; dropping
     /// it (the entry removed, or a new run started) kills the agent.
-    run: Option<BriefRun>,
-    /// The written brief a run in flight replaces, shown again when that
-    /// run is cancelled.
-    replaced: Option<Box<PreparedBrief>>,
-}
-
-/// An agent run: its task, and the guard that kills the agent process when
-/// the run is replaced or the view closes.
-struct BriefRun {
-    _task: Task<()>,
-    _cancel: RunCancel,
+    run: Option<ReviewAgentTask>,
+    /// Replacement progress and errors do not hide the saved brief.
+    progress: Option<AgentProgress>,
+    error: Option<String>,
+    /// Completed output awaiting a local save; its original receipt and metadata stay intact.
+    pending_save: Option<Box<PendingBrief>>,
+    saving: bool,
 }
 
 /// Which brief the shown rows belong to: the rows are laid out anew (from
@@ -165,30 +164,71 @@ impl BriefPane {
         self.entry(key).map(|entry| &entry.state)
     }
 
-    /// Records the brief `key` names, replacing the state before (its run
-    /// goes on); it opens on its first page, its diagrams fitted to the
-    /// column when it shows. A written brief that a run starts to replace is
-    /// kept, to show again when the run is cancelled.
+    /// Installs a stored or completed brief; a separate run retains its saved predecessor.
     pub fn set_state(&mut self, key: &BriefKey, state: BriefState) {
-        let Some(entry) = self.entry_mut(key) else {
+        if let Some(entry) = self.entry_mut(key) {
+            entry.state = state;
+            entry.page = 0;
+            entry.error = None;
+            entry.pending_save = None;
+            entry.saving = false;
+        } else {
             self.entries.push(BriefEntry {
                 key: key.clone(),
                 state,
                 page: 0,
                 run: None,
-                replaced: None,
+                progress: None,
+                error: None,
+                pending_save: None,
+                saving: false,
             });
-            return;
-        };
+        }
+    }
 
-        // Writing keeps the brief it replaces until the run ends.
-        let earlier = std::mem::replace(&mut entry.state, state);
-        entry.replaced = match (earlier, &entry.state) {
-            (BriefState::Written(brief), BriefState::Writing(_)) => Some(brief),
-            (_, BriefState::Writing(_)) => entry.replaced.take(),
-            (_, BriefState::Written(_) | BriefState::Failed(_)) => None,
-        };
-        entry.page = 0;
+    /// A new run's failure keeps the last published brief available to read.
+    pub fn fail_to_start(&mut self, key: &BriefKey, message: String) {
+        if let Some(entry) = self.entry_mut(key)
+            && matches!(entry.state, BriefState::Written(_))
+        {
+            entry.error = Some(message);
+        } else {
+            self.set_state(key, BriefState::Failed(message.into()));
+        }
+    }
+
+    /// The current generation identity; used to reject late progress and completion.
+    pub fn run_of(&self, key: &BriefKey) -> Option<&ReviewAgentTask> {
+        self.entry(key)?.run.as_ref()
+    }
+
+    /// The latest progress of the current generation; absent until its first event.
+    pub fn run_progress_of(&self, key: &BriefKey) -> Option<AgentProgress> {
+        self.entry(key)?.progress
+    }
+
+    /// Why a replacement failed, while its previous brief is still shown.
+    pub fn error_of(&self, key: &BriefKey) -> Option<&str> {
+        self.entry(key)?.error.as_deref()
+    }
+
+    /// Distinguishes saving completed output from asking Claude for a new brief.
+    pub fn save_status_of(&self, key: &BriefKey) -> BriefSaveStatus {
+        match self.entry(key) {
+            Some(entry) if entry.saving => BriefSaveStatus::Saving,
+            Some(entry) if entry.pending_save.is_some() => BriefSaveStatus::Pending,
+            _ => BriefSaveStatus::None,
+        }
+    }
+
+    /// The immutable completed draft, checked against the currently loaded revision before retry.
+    pub(super) fn pending_save_of(&self, key: &BriefKey) -> Option<&PendingBrief> {
+        self.entry(key)?.pending_save.as_deref()
+    }
+
+    /// Transfers the completed draft to one background save attempt.
+    pub(super) fn take_pending_save(&mut self, key: &BriefKey) -> Option<Box<PendingBrief>> {
+        self.entry_mut(key)?.pending_save.take()
     }
 
     /// The page shown of the brief `key` names.
@@ -211,32 +251,141 @@ impl BriefPane {
         self.entries.iter_mut().find(|entry| entry.key == *key)
     }
 
-    /// Keeps `task` as the run writing the brief `key` names (recorded as
-    /// writing before), cancelling an earlier run of that brief; runs of
-    /// other briefs go on.
-    pub fn start_run(&mut self, key: &BriefKey, task: Task<()>, cancel: RunCancel) {
+    /// Starts a generation without removing a previously published brief.
+    pub fn start_run(&mut self, key: &BriefKey, run: ReviewAgentTask) {
+        if self.entry(key).is_none() {
+            self.set_state(key, BriefState::Writing(None));
+        }
         if let Some(entry) = self.entry_mut(key) {
-            entry.run = Some(BriefRun {
-                _task: task,
-                _cancel: cancel,
-            });
+            if !matches!(entry.state, BriefState::Written(_)) {
+                entry.state = BriefState::Writing(None);
+            }
+            entry.run = Some(run);
+            entry.progress = None;
+            entry.error = None;
+            entry.pending_save = None;
+            entry.saving = false;
         }
     }
 
-    /// Stops the run writing the brief `key` names (killing its agent) and
-    /// shows the brief it was replacing again, or forgets the brief when
-    /// there was none.
+    /// Saves a retained draft under its original generation without invoking Claude.
+    pub fn start_save(&mut self, key: &BriefKey, run: ReviewAgentTask) {
+        self.start_run(key, run);
+        if let Some(entry) = self.entry_mut(key) {
+            entry.saving = true;
+        }
+    }
+
+    /// Applies progress only to the generation still owned by this entry.
+    pub fn update_run_progress(&mut self, key: &BriefKey, run_id: &str, progress: AgentProgress) {
+        if let Some(entry) = self.entry_mut(key)
+            && entry.run.as_ref().is_some_and(|run| run.run_id == run_id)
+        {
+            entry.progress = Some(progress);
+            if matches!(entry.state, BriefState::Writing(_)) {
+                entry.state = BriefState::Writing(Some(progress));
+            }
+        }
+    }
+
+    /// Completes only the current generation, preserving prior content on failure.
+    pub fn finish_run(
+        &mut self,
+        key: &BriefKey,
+        run_id: &str,
+        outcome: Result<PreparedBrief, ReviewJobError<PendingBrief>>,
+    ) -> bool {
+        let replaces_shown = self.shown.as_ref().is_some_and(|shown| shown.key == *key);
+        let Some(entry) = self.entry_mut(key) else {
+            return false;
+        };
+        if entry.run.as_ref().is_none_or(|run| run.run_id != run_id) {
+            return false;
+        }
+        entry.run = None;
+        entry.progress = None;
+        entry.saving = false;
+        entry.pending_save = None;
+        match outcome {
+            Ok(brief) => {
+                entry.state = BriefState::Written(Box::new(brief));
+                entry.page = 0;
+                entry.error = None;
+                // Identical row positions can still contain a wholly new artifact.
+                // Force new measurements and close the previous report on the next refresh.
+                if replaces_shown {
+                    self.shown = None;
+                }
+            }
+            Err(error) => {
+                let message = match error {
+                    ReviewJobError::Failed(message) => message,
+                    ReviewJobError::SaveFailed { draft, message } => {
+                        entry.pending_save = Some(draft);
+                        message
+                    }
+                };
+                if matches!(entry.state, BriefState::Written(_)) {
+                    entry.error = Some(message);
+                } else {
+                    entry.state = BriefState::Failed(message.into());
+                }
+            }
+        }
+        true
+    }
+
+    /// Cancels until publication starts; a written brief and its page remain intact.
     pub fn cancel_run(&mut self, key: &BriefKey) {
-        let replaced = self.entry_mut(key).and_then(|entry| entry.replaced.take());
-        self.remove(key);
-        if let Some(brief) = replaced {
-            self.set_state(key, BriefState::Written(brief));
+        if let Some(entry) = self.entry_mut(key)
+            && entry
+                .run
+                .as_ref()
+                .map_or(entry.pending_save.is_some(), |run| run.gate.cancel())
+        {
+            entry.run = None;
+            entry.progress = None;
+            entry.error = None;
+            entry.pending_save = None;
+            entry.saving = false;
+            if !matches!(entry.state, BriefState::Written(_)) {
+                self.entries.retain(|entry| entry.key != *key);
+            }
         }
     }
 
-    /// Forgets the brief `key` names, killing its run.
-    fn remove(&mut self, key: &BriefKey) {
-        self.entries.retain(|entry| entry.key != *key);
+    /// Refresh invalidates drafts of this scope when either captured commit changes.
+    pub fn invalidate_runs(
+        &mut self,
+        scope: &ReviewScope,
+        head_sha: Option<&str>,
+        base_sha: Option<&str>,
+    ) {
+        for entry in &mut self.entries {
+            let invalidated_run = entry.run.as_ref().is_some_and(|run| {
+                &run.scope == scope
+                    && (run.head_sha.as_deref() != head_sha || run.base_sha.as_deref() != base_sha)
+                    && run.gate.invalidate()
+            });
+            let invalidated_save = entry.pending_save.as_ref().is_some_and(|draft| {
+                draft.scope() == scope
+                    && (draft.head_sha() != head_sha || draft.base_sha() != base_sha)
+            });
+            if invalidated_run || invalidated_save {
+                entry.run = None;
+                entry.progress = None;
+                entry.pending_save = None;
+                entry.saving = false;
+                let message =
+                    "The diff changed while writing the brief. Write it again for this revision."
+                        .to_owned();
+                if matches!(entry.state, BriefState::Written(_)) {
+                    entry.error = Some(message);
+                } else {
+                    entry.state = BriefState::Failed(message.into());
+                }
+            }
+        }
     }
 
     /// Shows `rows` of the brief and page `shown`; the list is reset (to its

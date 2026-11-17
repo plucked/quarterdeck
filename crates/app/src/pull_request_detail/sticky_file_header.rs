@@ -24,19 +24,23 @@ impl PullRequestDetail {
                 canvas(
                     move |bounds, window, cx| {
                         let top = list.logical_scroll_top();
-                        let (header, next_row) = detail
+                        let (header, next_row, is_group) = detail
                             .update(cx, |detail, cx| {
                                 let file = detail.rows().file_at_row(top.item_ix)?;
                                 let range = detail.rows().file_range(file)?;
                                 if top.item_ix == range.start && top.offset_in_item <= px(0.) {
                                     return None;
                                 }
-                                Some((detail.render_file_header_row(file, cx), range.end))
+                                Some((
+                                    detail.render_file_header_row(file, cx),
+                                    range.end,
+                                    detail.guided_diff_active(),
+                                ))
                             })
                             .ok()??;
 
                         let mut header = div()
-                            .px_4()
+                            .when(!is_group, gpui::Styled::px_4)
                             // Controls must not select or click code underneath;
                             // wheel gestures still reach the virtualized list.
                             .block_mouse_except_scroll()

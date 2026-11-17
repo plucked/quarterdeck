@@ -1,0 +1,1 @@
+These tests exercise the crate's public blocking API over real IPv4 loopback sockets. Synthetic handlers check modern and legacy protocol lifecycle, authentication, input bounds, error delivery and owned shutdown without external network calls or model usage.

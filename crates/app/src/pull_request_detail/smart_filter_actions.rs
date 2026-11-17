@@ -1,13 +1,19 @@
+use std::sync::Arc;
+
 use futures::{StreamExt as _, channel::mpsc};
 use gpui::Context;
+use qd_cache::ReviewScope;
 use qd_studio::{ReaderFamiliarity, SmartFilter, find_claude};
 
+use super::pending_guided_review::PendingGuidedReview;
 use super::pull_request_detail::PullRequestDetail;
-use super::run_cancel::RunCancel;
+use super::review_agent_task::ReviewAgentTask;
+use super::review_job_error::ReviewJobError;
+use super::review_publication_gate::ReviewPublicationGate;
+use super::review_run_id::new_review_run_id;
 use super::smart_filter_job::SmartFilterJob;
 use super::smart_filter_state::SmartFilterState;
 use super::studio_request::studio_request;
-use crate::facet_chips::ChipClick;
 use crate::ui_state::UiStateRecorder;
 
 impl PullRequestDetail {
@@ -29,16 +35,16 @@ impl PullRequestDetail {
                 state.filter = saved;
             }
         }
-        self.sync_smart_buckets();
+        self.reset_guided_walkthrough();
     }
 
-    fn sync_smart_buckets(&mut self) {
-        let buckets = self
-            .current_smart_filter()
-            .and_then(|state| state.filter.as_ref())
-            .map(|filter| filter.buckets.clone())
-            .unwrap_or_default();
-        self.file_tree.set_smart_buckets(buckets);
+    /// Clears step-specific navigation when a saved guide is loaded or replaced.
+    fn reset_guided_walkthrough(&mut self) {
+        self.clear_diff_selection();
+        self.row_tops_width = None;
+        self.walkthrough.selected_group = None;
+        self.walkthrough.current_item = None;
+        self.walkthrough.expanded_items.clear();
     }
 
     /// Starts only on an explicit click, and never duplicates an active run
@@ -64,7 +70,11 @@ impl PullRequestDetail {
             cx.notify();
             return;
         };
+        let run_id = new_review_run_id();
+        let gate = Arc::new(ReviewPublicationGate::default());
         let job = SmartFilterJob {
+            run_id: run_id.clone(),
+            gate: gate.clone(),
             services: self.services().clone(),
             request: studio_request(
                 &pull_request,
@@ -75,30 +85,34 @@ impl PullRequestDetail {
             ),
             pull_request,
             scope: scope.clone(),
-            head_sha,
+            head_sha: head_sha.clone(),
             base_sha: self.shown_base_sha.clone(),
             program,
             files: self.loaded_files().to_vec(),
             store: cx.global::<UiStateRecorder>().shared_store(),
         };
-        let (cancel, flag) = RunCancel::new();
+        let task_run_id = run_id.clone();
+        let base_sha = self.shown_base_sha.clone();
         let run_scope = scope.clone();
         let task = cx.spawn(async move |detail, cx| {
             let (sender, mut progress) = mpsc::unbounded();
             let run = cx.background_executor().spawn(async move {
-                job.run(&flag, &mut |step| {
+                job.run(&mut |step| {
                     sender.unbounded_send(step).ok();
                 })
             });
             while let Some(step) = progress.next().await {
                 if detail
                     .update(cx, |detail, cx| {
-                        detail
-                            .smart_filters
-                            .entry(scope.clone())
-                            .or_default()
-                            .progress = Some(step);
-                        cx.notify();
+                        if let Some(state) = detail.smart_filters.get_mut(&scope)
+                            && state
+                                .run
+                                .as_ref()
+                                .is_some_and(|run| run.run_id == task_run_id)
+                        {
+                            state.progress = Some(step);
+                            cx.notify();
+                        }
                     })
                     .is_err()
                 {
@@ -108,28 +122,44 @@ impl PullRequestDetail {
             let outcome = run.await;
             detail
                 .update(cx, |detail, cx| {
-                    let state = detail.smart_filters.entry(scope.clone()).or_default();
-                    state.run = None;
-                    state.progress = None;
-                    match outcome {
-                        Ok((filter, warning)) => {
-                            state.filter = Some(filter);
-                            state.error = warning;
-                        }
-                        Err(error) => state.error = Some(error),
-                    }
-                    if detail.review_scope() == Some(&scope) {
-                        detail.sync_smart_buckets();
-                        detail.rebuild_rows(detail.anchor_at_top());
-                    }
-                    cx.notify();
+                    detail.finish_smart_filter_run(&scope, &task_run_id, outcome, cx);
                 })
                 .ok();
         });
-        let state = self.smart_filters.entry(run_scope).or_default();
+        let state = self.smart_filters.entry(run_scope.clone()).or_default();
         state.error = None;
         state.progress = None;
-        state.run = Some((task, cancel));
+        state.pending_save = None;
+        state.saving = false;
+        state.run = Some(ReviewAgentTask {
+            run_id,
+            scope: run_scope,
+            head_sha: Some(head_sha),
+            base_sha,
+            gate,
+            _task: task,
+        });
+        cx.notify();
+    }
+
+    /// Applies only the generation still owned by this scope; failures retain its saved guide.
+    pub(super) fn finish_smart_filter_run(
+        &mut self,
+        scope: &ReviewScope,
+        run_id: &str,
+        outcome: Result<SmartFilter, ReviewJobError<PendingGuidedReview>>,
+        cx: &mut Context<Self>,
+    ) {
+        let state = self.smart_filters.entry(scope.clone()).or_default();
+        let published = outcome.is_ok();
+        if !state.finish_run(run_id, outcome) {
+            return;
+        }
+        if published && self.review_scope() == Some(scope) {
+            self.reset_guided_walkthrough();
+            self.rebuild_rows(self.anchor_at_top());
+            self.resume_guided_review(cx);
+        }
         cx.notify();
     }
 
@@ -137,61 +167,20 @@ impl PullRequestDetail {
         if let Some(scope) = self.review_scope().cloned()
             && let Some(state) = self.smart_filters.get_mut(&scope)
         {
-            state.run = None;
-            state.progress = None;
+            state.cancel();
         }
         cx.notify();
     }
 
-    pub(super) fn click_smart_bucket(
+    /// A refreshed snapshot invalidates only its own scope's in-flight guide.
+    pub(super) fn invalidate_guided_review(
         &mut self,
-        order: u32,
-        click: ChipClick,
-        cx: &mut Context<Self>,
+        scope: &qd_cache::ReviewScope,
+        head_sha: Option<&str>,
+        base_sha: Option<&str>,
     ) {
-        self.file_tree.click_smart_bucket(order, click);
-        self.rebuild_rows(self.anchor_at_top());
-        cx.notify();
-    }
-
-    /// Bulk marks are always a user action, and require the original commits.
-    pub(super) fn toggle_smart_bucket_viewed(&mut self, order: u32, cx: &mut Context<Self>) {
-        let Some(scope) = self.review_scope().cloned() else {
-            return;
-        };
-        let Some(filter) = self
-            .current_smart_filter()
-            .and_then(|state| state.filter.as_ref())
-        else {
-            return;
-        };
-        if self.smart_filter_is_stale(filter) {
-            return;
+        if let Some(state) = self.smart_filters.get_mut(scope) {
+            state.invalidate(head_sha, base_sha);
         }
-        let Some(bucket) = filter
-            .buckets
-            .iter()
-            .find(|bucket| bucket.order == order && bucket.suggest_viewed)
-        else {
-            return;
-        };
-        let members: std::collections::HashSet<_> =
-            bucket.files.iter().map(String::as_str).collect();
-        let files: Vec<_> = self
-            .loaded_files()
-            .iter()
-            .filter(|file| members.contains(file.filename()))
-            .cloned()
-            .collect();
-        let viewed = !files
-            .iter()
-            .all(|file| self.file_review.is_viewed(file.filename()));
-        for file in files {
-            if let Some(toggle) = self.file_review.set_viewed(&file, viewed) {
-                toggle.record(scope.clone(), cx);
-            }
-        }
-        self.rebuild_rows(self.anchor_at_top());
-        cx.notify();
     }
 }

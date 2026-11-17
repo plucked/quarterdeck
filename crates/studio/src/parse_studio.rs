@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::brief_draft::{BriefIssue, BriefIssues, check_page_anchors, check_page_schema};
+
 use super::anchor_targets::AnchorTargets;
 use super::callout_tone::CalloutTone;
 use super::change_scope::ChangeScope;
@@ -25,7 +27,7 @@ const MAX_TABLE_ROWS: usize = 40;
 /// better split into several pull requests.
 const MAX_TOUR_STEPS: usize = 9;
 /// The most pages a studio may have; their tabs share one row.
-const MAX_PAGES: usize = 10;
+pub(crate) const MAX_PAGES: usize = 10;
 
 /// The agent's output as the schema describes it.
 #[derive(Deserialize)]
@@ -163,6 +165,101 @@ pub fn parse_studio(
         },
         rejected,
     })
+}
+
+/// Builds a complete page with the same widget checks, rejecting any discarded content.
+/// Unlike legacy parsing, one invalid widget rejects this entire proposed page.
+pub(crate) fn check_brief_page(
+    candidate: &serde_json::Value,
+    targets: &AnchorTargets,
+) -> Result<StudioPage, BriefIssues> {
+    // Shape and anchor diagnostics retain exact pointers before typed wire decoding.
+    let mut issues = BriefIssues::default();
+    check_page_schema(candidate, &mut issues);
+    check_page_anchors(candidate, targets, &mut issues);
+    let title = candidate["title"].as_str().unwrap_or_default().trim();
+    let summary = candidate["summary"].as_str().unwrap_or_default().trim();
+    for (field, text) in [("title", title), ("summary", summary)] {
+        if text.is_empty() {
+            issues.push(BriefIssue::new(
+                "empty_guidance",
+                &format!("/{field}"),
+                "A Brief page needs a nonempty title and summary.",
+            ));
+        }
+    }
+
+    // Reuse the authoritative validators, then detect the legacy path's lossy repairs.
+    let mut widgets = Vec::new();
+    if let Some(candidates) = candidate["widgets"].as_array() {
+        for (index, candidate) in candidates.iter().enumerate() {
+            let location = format!("/widgets/{index}");
+            let wire = match serde_json::from_value::<WireWidget>(candidate.clone()) {
+                Ok(wire) => wire,
+                Err(error) => {
+                    issues.push(BriefIssue::new(
+                        "invalid_widget",
+                        &location,
+                        &error.to_string(),
+                    ));
+                    continue;
+                }
+            };
+            match check_widget(wire, targets) {
+                Ok(widget) => {
+                    check_widget_retention(candidate, &widget, &location, &mut issues);
+                    widgets.push(widget);
+                }
+                Err(reason) => {
+                    if !issues.issues.iter().any(|issue| {
+                        issue.widget_index == Some(index) && issue.code == "invalid_anchor"
+                    }) {
+                        issues.push(BriefIssue::new("invalid_widget", &location, &reason));
+                    }
+                }
+            }
+        }
+    }
+    if issues.is_empty() {
+        Ok(StudioPage {
+            title: title.into(),
+            summary: summary.into(),
+            widgets,
+        })
+    } else {
+        Err(issues)
+    }
+}
+
+/// Strict authoring rejects content the tolerant legacy parser deliberately removes.
+fn check_widget_retention(
+    candidate: &serde_json::Value,
+    widget: &StudioWidget,
+    location: &str,
+    issues: &mut BriefIssues,
+) {
+    match widget {
+        StudioWidget::Table(table) => {
+            if candidate["rows"]
+                .as_array()
+                .is_some_and(|rows| rows.len() != table.rows.len())
+            {
+                issues.push(BriefIssue::new("truncated_table", &format!("{location}/rows"), &format!("A table or trace has at most {MAX_TABLE_ROWS} rows; split this content into complete widgets.")));
+            }
+        }
+        StudioWidget::Scope(_) => {
+            for field in ["changes", "unchanged", "mechanical"] {
+                if let Some(items) = candidate[field].as_array() {
+                    for (index, _) in items.iter().enumerate().filter(|(_, item)| {
+                        item.as_str().is_some_and(|text| text.trim().is_empty())
+                    }) {
+                        issues.push(BriefIssue::new("discarded_scope_item", &format!("{location}/{field}/{index}"), "An empty scope entry would be discarded. Remove it explicitly or provide its explanation."));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 /// The widget's kind and title, for the rejection list.

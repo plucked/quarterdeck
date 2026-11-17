@@ -17,6 +17,10 @@ impl PullRequestDetail {
     /// Opens the merge or close panel and reads GitHub's options for the
     /// shown pull request (one GraphQL request); the same panel again closes it.
     pub(super) fn toggle_action_panel(&mut self, action: PanelAction, cx: &mut Context<Self>) {
+        // Switching or cancelling a panel must not drop a running operation.
+        if self.action_panel().is_some_and(ActionPanel::is_working) {
+            return;
+        }
         if self
             .action_panel()
             .is_some_and(|panel| panel.action == action && !panel.is_working())

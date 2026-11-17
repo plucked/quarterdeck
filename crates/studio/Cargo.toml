@@ -9,11 +9,18 @@ publish.workspace = true
 [dependencies]
 base64.workspace = true
 dirs.workspace = true
+nix.workspace = true
+qd-agent-mcp.workspace = true
 qd-claude.workspace = true
 qd-diff.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
+sha2.workspace = true
 thiserror.workspace = true
+wait-timeout.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

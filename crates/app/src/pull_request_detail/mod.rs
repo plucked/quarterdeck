@@ -9,6 +9,35 @@
 //! and the side panel's Files, Review, Actions (merge, close) and Checks tabs.
 //!
 //! Files:
+//! - `review_publication_gate.rs`: nonblocking arbitration of cancellation and durable publication.
+//! - `review_run_id.rs`: unique identities for concurrent review agent generations.
+//! - `review_agent_task.rs`: generation identity, snapshot and cancellation owned by a live task.
+//! - `focus_drawer.rs`: Interactive Files controls and background content indexing, owned by one detail pane.
+//! - `focus_drawer_rendering.rs`: focus drawer rendering
+//! - `file_search.rs`: The query and its derived matches; empty queries admit all files.
+//! - `search_scope.rs`: The data searched by the Files field.
+//! - `content_match.rs`: A matching line in a complete source file, with a one-based line number.
+//! - `file_search_match.rs`: A file's ranked path match or bounded content snippets.
+//! - `file_search_actions.rs`: file search actions
+//! - `file_search_rendering.rs`: file search rendering
+//! - `search_content_job.rs`: Reads complete texts at the loaded revision, using content-addressed cache entries first.
+//! - `search_content_result.rs`: One file's indexing outcome. A stopping error ends requests without hiding partial results.
+//! - `search_preview.rs`: A bounded excerpt of complete source around a selected content-search match.
+//! - `review_walkthrough.rs`: Derived plan navigation, rebuilt on data changes rather than during rendering.
+//! - `walkthrough_actions.rs`: walkthrough actions
+//! - `walkthrough_rendering.rs`: Virtualized buckets, actions and wrapped review guidance.
+//! - `walkthrough_item_rendering.rs`: File and group stops with icons and wrapped item guidance.
+//! - `group_overview_rendering.rs`: Single-file and grouped step guidance with ordered inline diffs.
+//! - `guided_review_rendering.rs`: the standalone guided workspace and creation state.
+//! - `group_diff.rs`: Independent file disclosures, diff rows and scroll for a group.
+//! - `group_diff_actions.rs`: Group disclosures and derived diff refresh.
+//! - `navigation_file_target.rs`: Navigation versus inline disclosure for shared file rows.
+//! - `walkthrough_row.rs`: A small row of the virtualized plan; content lives in prepared buckets and files.
+//! - `walkthrough_bucket.rs`: A saved bucket mapped to the currently loaded files, plus its progress.
+//! - `walkthrough_item.rs`: One prepared stop: its ordered current file indexes and derived progress.
+//! - `walkthrough_item_id.rs`: The bucket and item positions of one stop in the prepared walkthrough.
+//! - `viewed_actions.rs`: viewed actions
+//! - `viewed_change.rs`: A bulk action's original mark and fold, bound to the exact patch for Undo.
 //! - `pull_request_detail.rs`: `PullRequestDetail`, the view's state, what it shows and its accessors.
 //! - `show_change.rs`: `ShowChange`, what showing a pull request changes after the one shown before.
 //! - `file_loading.rs`: loading the review target's files, marks, notes and stored brief in the background.
@@ -87,14 +116,19 @@
 //! - `fetch_file_text.rs`: gets a file's text after the change from the cache by blob SHA, else from GitHub.
 //! - `head_commit.rs`: `HeadCommit`, the head commit the shown files are of, read from the cache when needed.
 //! - `context_loads.rs`: `ContextLoads`, the file texts being fetched and their tasks.
-//! - `detail_mode.rs`: `DetailMode`, the summary, diff or brief in the main column.
+//! - `detail_mode.rs`: `DetailMode`, the summary, diff, guided review or brief in the main column.
+//! - `detail_mode_actions.rs`: separate review surfaces, their navigation and retained step selection.
+//! - `brief_pane_tests.rs`: retained saved briefs, stale completion and publication/cancellation regression cases.
 //! - `brief_pane.rs`: `BriefPane`, the briefs written this session, the run in flight, the brief's rows.
 //! - `brief_key.rs`: `BriefKey`, which brief: a pull request and review target.
 //! - `brief_row.rs`: `BriefRow`, one row of the brief's list.
 //! - `run_cancel.rs`: `RunCancel`, kills the agent process when the run is dropped.
 //! - `brief_job.rs`: `BriefJob`, one brief's background run: checkout, agent, checks, storing.
+//! - `pending_brief.rs`, `pending_guided_review.rs`: completed drafts retained for local save retries.
+//! - `review_job_error.rs`: generation failures and recoverable publication failures.
+//! - `review_save_actions.rs`: retrying completed drafts without another model run.
 //! - `brief_code.rs`: `BriefCode`, the shallow checkout of the head commit a brief's agent reads (or why there is none).
-//! - `smart_filter_state.rs`, `smart_filter_actions.rs`, `smart_filter_job.rs`, `smart_filter_rendering.rs`: saved review buckets, their agent run, filters and bulk viewed actions.
+//! - `smart_filter_state.rs`, `smart_filter_actions.rs`, `smart_filter_job.rs`: saved guided reviews and their agent run.
 //! - `brief_actions.rs`: writing a brief with Claude Code and cancelling it, its pages and reader.
 //! - `brief_handlers.rs`: `detail_brief_handlers`, what the brief's links and buttons do in the detail, and its report host.
 //! - `studio_request.rs`: `studio_request`, what the agent is told about the shown pull request and its files.
@@ -113,6 +147,8 @@ mod brief_job;
 mod brief_key;
 mod brief_pane;
 mod brief_pane_rendering;
+#[cfg(test)]
+mod brief_pane_tests;
 mod brief_row;
 mod change_diff_of;
 mod changed_files;
@@ -131,6 +167,7 @@ mod destination_switch_rendering;
 mod detail_content;
 mod detail_event;
 mod detail_mode;
+mod detail_mode_actions;
 mod detail_row;
 mod detail_row_list;
 mod diff_line_ref;
@@ -164,14 +201,21 @@ mod local_note_actions;
 mod local_review_export;
 mod operation_status;
 mod parsed_description;
+mod pending_brief;
+mod pending_guided_review;
 mod placed_card;
 mod pull_request_actions;
 mod pull_request_detail;
 mod review_actions;
 mod review_comments;
+mod review_job_error;
 mod review_pane;
 mod review_panel_rendering;
+mod review_save_actions;
 
+mod review_agent_task;
+mod review_publication_gate;
+mod review_run_id;
 mod review_target;
 mod row_height_estimate;
 mod row_rebuilding;
@@ -186,7 +230,6 @@ mod side_panel_rendering;
 mod side_panel_tab;
 mod smart_filter_actions;
 mod smart_filter_job;
-mod smart_filter_rendering;
 mod smart_filter_state;
 mod stack_actions;
 mod stack_mode_rendering;
@@ -202,3 +245,34 @@ mod viewed_toggle;
 pub use detail_event::DetailEvent;
 pub use layer_request::LayerRequest;
 pub use pull_request_detail::PullRequestDetail;
+
+mod file_search;
+mod file_search_actions;
+mod focus_drawer;
+mod review_walkthrough;
+mod search_content_job;
+mod viewed_actions;
+mod viewed_change;
+mod walkthrough_bucket;
+mod walkthrough_item;
+mod walkthrough_item_id;
+mod walkthrough_row;
+
+mod file_search_rendering;
+mod focus_drawer_rendering;
+mod group_overview_rendering;
+mod guided_review_rendering;
+mod search_preview;
+mod walkthrough_actions;
+mod walkthrough_item_rendering;
+mod walkthrough_rendering;
+
+mod content_match;
+mod file_search_match;
+mod search_content_result;
+mod search_scope;
+
+mod group_diff;
+mod group_diff_actions;
+
+mod navigation_file_target;

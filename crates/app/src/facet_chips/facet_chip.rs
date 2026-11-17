@@ -4,7 +4,7 @@ use gpui::{
 };
 use qd_file_tree::{FacetChoice, FacetCount};
 
-use crate::controls::{NumberFlow, TextTooltip};
+use crate::controls::NumberFlow;
 use crate::theme;
 
 /// Opacity of an open chip that would show nothing given the other rows.
@@ -28,7 +28,6 @@ pub struct FacetChip {
     /// Whether picking it would show nothing given the other rows.
     shows_nothing: bool,
     leading: Option<AnyElement>,
-    tooltip: Option<SharedString>,
     on_click: Option<ChipClickHandler>,
 }
 
@@ -51,7 +50,6 @@ impl FacetChip {
             number,
             shows_nothing: count.matching == 0,
             leading: None,
-            tooltip: None,
             on_click: None,
         }
     }
@@ -60,13 +58,6 @@ impl FacetChip {
     #[must_use]
     pub fn leading(mut self, leading: Option<AnyElement>) -> Self {
         self.leading = leading;
-        self
-    }
-
-    /// Explains a value whose label alone does not convey its meaning.
-    #[must_use]
-    pub fn tooltip(mut self, text: impl Into<SharedString>) -> Self {
-        self.tooltip = Some(text.into());
         self
     }
 
@@ -107,9 +98,6 @@ impl RenderOnce for FacetChip {
                     .text_color(theme::subtle())
                     .child(NumberFlow::label(self.number.to_string())),
             )
-            .when_some(self.tooltip, |chip, text| {
-                chip.tooltip(TextTooltip::builder(text))
-            })
             .when_some(self.on_click, |chip, handler| chip.on_click(handler));
         match self.choice {
             FacetChoice::Only => chip

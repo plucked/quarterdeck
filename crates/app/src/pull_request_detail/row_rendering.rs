@@ -34,36 +34,6 @@ impl Render for PullRequestDetail {
         // This frame's code texts register again as they paint.
         self.code_segments().clear();
 
-        // The diff: the virtualized rows, their scrollbar, and code selection.
-        let diff_area = div()
-            .relative()
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|detail, event: &MouseDownEvent, window, cx| {
-                    detail.begin_diff_selection(event.position, event.click_count, window, cx);
-                }),
-            )
-            .child(
-                list(
-                    self.list().clone(),
-                    cx.processor(|detail, index, _window, cx| detail.render_row(index, cx)),
-                )
-                .size_full(),
-            )
-            .child(self.render_sticky_file_header(cx))
-            .child(VerticalScrollbar::new(
-                "detail-scrollbar",
-                ScrollbarTarget::EstimatedList(self.list().clone(), self.current_row_tops()),
-            ))
-            .child(
-                drag_listener(cx.entity().downgrade())
-                    .absolute()
-                    .size_full(),
-            );
-
         // The sticky header over the diff, in one column; the side panel
         // beside that column at full height when shown. `min_w_0` and
         // `min_h_0` let the pane shrink to the window.
@@ -84,7 +54,11 @@ impl Render for PullRequestDetail {
                     .min_h_0()
                     .child(match self.brief().mode {
                         DetailMode::Summary => self.render_summary_area(),
-                        DetailMode::Diff => diff_area.into_any_element(),
+                        DetailMode::Diff => match &self.focus_drawer.preview {
+                            Some(preview) => self.render_search_preview(preview, cx),
+                            None => self.render_diff_area(cx),
+                        },
+                        DetailMode::GuidedReview => self.render_guided_review_area(cx),
                         DetailMode::Brief => self.render_brief_area(cx),
                     }),
             );
@@ -136,6 +110,41 @@ fn drag_listener(detail: WeakEntity<PullRequestDetail>) -> Canvas<()> {
 }
 
 impl PullRequestDetail {
+    /// Shared virtualized diff surface, used by both the full review and inline group disclosures.
+    pub(super) fn render_diff_area(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        // The diff: the virtualized rows, their scrollbar, and code selection.
+        let diff_area = div()
+            .relative()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|detail, event: &MouseDownEvent, window, cx| {
+                    detail.begin_diff_selection(event.position, event.click_count, window, cx);
+                }),
+            )
+            .child(
+                list(
+                    self.list().clone(),
+                    cx.processor(|detail, index, _window, cx| detail.render_row(index, cx)),
+                )
+                .size_full(),
+            )
+            .child(self.render_sticky_file_header(cx))
+            .child(VerticalScrollbar::new(
+                "detail-scrollbar",
+                ScrollbarTarget::EstimatedList(self.list().clone(), self.current_row_tops()),
+            ))
+            .child(
+                drag_listener(cx.entity().downgrade())
+                    .absolute()
+                    .size_full(),
+            );
+
+        diff_area.into_any_element()
+    }
+
     /// Row `index` of the list, padded like the pane. Called only for rows
     /// in or near view.
     fn render_row(&mut self, index: usize, cx: &mut Context<Self>) -> AnyElement {
@@ -219,8 +228,8 @@ impl PullRequestDetail {
         };
         div()
             .id(row_id)
-            .px_4()
-            .when(index == 0, Styled::pt_4)
+            .when(!self.guided_diff_active(), Styled::px_4)
+            .when(index == 0 && !self.guided_diff_active(), Styled::pt_4)
             .when(is_last, Styled::pb_4)
             .child(content)
             .into_any_element()
@@ -233,6 +242,12 @@ impl PullRequestDetail {
             .iter()
             .all(|loaded| self.file_review().is_viewed(loaded.filename()));
         let filter = self.file_tree().filter();
+        if !self.file_tree.search.query.trim().is_empty() {
+            return render_status_line(
+                "No files match this search and the active filters.",
+                theme::muted(),
+            );
+        }
         let message = if all_viewed && filter.hide_viewed && !self.file_tree().has_chips_set() {
             "Every file is viewed.".to_owned()
         } else {
@@ -275,6 +290,14 @@ impl PullRequestDetail {
     /// File `file`'s header, wired to its collapse and viewed toggles and
     /// to showing it in the file tree.
     pub(super) fn render_file_header_row(&self, file: usize, cx: &mut Context<Self>) -> AnyElement {
+        if self.guided_diff_active() {
+            return self.render_navigation_file(
+                file,
+                "group-diff-file",
+                super::navigation_file_target::NavigationFileTarget::GroupDiff,
+                cx,
+            );
+        }
         let Some(loaded) = self.loaded_files().get(file) else {
             return div().into_any_element();
         };

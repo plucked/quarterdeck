@@ -11,8 +11,8 @@ use crate::theme;
 const METHOD_ROW_RADIUS: f32 = 4.;
 
 impl PullRequestDetail {
-    /// The side panel's Actions tab: `Merge…` and `Close…`, and the open
-    /// panel of the one clicked under them; without a GitHub connection,
+    /// The side panel's Actions tab: the panel prepared by its secondary
+    /// Merge / Close selector; without a GitHub connection,
     /// why there are none.
     pub(super) fn render_actions_tab(&self, cx: &mut Context<Self>) -> AnyElement {
         let tab = div()
@@ -34,27 +34,12 @@ impl PullRequestDetail {
                 ))
                 .into_any_element();
         }
-        let open = self.action_panel().map(|panel| panel.action);
-        tab.child(
-            div()
-                .flex()
-                .gap_1p5()
-                .child(
-                    Button::new("open-merge", "Merge…")
-                        .selected(open == Some(PanelAction::Merge))
-                        .on_click(cx.listener(|detail, _, _, cx| {
-                            detail.toggle_action_panel(PanelAction::Merge, cx);
-                        })),
-                )
-                .child(
-                    Button::new("open-close", "Close…")
-                        .ghost()
-                        .selected(open == Some(PanelAction::Close))
-                        .on_click(cx.listener(|detail, _, _, cx| {
-                            detail.toggle_action_panel(PanelAction::Close, cx);
-                        })),
-                ),
-        )
+        tab.when(self.action_panel().is_none(), |tab| {
+            tab.child(render_line(
+                "Choose Merge or Close above to prepare an action.",
+                theme::muted(),
+            ))
+        })
         .children(self.render_action_panel(cx))
         .into_any_element()
     }

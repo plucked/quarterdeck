@@ -1,12 +1,16 @@
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
-use qd_studio::{BriefRecord, CodeAccess, RejectedWidget, RequestLayer, Studio, ToolCall};
-use rusqlite::{OptionalExtension, Transaction, params};
+use qd_studio::{
+    BriefMcpRecord, BriefRecord, CodeAccess, RejectedWidget, RequestLayer, Studio, ToolCall,
+};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
+use crate::agent_publication_storage::read_agent_publication;
 use crate::brief_sql_text::{CodeAccessKind, reader_as_sql_text, reader_from_sql_text};
 use crate::brief_widget_writing::put_widget;
 use crate::cached_statements::execute_cached;
+use crate::publication_owner::PublicationOwner;
 use crate::scope_columns::ScopeColumns;
 use crate::sql_integers::{read_u64, sql_integer};
 use crate::{BriefIndex, ReviewScope, StoredBrief, UiStateStore};
@@ -27,19 +31,7 @@ impl UiStateStore {
         record: &BriefRecord,
     ) -> Result<()> {
         let transaction = self.connection().unchecked_transaction()?;
-
-        // The brief before, with every part (the foreign keys cascade).
-        let columns = ScopeColumns::of(scope)?;
-        execute_cached(
-            &transaction,
-            &format!("DELETE FROM briefs WHERE {SCOPE_MATCH}"),
-            columns.as_params(),
-        )?;
-
-        // The brief's own row, then its pages, then the record's lists.
-        let brief_id = put_brief_row(&transaction, &columns, studio, record)?;
-        put_pages(&transaction, brief_id, studio)?;
-        put_record_lists(&transaction, brief_id, record)?;
+        write_brief(&transaction, scope, studio, record)?;
         transaction.commit()?;
         Ok(())
     }
@@ -48,6 +40,8 @@ impl UiStateStore {
     /// longer read (a value outside its CHECK) is an error, which the app
     /// treats as no brief.
     pub fn brief(&self, scope: &ReviewScope) -> Result<Option<StoredBrief>> {
+        // Keep artifact rows and their receipt on one snapshot across other writers.
+        let _snapshot = read_transaction_if_needed(self.connection())?;
         // The brief's own row.
         let columns = ScopeColumns::of(scope)?;
         let row = self
@@ -88,7 +82,25 @@ impl UiStateStore {
 
         // The pages, each with its widgets.
         let pages = self.brief_pages(row.id)?;
+        let publication =
+            read_agent_publication(self.connection(), PublicationOwner::Brief, row.id)?;
+        let base_sha = self
+            .connection()
+            .query_row(
+                "SELECT base_sha FROM brief_publications WHERE brief_id=?1",
+                [row.id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten();
         let record = BriefRecord {
+            mcp: publication.map(|publication| BriefMcpRecord {
+                base_sha,
+                run_id: publication.run_id,
+                snapshot_id: publication.snapshot_id,
+                validation_receipt: publication.validation_receipt,
+                audit: publication.audit,
+            }),
             repository: row.repository,
             number: row.number,
             url: row.url,
@@ -187,6 +199,36 @@ impl UiStateStore {
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
+}
+
+/// Joins an existing publication transaction or holds a consistent read snapshot.
+fn read_transaction_if_needed(connection: &Connection) -> Result<Option<Transaction<'_>>> {
+    if connection.is_autocommit() {
+        return Ok(Some(connection.unchecked_transaction()?));
+    }
+    Ok(None)
+}
+
+/// Replaces a complete brief within its caller's publication transaction.
+pub(crate) fn write_brief(
+    transaction: &Transaction<'_>,
+    scope: &ReviewScope,
+    studio: &Studio,
+    record: &BriefRecord,
+) -> Result<i64> {
+    // Remove all previous artifact parts through their cascading foreign keys.
+    let columns = ScopeColumns::of(scope)?;
+    execute_cached(
+        transaction,
+        &format!("DELETE FROM briefs WHERE {SCOPE_MATCH}"),
+        columns.as_params(),
+    )?;
+
+    // Save each typed component before the caller can commit any publication.
+    let brief_id = put_brief_row(transaction, &columns, studio, record)?;
+    put_pages(transaction, brief_id, studio)?;
+    put_record_lists(transaction, brief_id, record)?;
+    Ok(brief_id)
 }
 
 /// The `briefs` row as read.
@@ -430,6 +472,7 @@ mod tests {
     /// A record of a run with a checkout, for a newcomer.
     fn record() -> BriefRecord {
         BriefRecord {
+            mcp: None,
             repository: "plucked/quarterdeck".into(),
             number: 42,
             url: "https://github.com/plucked/quarterdeck/pull/42".into(),

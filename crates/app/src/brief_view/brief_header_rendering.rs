@@ -12,6 +12,8 @@ use super::version_rendering::render_brief_version;
 pub fn render_brief_header(
     record: &BriefRecord,
     shown_head: Option<&str>,
+    shown_base: Option<&str>,
+    is_writing: bool,
     report: &ReportState,
     handlers: &BriefHandlers,
 ) -> Div {
@@ -19,6 +21,8 @@ pub fn render_brief_header(
         .flex()
         .flex_col()
         .gap_2()
-        .child(render_brief_version(record, shown_head, report, handlers))
+        .child(render_brief_version(
+            record, shown_head, shown_base, is_writing, report, handlers,
+        ))
         .children(render_report_panel(report, handlers))
 }

@@ -1,0 +1,1 @@
+This folder owns the generic MCP transport boundary. It adapts blocking application tools to the official SDK and contains all HTTP, credential and runtime machinery. Domain validation, agent process management and durable publication belong to callers.

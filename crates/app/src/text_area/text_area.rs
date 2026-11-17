@@ -62,6 +62,11 @@ impl Focusable for TextArea {
 }
 
 impl TextArea {
+    /// Whether this field scrolls horizontally instead of wrapping onto another row.
+    pub(super) fn is_single_line(&self) -> bool {
+        self.line_mode == LineMode::SingleLine
+    }
+
     /// An empty multiline text area showing `placeholder` until something
     /// is typed. Return inserts a newline; cmd-enter submits.
     pub fn new(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {

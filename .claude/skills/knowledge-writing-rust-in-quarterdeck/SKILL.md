@@ -54,7 +54,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 
 - **Never block the main thread.** Rendering, event handlers and `cx.spawn` futures run on the main thread. Network calls (`ureq`) and SQLite work run inside `cx.background_executor().spawn(...)`; the foreground task awaits that and writes the result back through the `WeakEntity` it was given. A cache read that is small and local may run on the main thread at startup only.
 - **Slow derived data arrives after what it decorates.** Show content as soon as it is usable and add the slow part when ready, in batches spread over the background executor (syntax colors after the diffs), instead of making the first view wait.
-- **No second runtime.** The app uses gpui's executors; library crates expose blocking APIs and do not depend on tokio.
+- **Keep runtimes at their boundary.** The app uses gpui's executors and library crates expose blocking APIs. The user-approved exception is `qd-agent-mcp`: the official Rust MCP SDK requires Tokio, so this adapter owns a private runtime on a dedicated thread. Tokio and SDK types must not cross into app or domain APIs; no other crate may create a Tokio runtime.
 - **Hold the `Task` you spawn.** A view stores its in-flight `Task<()>` in a field (`refresh_task`), so starting a new one drops and cancels the old one and closing the view cancels both. `detach()` only for work that must outlive the view, with a comment saying why.
 - **A dropped view is not an error.** The result of `this.update(cx, ...)` after an await is ignored with `.ok()`: the view was closed while the task ran.
 - **Await events; never poll for them.** No loop that wakes on an interval to recheck a flag; await a channel or a timer set to the next deadline.
@@ -70,7 +70,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 
 ## Persistence
 
-- **Everything stored lives in typed SQLite columns, never in JSON** (or any other self-described format), cached GitHub data included: the schema is our local contract, and SQLite checks it on every write. One table per concept, one column per field (`pull_requests`, `pr_files`); a list is a child table with a `position` column; an enum is a `TEXT` column with a `CHECK` listing its values, mapped by `as_sql_text`/`from_sql_text` beside the enum (`WindowMode`), or beside its store when another crate owns the enum (`diff_option_sql_text.rs` for `qd-diff`'s); one-row state uses `id INTEGER PRIMARY KEY CHECK (id = 1)` (`window_placement`). A value GitHub owns and may extend (a file's `status`) stays unchecked `TEXT`. JSON is only for talking to GitHub: `qd-github` types derive `Deserialize` where they are decoded from a response, and nothing derives `Serialize`.
+- **Everything stored lives in typed SQLite columns, never in JSON** (or any other self-described format), cached GitHub data included: the schema is our local contract, and SQLite checks it on every write. One table per concept, one column per field (`pull_requests`, `pr_files`); a list is a child table with a `position` column; an enum is a `TEXT` column with a `CHECK` listing its values, mapped by `as_sql_text`/`from_sql_text` beside the enum (`WindowMode`), or beside its store when another crate owns the enum (`diff_option_sql_text.rs` for `qd-diff`'s); one-row state uses `id INTEGER PRIMARY KEY CHECK (id = 1)` (`window_placement`). A value GitHub owns and may extend (a file's `status`) stays unchecked `TEXT`. JSON is a wire format for GitHub, the Claude CLI, and MCP only. `qd-github` types derive `Deserialize` for responses; MCP adapters may serialize protocol DTOs. Domain and persistence types stay independent of transport serialization; no stored JSON.
 - **Ask GitHub as little as possible.** Serve from the cache first; when cached data may be stale, check the cheapest marker of change before refetching (a pull request's head and base commits, not its `updated_at`, which moves on every comment), with a conditional request (`If-None-Match` with the stored `ETag`, free when GitHub answers 304); follow every page of a list. Count requests in `ApiUsage` and turn exhausted budgets into `GitHubError::RateLimited` (`fetch_changed_files`).
 - **Cached GitHub data expires; user data does not.** Cache rows carry when they were last used and `delete_expired` removes them after the TTL; viewed marks, settings and UI state are never expired.
 - **All persistence goes through `qd-cache`,** in the one database file. Each store type opens its own connection (`GitHubCache`, `UiStateStore`); WAL lets them share the file without waiting on each other.
@@ -91,7 +91,7 @@ Before writing Rust here, read the crate's `CLAUDE.md` and the `README.md` of th
 
 - **Tests say what they pin:** every test has a one-line `///` naming the behaviour it checks, and long scenarios have a comment above each phase (set up, act, expect).
 - **Test-only code is compiled only for tests:** `#[cfg(test)]`, so release builds cannot call it (`GitHubCache::open_in_memory`).
-- **Tests never touch the network or the user's cache.** Parse recorded JSON for GitHub shapes; use an in-memory or temp-dir database.
+- **Automated tests never touch external services or the user's cache.** Parse recorded JSON for GitHub shapes; use an in-memory or temp-dir database. MCP transport tests may bind an ephemeral authenticated loopback listener and use synthetic handlers. Real-provider probes are opt-in examples, run only when the user has authorized them.
 - **A test that blocks cannot hang:** give every blocking wait a timeout.
 
 ## Dependencies
@@ -117,7 +117,7 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 ```
 
-Upstream future-incompatibility notes from gpui's dependencies (`block`, `proc-macro-error2`) are not ours and are ignored. A UI change is also checked by running the app (`cargo run`, or `bacon` to rebuild and relaunch on save).
+Upstream future-incompatibility notes from gpui's dependencies (`block`, `proc-macro-error2`) are not ours and are ignored. A UI change is also checked by running the app. **Pass `--no-splash` for UI tests and visual checks**, using `cargo run -- --no-splash` or `target/debug/Quarterdeck.app/Contents/MacOS/Quarterdeck --no-splash` after `packaging/macos/bundle.sh --dev`. Start the process with the flag before attaching UI automation; an automation tool's default app launch may omit arguments. Omit the flag only when testing the startup splash, playback, or fade itself.
 
 ## Evolving these conventions
 

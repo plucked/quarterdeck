@@ -35,7 +35,11 @@ impl PullRequestDetail {
             .px_3()
             .pt_2()
             .pb_4()
-            .child(div().flex_none().child(self.render_destination_switch(cx)))
+            .when(!self.can_review_on_github(), |panel| {
+                panel.child(muted_line(
+                    "Combined reviews are local: GitHub has no place for comments across layers.",
+                ))
+            })
             .children(
                 self.review()
                     .status
@@ -43,31 +47,6 @@ impl PullRequestDetail {
                     .map(|status| div().flex_none().child(status)),
             )
             .child(body)
-    }
-
-    /// GitHub or Local: where new comments go. A combined review is local only.
-    fn render_destination_switch(&self, cx: &mut Context<Self>) -> AnyElement {
-        if !self.can_review_on_github() {
-            return div()
-                .text_xs()
-                .text_color(theme::muted())
-                .child(
-                    "Combined reviews are local: GitHub has no place for comments across layers.",
-                )
-                .into_any_element();
-        }
-        div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(theme::subtle())
-                    .child("Comments go to"),
-            )
-            .child(self.render_destination_control("comment-destination", "GitHub", "Local", cx))
-            .into_any_element()
     }
 
     /// The GitHub review: drafts, a pending review begun in the browser,
@@ -263,8 +242,7 @@ impl PullRequestDetail {
                     .cursor_pointer()
                     .hover(|style| style.border_color(theme::border_strong()))
                     .on_click(cx.listener(move |detail, _, _, cx| {
-                        detail.reveal_note(id);
-                        cx.notify();
+                        detail.reveal_note(id, cx);
                     }))
                     .child(
                         div()

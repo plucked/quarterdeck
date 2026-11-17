@@ -116,6 +116,42 @@ mod tests {
         )
     }
 
+    /// Reset unmarks all viewed files once and preserves unrelated folding.
+    #[test]
+    fn reset_viewed_clears_marks_and_preserves_unviewed_folds() {
+        let files = [
+            loaded("src/a.rs", "@@ -1 +1 @@\n-a\n+b\n"),
+            loaded("tests/a.rs", "@@ -1 +1 @@\n-c\n+d\n"),
+            loaded("generated/a.rs", "@@ -1 +1 @@\n-e\n+f\n"),
+        ];
+        let mut state = FileReviewState::default();
+        state.set_viewed(&files[0], true);
+        state.set_viewed(&files[1], true);
+        state.toggle_collapsed(files[2].filename());
+
+        assert_eq!(
+            files
+                .iter()
+                .filter_map(|file| state.set_viewed(file, false))
+                .collect::<Vec<_>>(),
+            vec![
+                ViewedToggle::Unmarked("src/a.rs".into()),
+                ViewedToggle::Unmarked("tests/a.rs".into()),
+            ]
+        );
+        assert_eq!(state.viewed_count(), 0);
+        assert!(!state.state_of(&files[0]).is_collapsed);
+        assert!(!state.state_of(&files[1]).is_collapsed);
+        assert!(state.state_of(&files[2]).is_collapsed);
+        assert_eq!(
+            files
+                .iter()
+                .filter_map(|file| state.set_viewed(file, false))
+                .collect::<Vec<_>>(),
+            []
+        );
+    }
+
     /// A saved mark holds only while the patch is the one it was made for.
     #[test]
     fn viewed_mark_needs_matching_fingerprint() {

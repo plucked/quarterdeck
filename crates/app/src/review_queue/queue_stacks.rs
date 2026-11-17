@@ -62,6 +62,7 @@ impl ReviewQueue {
     /// Opens the combined review of a stack (a click on its header in the
     /// sidebar): its highest listed layer, combined from the lowest unmerged one.
     pub(super) fn open_stack(&mut self, key: &StackKey, cx: &mut Context<Self>) {
+        self.startup_selection_pending = false;
         let Some(top) = self
             .shown_list()
             .iter()

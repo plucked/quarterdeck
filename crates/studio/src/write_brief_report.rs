@@ -11,6 +11,7 @@ use super::shown_page::ShownPage;
 use super::studio_guide::STUDIO_GUIDE;
 use super::studio_schema::STUDIO_SCHEMA;
 use super::utc_stamp::utc_stamp;
+use crate::{MCP_COMPLETION_SCHEMA, brief_mcp_system_prompt};
 
 /// The report's entry point, which names the other files.
 pub const REPORT_FILE: &str = "report.md";
@@ -19,16 +20,17 @@ pub const REPORT_FILE: &str = "report.md";
 const FOLDER_GUIDE: &str = "## Files in this folder\n\n\
 - `prompt.md`: the user message sent to Claude Code on stdin (the pull request, the reader, where the code is, the numbered diffs anchors cite).\n\
 - `system-prompt.md`: the authoring guide appended to the system prompt (`--append-system-prompt`), as compiled into this build.\n\
-- `schema.json`: the JSON Schema the answer had to match (`--json-schema`), as compiled into this build.\n\
-- `answer.json`: Claude's structured answer, before the app's checks (only for a brief written since the app started; one loaded from storage keeps only the checked brief).\n\
-- `rejected.md`: the widgets the app's checks left out, with the reasons.\n\
+- `schema.json`: the full brief artifact schema, as compiled into this build. MCP runs also include `completion-schema.json` for the receipt-only CLI result.\n\
+- `answer.json`: the full accepted brief artifact (the sealed draft for MCP runs, the original answer for legacy runs); never a receipt-only envelope. Available for briefs written this session.\n\
+- `mcp-repair.md`: MCP run identity, publication receipt and bounded repair audit when present; no transport credentials.\n\
+- `rejected.md`: legacy widgets the app's checks left out, with the reasons.\n\
 - `transcript.jsonl`: the run's events without the partial-message stream: the init (model, tools), whole assistant messages with their tool calls, tool results, the result (only for a brief written since the app started).\n\n\
 ## Where Quarterdeck makes the brief\n\n\
 - `crates/studio/src/studio_guide.md`: the authoring guide (system prompt).\n\
 - `crates/studio/src/studio_schema.json`: the answer's schema; `crates/studio/src/studio_widget.rs` and siblings: the widget types.\n\
 - `crates/studio/src/studio_prompt.rs`: the user message; `reader_brief` sets the onboarding per reader.\n\
 - `crates/studio/src/parse_studio.rs`, `wire_graph.rs`, `wire_sequence.rs`, `anchor_targets.rs`: the checks that leave widgets out.\n\
-- `crates/studio/src/run_claude.rs`: the Claude Code flags and confinement; `prepare_workspace.rs`: the checkout.\n\
+- `crates/studio/src/run_mcp_review.rs`: shared MCP process lifecycle; `run_brief_review.rs`: receipt matching; `brief_draft/`: strict page and anchor repair; `prepare_workspace.rs`: the checkout.\n\
 - `crates/app/src/brief_view/`: how the brief is drawn (layouts of diagrams in `graph_layout.rs`, `sequence_layout.rs`).\n\
 - `crates/app/src/pull_request_detail/brief_actions.rs`: what is sent and when.\n\
 - `docs/research/ai-review-studio.md`: the design and the trials so far.\n";
@@ -68,7 +70,16 @@ pub fn write_brief_report(
 
     // The inputs and outputs of the run, as they were.
     std::fs::write(folder.join("prompt.md"), &record.prompt)?;
-    std::fs::write(folder.join("system-prompt.md"), STUDIO_GUIDE)?;
+    let system_prompt = if record.mcp.is_some() {
+        brief_mcp_system_prompt()
+    } else {
+        STUDIO_GUIDE.to_owned()
+    };
+    std::fs::write(folder.join("system-prompt.md"), system_prompt)?;
+    if record.mcp.is_some() {
+        std::fs::write(folder.join("completion-schema.json"), MCP_COMPLETION_SCHEMA)?;
+        std::fs::write(folder.join("mcp-repair.md"), mcp_repair_text(record))?;
+    }
     std::fs::write(folder.join("schema.json"), STUDIO_SCHEMA)?;
     // The raw answer and transcript exist for briefs written this session.
     if let Some(answer) = &record.answer {
@@ -89,6 +100,35 @@ pub fn write_brief_report(
         report_text(record, feedback, shown_page, app_version, &stamp.readable),
     )?;
     Ok(report)
+}
+
+/// Keeps proof of publication and repair attempts separate from the full brief artifact.
+fn mcp_repair_text(record: &BriefRecord) -> String {
+    let Some(mcp) = &record.mcp else {
+        return String::new();
+    };
+    let mut text = format!(
+        "# Brief MCP publication\n\nContract: {}\nRun: `{}`\nSnapshot: `{}`\nValidation receipt: `{}`\n\nThe host published the sealed draft after a successful CLI result and exit.\n\n## Authoring audit\n\n",
+        crate::brief_draft::BRIEF_CONTRACT_VERSION,
+        mcp.run_id,
+        mcp.snapshot_id,
+        mcp.validation_receipt
+    );
+    for event in &mcp.audit {
+        let _ = writeln!(
+            text,
+            "- {}: {} at revision {}{}",
+            event.tool_name,
+            event.status,
+            event.revision,
+            if event.issue_codes.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", event.issue_codes.join(", "))
+            }
+        );
+    }
+    text
 }
 
 /// A new folder `name` under `root`, or `name-2`, `name-3`… when a report

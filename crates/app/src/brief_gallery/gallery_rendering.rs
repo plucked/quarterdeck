@@ -7,9 +7,9 @@ use super::gallery_row::GalleryRow;
 use super::sample_brief::SampleBrief;
 use crate::app_commands::CloseWindow;
 use crate::brief_view::{
-    BriefPageRow, BriefWidgetContext, PreparedBrief, PreparedWidget, render_brief_column,
-    render_brief_header, render_brief_page_row, render_brief_status, render_column_width_probe,
-    render_page_tabs,
+    BriefPageRow, BriefSaveStatus, BriefWidgetContext, PreparedBrief, PreparedWidget,
+    render_brief_column, render_brief_header, render_brief_page_row, render_brief_status,
+    render_column_width_probe, render_page_tabs,
 };
 use crate::controls::SectionLabel;
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
@@ -92,6 +92,7 @@ impl BriefGallery {
     fn render_sample_row(&self, sample: &SampleBrief, row: GalleryRow) -> AnyElement {
         let widget_context = BriefWidgetContext {
             diffs: &sample.diffs,
+            is_writing: false,
             reader: self.reader,
             handlers: &self.handlers,
         };
@@ -101,6 +102,7 @@ impl BriefGallery {
                     format!("status · {}", status.label),
                     render_brief_status(
                         status.state.as_ref(),
+                        BriefSaveStatus::None,
                         status.can_write,
                         self.reader,
                         &self.handlers,
@@ -114,6 +116,8 @@ impl BriefGallery {
                 render_brief_header(
                     &sample.brief.record,
                     sample.brief.record.head_sha.as_deref(),
+                    None,
+                    false,
                     self.report.state(),
                     &self.handlers,
                 )

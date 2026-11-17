@@ -4,7 +4,7 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use qd_studio::{AgentProgress, AgentRunError, run_smart_filter};
+use qd_studio::{AgentProgress, AgentRunError, run_claude, run_smart_filter};
 
 /// Exercise the real process/stream boundary without invoking a paid agent.
 #[test]
@@ -36,6 +36,7 @@ printf '%s\n' '{"type":"result","is_error":false,"structured_output":{"buckets":
         "Review all changed files"
     );
     let args = std::fs::read_to_string(folder.join("arguments.txt")).unwrap();
+    assert!(!args.lines().any(|argument| argument == "--max-budget-usd"));
     for flags in [
         "--model\nopus",
         "--effort\nhigh",
@@ -58,6 +59,20 @@ printf '%s\n' '{"type":"result","is_error":false,"structured_output":{"buckets":
     assert!(schema["properties"]["buckets"].get("maxItems").is_none());
     assert!(schema["properties"]["buckets"]["items"]["properties"]["suggest_viewed"].is_object());
 
+    // Briefs may delegate to reading agents, with no app-imposed dollar cap either.
+    run_claude(
+        &program,
+        "Explain this change",
+        Some(&folder),
+        &AtomicBool::new(false),
+        &mut |_| {},
+    )
+    .unwrap();
+    let args = std::fs::read_to_string(folder.join("arguments.txt")).unwrap();
+    assert!(args.contains("--tools\nRead,Grep,Glob,Agent"));
+    assert!(!args.lines().any(|argument| argument == "--max-budget-usd"));
+
+    // Login failures and cancellation remain visible and bounded.
     std::fs::write(
         &program,
         "#!/bin/sh\ncat >/dev/null\necho 'Please log in' >&2\nexit 1\n",

@@ -11,6 +11,8 @@ use super::tool_call::ToolCall;
 /// it answered and did, and what the app's checks left out.
 #[derive(Debug, Clone)]
 pub struct BriefRecord {
+    /// MCP publication evidence; legacy one-shot briefs have none.
+    pub mcp: Option<crate::BriefMcpRecord>,
     /// `owner/name`.
     pub repository: String,
     pub number: u64,

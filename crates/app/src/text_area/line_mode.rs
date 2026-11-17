@@ -7,8 +7,8 @@ pub enum LineMode {
     Multiline,
     /// A field of one line, like a macOS text field: Return (or Enter on
     /// the keypad) submits, Up and Down go to the text's start and end, and
-    /// newlines in pasted or input-method text are dropped. Long text still
-    /// wraps on screen; it stays one logical line.
+    /// newlines in pasted or input-method text are dropped. Long text scrolls
+    /// horizontally to keep the caret visible.
     SingleLine,
 }
 

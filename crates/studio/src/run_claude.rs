@@ -15,9 +15,6 @@ use super::studio_guide::STUDIO_GUIDE;
 use super::studio_schema::STUDIO_SCHEMA;
 use super::text_tail::tail;
 
-/// The most a run may spend before Claude Code stops it, in US dollars.
-const MAX_BUDGET_USD: &str = "5";
-
 /// The tools an agent with a workspace may use: reading, and subagents
 /// (`Agent`) to read a large change in parallel. A subagent gets only the
 /// reading tools and the same confinement (verified with Claude Code
@@ -40,7 +37,7 @@ const MAX_ERROR_OUTPUT_CHARS: usize = 2_000;
 /// code, no settings files, file tools kept to the working folder),
 /// `--safe-mode` (no CLAUDE.md, hooks, skills or plugins, so a checked-out
 /// repository cannot instruct it), no MCP servers, nothing that would ask
-/// for permission allowed, and a spending limit. With a `workspace` it
+/// for permission allowed. Quarterdeck imposes no spending cap. With a `workspace` it
 /// starts there with only `Read`, `Grep`, `Glob` and `Agent`; without one it starts
 /// in a new empty folder with no tools at all (only the structured-output
 /// tool remains). The `Agent` tool starts subagents, which read under the
@@ -169,8 +166,6 @@ fn run_in(
         "none",
         "--tools",
         tools,
-        "--max-budget-usd",
-        MAX_BUDGET_USD,
         "--json-schema",
         format.schema,
         "--append-system-prompt",

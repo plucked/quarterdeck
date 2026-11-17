@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use futures::StreamExt as _;
 use futures::channel::mpsc;
 use gpui::Context;
@@ -9,9 +11,10 @@ use super::brief_key::BriefKey;
 use super::brief_pane::ShownBrief;
 use super::brief_row::BriefRow;
 use super::detail_event::DetailEvent;
-use super::detail_mode::DetailMode;
 use super::pull_request_detail::PullRequestDetail;
-use super::run_cancel::RunCancel;
+use super::review_agent_task::ReviewAgentTask;
+use super::review_publication_gate::ReviewPublicationGate;
+use super::review_run_id::new_review_run_id;
 use super::studio_request::studio_request;
 use crate::brief_view::{BriefPageRow, BriefState, PreparedBrief, ReportHost};
 use crate::ui_state::UiStateRecorder;
@@ -32,16 +35,6 @@ impl PullRequestDetail {
     /// The shown pull request's brief at the shown target, if one was started.
     pub(super) fn current_brief(&self) -> Option<&BriefState> {
         self.brief().state_of(&self.shown_brief_key()?)
-    }
-
-    /// Shows the summary, diff or brief in the main column.
-    pub(super) fn set_detail_mode(&mut self, mode: DetailMode, cx: &mut Context<Self>) {
-        if mode != DetailMode::Diff {
-            self.clear_diff_selection();
-        }
-        self.brief_mut().mode = mode;
-        self.refresh_brief_rows();
-        cx.notify();
     }
 
     /// The page shown of the shown brief.
@@ -140,11 +133,8 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Starts Claude Code on the shown pull request's loaded files, in the
-    /// background. Progress shows in the brief's status row; the brief
-    /// replaces it when written. A run already in flight is cancelled.
+    /// Starts a scoped MCP draft while retaining a published brief and its page.
     pub(super) fn write_brief(&mut self, cx: &mut Context<Self>) {
-        // The pull request is cloned: the background run checks out its commits.
         let Some(pull_request) = self.pull_request().cloned() else {
             return;
         };
@@ -155,78 +145,89 @@ impl PullRequestDetail {
             pull_request_id: pull_request.id,
             target: self.target().clone(),
         };
-        let reader = self.current_familiarity();
-        let request = studio_request(
-            &pull_request,
-            &key.target,
-            self.stack(),
-            self.loaded_files(),
-            reader,
-        );
-
-        // Without the CLI there is nothing to run; say how to get it.
+        if self.brief().run_of(&key).is_some() {
+            return;
+        }
         let Some(program) = find_claude() else {
-            self.brief_mut()
-                .set_state(&key, BriefState::Failed(CLAUDE_MISSING.into()));
+            self.brief_mut().fail_to_start(&key, CLAUDE_MISSING.into());
             self.refresh_brief_rows();
             cx.notify();
             return;
         };
-        self.brief_mut().set_state(&key, BriefState::Writing(None));
-        self.refresh_brief_rows();
-        cx.notify();
-
-        let (cancel, cancel_flag) = RunCancel::new();
+        let run_id = new_review_run_id();
+        let gate = Arc::new(ReviewPublicationGate::default());
+        let head_sha = self.shown_head_sha().map(str::to_owned);
+        let base_sha = self.shown_base_sha.clone();
+        let scope = key.target.viewed_scope(&pull_request);
         let job = BriefJob {
+            run_id: run_id.clone(),
+            gate: gate.clone(),
+            base_sha: base_sha.clone(),
             services: self.services().clone(),
+            request: studio_request(
+                &pull_request,
+                &key.target,
+                self.stack(),
+                self.loaded_files(),
+                self.current_familiarity(),
+            ),
             pull_request,
             target: key.target.clone(),
-            head_sha: self.shown_head_sha().map(str::to_owned),
+            head_sha: head_sha.clone(),
             program,
-            request,
             files: self.loaded_files().to_vec(),
             store: cx.global::<UiStateRecorder>().shared_store(),
         };
         let run_key = key.clone();
+        let task_run_id = run_id.clone();
         let task = cx.spawn(async move |detail, cx| {
-            // Write it on the background executor, reporting progress through
-            // a channel that ends with the run.
             let (progress_sender, mut progress) = mpsc::unbounded();
             let run = cx.background_executor().spawn(async move {
-                let mut report = |step| {
+                job.run(&mut |step| {
                     progress_sender.unbounded_send(step).ok();
-                };
-                job.run(&cancel_flag, &mut report)
+                })
             });
-
-            // Show each step; a closed view ends the wait.
             while let Some(step) = progress.next().await {
-                let shown = detail.update(cx, |detail, cx| {
-                    detail.set_brief_state(&key, BriefState::Writing(Some(step)));
-                    cx.notify();
-                });
-                if shown.is_err() {
+                if detail
+                    .update(cx, |detail, cx| {
+                        detail
+                            .brief_mut()
+                            .update_run_progress(&key, &task_run_id, step);
+                        detail.refresh_brief_rows();
+                        cx.notify();
+                    })
+                    .is_err()
+                {
                     return;
                 }
             }
             let outcome = run.await;
-
-            // Show the brief, or why there is none.
             detail
                 .update(cx, |detail, cx| {
-                    let state = match outcome {
-                        Ok(brief) => {
+                    let published = outcome.is_ok();
+                    if detail.brief_mut().finish_run(&key, &task_run_id, outcome) {
+                        if published {
                             cx.emit(DetailEvent::BriefStored);
-                            BriefState::Written(Box::new(brief))
                         }
-                        Err(message) => BriefState::Failed(message.into()),
-                    };
-                    detail.set_brief_state(&key, state);
-                    cx.notify();
+                        detail.refresh_brief_rows();
+                        cx.notify();
+                    }
                 })
                 .ok();
         });
-        self.brief_mut().start_run(&run_key, task, cancel);
+        self.brief_mut().start_run(
+            &run_key,
+            ReviewAgentTask {
+                run_id,
+                scope,
+                head_sha,
+                base_sha,
+                gate,
+                _task: task,
+            },
+        );
+        self.refresh_brief_rows();
+        cx.notify();
     }
 
     /// Stops the shown brief's run (killing the agent); the brief it was
@@ -237,12 +238,6 @@ impl PullRequestDetail {
         }
         self.refresh_brief_rows();
         cx.notify();
-    }
-
-    /// Records a brief's new state, laying out the rows again when it is the shown one.
-    fn set_brief_state(&mut self, key: &BriefKey, state: BriefState) {
-        self.brief_mut().set_state(key, state);
-        self.refresh_brief_rows();
     }
 }
 

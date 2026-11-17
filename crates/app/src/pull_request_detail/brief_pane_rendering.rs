@@ -3,8 +3,9 @@ use gpui::{AnyElement, Context, div, list, prelude::*};
 use super::brief_row::BriefRow;
 use super::pull_request_detail::PullRequestDetail;
 use crate::brief_view::{
-    BriefState, BriefWidgetContext, render_brief_bar, render_brief_column, render_brief_header,
-    render_brief_page_row, render_brief_status, render_column_width_probe, render_page_tabs,
+    BriefSaveStatus, BriefState, BriefWidgetContext, render_brief_bar, render_brief_column,
+    render_brief_header, render_brief_page_row, render_brief_refresh, render_brief_status,
+    render_column_width_probe, render_page_tabs,
 };
 use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 
@@ -24,9 +25,21 @@ impl PullRequestDetail {
                     render_brief_header(
                         &brief.record,
                         self.shown_head_sha(),
+                        self.shown_base_sha.as_deref(),
+                        self.shown_brief_key()
+                            .is_some_and(|key| self.brief().run_of(&key).is_some()),
                         self.brief().report(),
                         handlers,
                     )
+                    .children(self.shown_brief_key().and_then(|key| {
+                        render_brief_refresh(
+                            self.brief().run_of(&key).is_some(),
+                            self.brief().save_status_of(&key),
+                            self.brief().run_progress_of(&key),
+                            self.brief().error_of(&key),
+                            handlers,
+                        )
+                    }))
                     .children(tabs)
                     .into_any_element(),
                 ))
@@ -80,12 +93,18 @@ impl PullRequestDetail {
         let files = self.loaded_files();
         let widget_context = BriefWidgetContext {
             diffs: &files,
+            is_writing: self
+                .shown_brief_key()
+                .is_some_and(|key| self.brief().run_of(&key).is_some()),
             reader: self.current_familiarity(),
             handlers,
         };
         let content = match (row, self.current_brief()) {
             (BriefRow::Status, state) => render_brief_status(
                 state,
+                self.shown_brief_key().map_or(BriefSaveStatus::None, |key| {
+                    self.brief().save_status_of(&key)
+                }),
                 !self.loaded_files().is_empty(),
                 self.current_familiarity(),
                 handlers,

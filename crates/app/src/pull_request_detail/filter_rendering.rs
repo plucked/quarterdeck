@@ -9,37 +9,27 @@ use crate::facet_chips::{
 use crate::theme;
 
 impl PullRequestDetail {
-    /// The filter under the progress bar: the viewed switch, the kind and
-    /// type chip rows with live counts, and a line saying what is shown,
-    /// right above the tree, with the button folding every folder beside it.
+    /// Kind and type facets stay in a bounded drawer shared by the review navigators.
     pub(super) fn render_filter_controls(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .id("files-filter-drawer")
+            .max_h(gpui::px(200.))
+            .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap_1p5()
-            .child(self.render_hide_viewed_switch(cx))
+            .gap_2()
+            .px_3()
+            .py_2()
+            .border_b_1()
+            .border_color(theme::border())
             .child(self.render_kind_row(cx))
             .child(self.render_type_row(cx))
-            .child(self.render_smart_row(cx))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .child(self.render_filter_summary(cx)),
-                    )
-                    .children(self.render_fold_all_button(cx)),
-            )
+            .child(self.render_filter_summary(cx))
     }
 
     /// `☐ Hide viewed (12)`: hides viewed files on top of the chips.
-    fn render_hide_viewed_switch(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn render_hide_viewed_switch(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let is_on = self.file_tree().filter().hide_viewed;
-        let viewed = self.file_review().viewed_count();
         div()
             .id("hide-viewed")
             .flex()
@@ -51,25 +41,25 @@ impl PullRequestDetail {
             .hover(|style| style.text_color(theme::text()))
             .on_click(cx.listener(|detail, _, _, cx| detail.toggle_hide_viewed(cx)))
             .child(Checkbox::new(CheckState::from_bool(is_on)))
-            .child("Hide viewed")
-            .child(
-                div()
-                    .text_color(theme::subtle())
-                    .child(NumberFlow::label(viewed.to_string())),
-            )
+            .child(if self.side_panel_width() < 260. {
+                "Hide"
+            } else {
+                "Hide viewed"
+            })
     }
 
     /// `Collapse all` while a folder is expanded, else `Expand all`: folds
     /// or unfolds every folder of the tree at once. None for a flat list.
-    fn render_fold_all_button(&self, cx: &mut Context<Self>) -> Option<Button> {
+    pub(super) fn render_fold_all_button(&self, cx: &mut Context<Self>) -> Option<Button> {
         let tree = self.file_tree();
         if !tree.has_folders() {
             return None;
         }
-        let label = if tree.has_expanded_folder() {
-            "Collapse all"
-        } else {
-            "Expand all"
+        let label = match (tree.has_expanded_folder(), self.side_panel_width() < 300.) {
+            (true, true) => "Collapse",
+            (true, false) => "Collapse all",
+            (false, true) => "Expand",
+            (false, false) => "Expand all",
         };
         Some(
             Button::new("fold-all-folders", label)

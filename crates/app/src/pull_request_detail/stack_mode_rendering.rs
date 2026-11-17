@@ -1,7 +1,6 @@
 use gpui::{AnyElement, Context, div, prelude::*};
 use qd_cache::StackReviewMode;
 
-use super::detail_mode::DetailMode;
 use super::pull_request_detail::PullRequestDetail;
 use super::review_target::ReviewTarget;
 use crate::controls::{SegmentedControl, TextTooltip, view_option};
@@ -11,7 +10,7 @@ impl PullRequestDetail {
     /// available on hover; layer navigation belongs to the sidebar.
     pub(super) fn render_stack_mode_switch(&self, cx: &mut Context<Self>) -> AnyElement {
         let mode = self.review_mode();
-        let is_diff = self.brief().mode == DetailMode::Diff;
+        let is_diff = self.brief().mode.shows_diff();
         let detail = cx.entity().downgrade();
         let pick = |mode| {
             let select = view_option(&detail, mode, PullRequestDetail::set_review_mode);

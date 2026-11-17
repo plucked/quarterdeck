@@ -11,6 +11,7 @@ use crate::{NoteDestination, PanelVisibility, StackReviewMode};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReviewLayoutState {
     pub file_tree: PanelVisibility,
+    pub files_mode: crate::FilesMode,
     pub hide_viewed: bool,
     pub hidden_kinds: BTreeSet<FileKind>,
     pub stack_review: StackReviewMode,
@@ -21,6 +22,7 @@ impl Default for ReviewLayoutState {
     fn default() -> Self {
         Self {
             file_tree: PanelVisibility::default(),
+            files_mode: crate::FilesMode::default(),
             hide_viewed: false,
             hidden_kinds: BTreeSet::new(),
             stack_review: StackReviewMode::default(),

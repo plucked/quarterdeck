@@ -15,5 +15,8 @@ qd-github.workspace = true
 qd-studio.workspace = true
 rusqlite.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

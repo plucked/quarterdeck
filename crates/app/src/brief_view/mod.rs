@@ -5,6 +5,7 @@
 //!
 //! Files:
 //! - `brief_state.rs`: `BriefState`, a brief being written, written or failed.
+//! - `brief_save_status.rs`: `BriefSaveStatus`, an accepted brief's pending or active local save.
 //! - `prepared_brief.rs`: `PreparedBrief`, a written brief with its Markdown parsed.
 //! - `prepared_page.rs`: `PreparedPage`, a page's title, summary and range of widgets.
 //! - `brief_page_row.rs`: `BriefPageRow`, one row of a written brief's shown page, and which rows a page has.
@@ -42,6 +43,7 @@
 //! - `version_rendering.rs`: the line above a brief: the commit it was written for, against the shown head, and the Report button.
 //! - `column_width_probe.rs`: `render_column_width_probe`, measures the brief's column so diagrams are laid out for it.
 //! - `brief_rendering.rs`: the column and the bar over it, each widget by kind, the lead and callouts.
+//! - `brief_refresh_rendering.rs`: replacement progress and retry above a retained saved brief.
 //! - `brief_status_rendering.rs`: the status card: no brief yet, one being written (how far), or a failed run.
 //! - `brief_text_rendering.rs`: the brief's Markdown prose and the caption above code.
 //! - `code_excerpt_rendering.rs`: quoted lines under their anchor link, in the diff's look, with gap rows.
@@ -56,8 +58,10 @@ mod brief_handlers;
 mod brief_header_rendering;
 mod brief_page_rendering;
 mod brief_page_row;
+mod brief_refresh_rendering;
 mod brief_rendering;
 mod brief_report;
+mod brief_save_status;
 mod brief_state;
 mod brief_status_rendering;
 mod brief_text_rendering;
@@ -97,8 +101,10 @@ pub use brief_handlers::{BriefHandlers, view_action, view_handler};
 pub use brief_header_rendering::render_brief_header;
 pub use brief_page_rendering::render_brief_page_row;
 pub use brief_page_row::BriefPageRow;
+pub use brief_refresh_rendering::render_brief_refresh;
 pub use brief_rendering::{render_brief_bar, render_brief_column};
 pub use brief_report::{BriefReport, ReportHost};
+pub use brief_save_status::BriefSaveStatus;
 pub use brief_state::BriefState;
 pub use brief_status_rendering::render_brief_status;
 pub use brief_widget_context::BriefWidgetContext;

@@ -76,10 +76,20 @@
 //! - `review_notes_storage.rs`: reads and writes of notes and summaries.
 //! - `sample_pull_requests.rs` (tests only): sample pull requests and changed files for the tests.
 
+//! - `files_mode.rs`: Tree or Guided review navigation persisted with review layout.
+//! - `guided_review_storage.rs`: generation-owned publication of complete guides.
+//! - `agent_publication.rs`: durable receipts and bounded typed agent-run metadata.
+//! - `agent_publication_storage.rs`, `publication_owner.rs`: shared typed receipt/audit storage for guides and briefs.
+//! - `brief_publication_storage.rs`: generation-owned atomic brief publication and recovery.
+//! - `smart_filter_storage.rs`: scope-owned plans, ordered items and exact paths in typed tables.
+
+mod agent_publication;
+mod agent_publication_storage;
 mod appearance_settings_storage;
 mod branch_side;
 mod brief_anchor_columns;
 mod brief_index;
+mod brief_publication_storage;
 mod brief_sql_text;
 mod brief_storage;
 mod brief_widget_reading;
@@ -105,10 +115,12 @@ mod display_uuid;
 mod file_set_revision;
 mod file_set_storage;
 mod file_text_storage;
+mod files_mode;
 mod folded_groups;
 mod folded_groups_storage;
 mod github_cache;
 mod github_enum_sql_text;
+mod guided_review_storage;
 mod hidden_branch_rule;
 mod hidden_branch_rules_storage;
 mod line_wrapping;
@@ -121,6 +133,7 @@ mod panel_visibility;
 mod panel_widths;
 mod panel_widths_storage;
 mod patch_fingerprint;
+mod publication_owner;
 mod pull_request_list_key;
 mod pull_request_storage;
 mod queue_tab;
@@ -151,6 +164,8 @@ mod window_mode;
 mod window_placement;
 mod window_placement_storage;
 
+pub use agent_publication::AgentPublication;
+pub use agent_publication::AgentPublication as GuidedReviewPublication;
 pub use branch_side::BranchSide;
 pub use brief_index::BriefIndex;
 pub use cache_ttl::CacheTtl;
@@ -164,6 +179,7 @@ pub use diff_layout::DiffLayout;
 pub use diff_view_settings::DiffViewSettings;
 pub use display_uuid::DisplayUuid;
 pub use file_set_revision::FileSetRevision;
+pub use files_mode::FilesMode;
 pub use folded_groups::{FoldedGroups, FoldedStack};
 pub use github_cache::GitHubCache;
 pub use hidden_branch_rule::HiddenBranchRule;

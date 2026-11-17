@@ -2,6 +2,7 @@ use gpui::{AppContext, ClipboardItem, Context, Focusable, Window};
 use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote};
 
 use super::comment_card::CommentCard;
+use super::detail_mode::DetailMode;
 use super::detail_row::DetailRow;
 use super::local_review_export::{ReviewExportHeader, local_review_markdown};
 use super::operation_status::OperationStatus;
@@ -97,8 +98,8 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Scrolls the diff to the card of note `id`, expanding nothing.
-    pub(super) fn reveal_note(&mut self, id: NoteId) {
+    /// Finds a note in its guided step before scrolling; ordinary diff browsing keeps its folds.
+    pub(super) fn reveal_note(&mut self, id: NoteId, cx: &mut Context<Self>) {
         let card = self
             .review()
             .cards
@@ -110,12 +111,19 @@ impl PullRequestDetail {
         let Some(card) = card else {
             return;
         };
+        // A guided step contains only its own members; open the note's file before finding its row.
+        if self.brief().mode == DetailMode::GuidedReview
+            && let Some(file) = self.file_of_path(&self.review().cards[card].path)
+        {
+            self.open_guided_file(file, cx);
+        }
         let row = (0..self.rows().len()).find(|row| {
             matches!(self.rows().get(*row), Some(DetailRow::CommentCard { card: shown, .. }) if shown == card)
         });
         if let Some(row) = row {
             self.scroll_to_row(row.saturating_sub(2));
         }
+        cx.notify();
     }
 }
 
