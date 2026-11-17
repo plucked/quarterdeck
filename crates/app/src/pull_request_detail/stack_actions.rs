@@ -65,9 +65,9 @@ impl PullRequestDetail {
 
     /// Recomputes the target and reloads the files when it changed: after
     /// the stack arrived or changed, the mode flipped or the range moved.
-    fn retarget(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn retarget(&mut self, cx: &mut Context<Self>) {
         let target = self.decide_target();
-        if target == self.target {
+        if target == self.target || self.review.editor.is_some() {
             return;
         }
         self.target = target;

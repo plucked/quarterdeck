@@ -56,7 +56,7 @@ impl PullRequestDetail {
         );
     }
 
-    /// Starts over for newly loaded files: no comments, no editor.
+    /// Resets the review after changing targets or completing a deferred reload.
     pub(super) fn reset_review(&mut self) {
         let review = self.review_mut();
         review.comments = ReviewComments::default();

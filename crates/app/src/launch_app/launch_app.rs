@@ -35,7 +35,7 @@ const TRAFFIC_LIGHTS_Y: f32 = (TOP_BAR_HEIGHT - TRAFFIC_LIGHT_HEIGHT) / 2.;
 pub fn launch_app() {
     // Services and UI state first: without the database there is nothing to show.
     let opened = AppServices::initialize().and_then(|services| {
-        let recorder = UiStateRecorder::open_default()?;
+        let recorder = UiStateRecorder::open(&services.database)?;
         Ok((services, recorder))
     });
     let (services, recorder) = match opened {
@@ -57,6 +57,11 @@ pub fn launch_app() {
             cx.set_global(AppSettings::load(&recorder));
             cx.set_global(services.clone());
             cx.set_global(recorder);
+            cx.on_app_quit(|cx| {
+                cx.global_mut::<UiStateRecorder>().flush_on_quit();
+                async {}
+            })
+            .detach();
             AppUpdater::start(cx);
             AvatarImages::install(cx);
 

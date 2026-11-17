@@ -4,9 +4,9 @@ use crate::{FileText, FileTextLocation, GitHubClient, GitHubError, RepoRef};
 
 /// Files larger than this are not shown whole: their text would cost more
 /// memory and cache space than a review needs.
-const MAX_FILE_TEXT_BYTES: u64 = 8 * 1024 * 1024;
+pub(crate) const MAX_FILE_TEXT_BYTES: u64 = 8 * 1024 * 1024;
 /// How far into a file git looks for a NUL byte to call it binary.
-const BINARY_PROBE_BYTES: usize = 8000;
+pub(crate) const BINARY_PROBE_BYTES: usize = 8000;
 
 impl GitHubClient {
     /// The whole text of one file. A blob by full SHA is one REST request
@@ -60,12 +60,7 @@ impl GitHubClient {
     fn blob_text(&self, repo: &RepoRef, blob_sha: &str) -> Result<FileText, GitHubError> {
         let url = format!("{}/git/blobs/{blob_sha}", repo.api_url());
         let response = self.get(&url, &[], None, RAW_MEDIA_TYPE, &mut |_| {})?;
-        check_text_size(u64::try_from(response.body.len()).unwrap_or(u64::MAX))?;
-        if is_binary(&response.body) {
-            return Err(GitHubError::NoFileText {
-                reason: "is binary",
-            });
-        }
+
         Ok(FileText {
             blob_sha: blob_sha.to_owned(),
             text: response.body,
@@ -74,7 +69,7 @@ impl GitHubClient {
 }
 
 /// An error for a file over [`MAX_FILE_TEXT_BYTES`].
-fn check_text_size(byte_size: u64) -> Result<(), GitHubError> {
+pub(crate) fn check_text_size(byte_size: u64) -> Result<(), GitHubError> {
     match byte_size.cmp(&MAX_FILE_TEXT_BYTES) {
         std::cmp::Ordering::Less | std::cmp::Ordering::Equal => Ok(()),
         std::cmp::Ordering::Greater => Err(GitHubError::NoFileText {
@@ -83,21 +78,9 @@ fn check_text_size(byte_size: u64) -> Result<(), GitHubError> {
     }
 }
 
-/// Whether `text` looks binary the way git decides: a NUL byte near its start.
-fn is_binary(text: &str) -> bool {
-    text.bytes().take(BINARY_PROBE_BYTES).any(|byte| byte == 0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A NUL byte near the start marks a file binary; plain text is not.
-    #[test]
-    fn detects_binary_content() {
-        assert!(is_binary("PNG\0\u{1}"));
-        assert!(!is_binary("fn main() {}\n"));
-    }
 
     /// Files up to the limit pass; larger ones are refused.
     #[test]

@@ -1,8 +1,7 @@
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use qd_diff::SourceLines;
 use qd_github::{FileTextLocation, GitHubClient, PullRequestFile, RepoRef};
 
-use super::head_commit::HeadCommit;
 use crate::shared_cache::SharedCache;
 
 /// Hex digits of a full git SHA.
@@ -11,7 +10,7 @@ const FULL_SHA_LENGTH: usize = 40;
 /// The text of `file` after the change, asking GitHub at most once per
 /// blob: from the cache by the file's blob SHA (content addressed, so never
 /// stale), else fetched (one request: by full SHA, or at the file's path in
-/// `head`, read only then: files from a whole diff, or cached before SHAs
+/// the displayed `head`: files from a whole diff, or cached before SHAs
 /// were kept) and cached under the SHA GitHub reports. A cached text that
 /// `is_text_of_file` rejects (another blob sharing an abbreviated SHA) is
 /// fetched instead.
@@ -22,7 +21,7 @@ pub fn fetch_file_text(
     cache: &SharedCache,
     repo: &RepoRef,
     file: &PullRequestFile,
-    head: &HeadCommit,
+    head: &str,
     is_text_of_file: &dyn Fn(&SourceLines) -> bool,
 ) -> Result<SourceLines> {
     // A blob read before needs no request; an abbreviated SHA finds it too.
@@ -41,9 +40,7 @@ pub fn fetch_file_text(
             FileTextLocation::Blob(blob_sha.clone())
         }
         Some(_) | None => FileTextLocation::Path {
-            commit: head
-                .resolve(cache)?
-                .context("the pull request's head commit is not known")?,
+            commit: head.to_owned(),
             path: file.filename.clone(),
         },
     };

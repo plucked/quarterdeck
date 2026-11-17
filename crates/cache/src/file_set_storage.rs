@@ -21,8 +21,14 @@ impl GitHubCache {
     /// keeps them. `None` when none are cached.
     pub fn file_set(&self, pull_request_id: u64) -> Result<Option<CachedFileSet>> {
         let pr_id = sql_integer(pull_request_id)?;
-        let stored = self
-            .connection()
+        let transaction = self.connection().unchecked_transaction()?;
+        // Acquire the write lock before reading the header, so a concurrent
+        // connection cannot invalidate our snapshot before we mark it used.
+        transaction.execute(
+            "UPDATE pr_file_sets SET last_used_at=?2 WHERE pr_id=?1",
+            params![pr_id, unix_now()],
+        )?;
+        let stored = transaction
             .query_row(
                 "SELECT updated_at, head_sha, base_sha, revision_etag
                  FROM pr_file_sets WHERE pr_id = ?1",
@@ -41,18 +47,12 @@ impl GitHubCache {
             return Ok(None);
         };
 
-        // Being read is a use: it moves the set's expiry.
-        self.connection().execute(
-            "UPDATE pr_file_sets SET last_used_at = ?2 WHERE pr_id = ?1",
-            params![pr_id, unix_now()],
-        )?;
-
-        let mut statement = self.connection().prepare(
+        let mut statement = transaction.prepare(
             "SELECT filename, previous_filename, status, additions, deletions, patch, sha
              FROM pr_files WHERE pr_id = ?1 ORDER BY position",
         )?;
         let rows = statement.query_map([pr_id], pull_request_file_from_row)?;
-        Ok(Some(CachedFileSet {
+        let set = CachedFileSet {
             updated_at: stored.updated_at,
             revision: FileSetRevision {
                 commits: PullRequestRevision {
@@ -62,7 +62,10 @@ impl GitHubCache {
                 etag: stored.revision_etag.map(ETag::new),
             },
             files: rows.collect::<rusqlite::Result<_>>()?,
-        }))
+        };
+        drop(statement);
+        transaction.commit()?;
+        Ok(Some(set))
     }
 
     /// The commits the cached files of a pull request were fetched for,
@@ -96,13 +99,13 @@ impl GitHubCache {
         let transaction = self.connection_mut().transaction()?;
 
         // Record what the set belongs to, and clear the old files.
-        transaction.execute(
+        let accepted = transaction.execute(
             "INSERT INTO pr_file_sets (pr_id, updated_at, head_sha, base_sha, revision_etag, last_used_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (pr_id) DO UPDATE SET
                 updated_at = excluded.updated_at, head_sha = excluded.head_sha,
                 base_sha = excluded.base_sha, revision_etag = excluded.revision_etag,
-                last_used_at = excluded.last_used_at",
+                last_used_at = excluded.last_used_at WHERE excluded.updated_at >= pr_file_sets.updated_at",
             params![
                 pr_id,
                 pull_request.updated_at,
@@ -112,6 +115,9 @@ impl GitHubCache {
                 unix_now()
             ],
         )?;
+        if accepted == 0 {
+            return Ok(());
+        }
         transaction.execute("DELETE FROM pr_files WHERE pr_id = ?1", [pr_id])?;
 
         // Insert the files in GitHub's order.
@@ -150,12 +156,14 @@ impl GitHubCache {
         self.connection().execute(
             "UPDATE pr_file_sets
              SET updated_at = ?2, revision_etag = ?3, last_used_at = ?4
-             WHERE pr_id = ?1",
+             WHERE pr_id = ?1 AND head_sha = ?5 AND base_sha = ?6 AND updated_at <= ?2",
             params![
                 sql_integer(pull_request.id)?,
                 pull_request.updated_at,
                 revision.etag.as_ref().map(ETag::as_str),
-                unix_now()
+                unix_now(),
+                revision.commits.head_sha,
+                revision.commits.base_sha
             ],
         )?;
         Ok(())
@@ -245,6 +253,29 @@ mod tests {
         assert!(set.is_current_for(&commented));
         assert_eq!(set.files, [sample_file("a.rs")]);
         assert_eq!(set.revision.etag, Some(ETag::new("tag2")));
+    }
+
+    #[test]
+    fn an_older_reader_cannot_relabel_or_replace_newer_files() {
+        let earlier = sample_pull_request(1, "t1");
+        let later = sample_pull_request(1, "t2");
+        let mut cache = cache_with(&earlier);
+        cache
+            .put_files(&earlier, &[sample_file("old")], &revision("old", "etag-a"))
+            .unwrap();
+        let original = cache.file_set(1).unwrap().unwrap();
+        cache
+            .put_files(&later, &[sample_file("new")], &revision("new", "etag-b"))
+            .unwrap();
+        cache.confirm_files(&later, &original.revision).unwrap();
+        cache
+            .put_files(&earlier, &original.files, &original.revision)
+            .unwrap();
+        let current = cache.file_set(1).unwrap().unwrap();
+        assert_eq!(current.files, [sample_file("new")]);
+        assert_eq!(current.revision, revision("new", "etag-b"));
+        assert_eq!(original.files, [sample_file("old")]);
+        assert_eq!(original.revision, revision("old", "etag-a"));
     }
 
     /// A pull request without cached files has no set.

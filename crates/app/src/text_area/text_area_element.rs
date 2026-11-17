@@ -203,7 +203,7 @@ fn shown_text(area: &TextArea, window: &Window) -> (SharedString, Hsla) {
         (area.placeholder().clone(), theme::muted().into())
     } else {
         (
-            SharedString::from(area.text().to_owned()),
+            SharedString::from(area.displayed_text()),
             window.text_style().color,
         )
     }

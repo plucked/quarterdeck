@@ -56,7 +56,7 @@ impl RunningBundle {
         release: &ReleaseManifest,
     ) -> Result<StagedUpdate, UpdateError> {
         // A fresh staging folder: whatever an earlier attempt left goes.
-        let staging = self.staging_directory();
+        let staging = self.staging_directory().join(release.version.to_string());
         remove_directory(&staging)?;
         std::fs::create_dir_all(&staging)
             .map_err(|error| UpdateError::file("cannot create", &staging, error))?;
@@ -224,6 +224,21 @@ mod tests {
             version: AppVersion::current(),
             app: staged_app,
         };
+
+        // A failed replacement must leave the already verified bundle installable.
+        let replacement = ReleaseManifest {
+            version: AppVersion::parse("99.0.0").unwrap(),
+            notes: String::new(),
+            zip_url: String::new(),
+            zip_sha256: String::new(),
+            zip_size: 1,
+        };
+        assert!(
+            bundle
+                .stage_release(&root.join("missing.zip"), &replacement)
+                .is_err()
+        );
+        assert!(staged.app.is_dir());
 
         // Act and expect: the new bundle is in place, nothing else is left.
         bundle.install(&staged).unwrap();

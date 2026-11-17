@@ -16,13 +16,36 @@ pub struct PatchFingerprint(u64);
 impl PatchFingerprint {
     /// Fingerprints the file's name, status and patch.
     pub fn of(file: &PullRequestFile) -> Self {
+        Self::at_revision(file, None)
+    }
+
+    /// A patchless, unidentified blob can only be matched within its original revision.
+    pub fn at_revision(
+        file: &PullRequestFile,
+        revision: Option<&qd_github::PullRequestRevision>,
+    ) -> Self {
         let fields = [
             file.filename.as_bytes(),
             file.status.as_bytes(),
             file.patch.as_deref().unwrap_or_default().as_bytes(),
         ];
         let mut hash = FNV_OFFSET_BASIS;
-        for field in fields {
+        let patchless = [
+            file.sha.as_deref().unwrap_or(""),
+            file.previous_filename.as_deref().unwrap_or(""),
+        ];
+        for field in fields.into_iter().chain(
+            patchless
+                .iter()
+                .filter(|_| file.patch.is_none())
+                .map(|s| s.as_bytes())
+                .chain(
+                    revision
+                        .filter(|_| file.patch.is_none() && file.sha.is_none())
+                        .into_iter()
+                        .flat_map(|r| [r.head_sha.as_bytes(), r.base_sha.as_bytes()]),
+                ),
+        ) {
             for byte in field.iter().chain([&FIELD_SEPARATOR]) {
                 hash ^= u64::from(*byte);
                 hash = hash.wrapping_mul(FNV_PRIME);
@@ -66,6 +89,16 @@ mod tests {
             PatchFingerprint::of(&file("+a")),
             PatchFingerprint::of(&file("+b"))
         );
+    }
+
+    #[test]
+    fn binary_changes_invalidate_viewed_marks() {
+        let mut binary = file("");
+        binary.patch = None;
+        binary.sha = Some("abc".into());
+        let first = PatchFingerprint::of(&binary);
+        binary.sha = Some("def".into());
+        assert_ne!(first, PatchFingerprint::of(&binary));
     }
 
     /// The stored integer reads back as the same fingerprint, high bit included.

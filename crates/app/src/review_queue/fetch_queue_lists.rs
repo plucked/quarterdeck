@@ -81,40 +81,44 @@ pub fn known_details(lists: &QueueLists) -> DetailsByNumber {
         .collect()
 }
 
-/// Fetches the viewer's own lists, those requesting the viewer's review and
-/// those the viewer reviewed (one search request each), and the branches,
-/// viewer reviews and stacks of every list (one GraphQL request, others' in
-/// `watched` included), fills them in and caches the lists. When GraphQL
-/// cannot be read, the details known before are kept.
+/// Pages through the viewer's three searches and looks up the returned PRs by
+/// number in each repository. Failed metadata batches retain known values.
 ///
-/// Blocking: runs on the background executor.
+////// Blocking: runs on the background executor.
 pub fn fetch_own_lists(
     client: &GitHubClient,
     cache: &SharedCache,
-    watched: &[RepoRef],
     known_details: DetailsByNumber,
 ) -> anyhow::Result<OwnLists> {
-    // The three lists, then the branches and stacks of all of them in one request.
+    // Overlapping searches need just one metadata lookup per pull request.
     let mut authored = client.authored()?;
     let mut review_requested = client.review_requested()?;
     let mut reviewed = client.reviewed_by_viewer()?;
-    let (details, details_error) = match client.listed_details(watched) {
-        Ok(listed) => (
-            listed
-                .into_iter()
-                .map(|listed| {
-                    let details = ListedDetails {
-                        branches: Some(listed.branches),
-                        viewer_review: listed.viewer_review,
-                        stack: listed.stack,
-                    };
-                    ((listed.repo, listed.number), details)
-                })
-                .collect(),
-            None,
-        ),
-        Err(error) => (known_details, Some(format!("{error:#}"))),
-    };
+    let mut by_repo: HashMap<RepoRef, HashMap<u64, PullRequest>> = HashMap::new();
+    for pr in authored.iter().chain(&review_requested).chain(&reviewed) {
+        by_repo
+            .entry(pr.repo.clone())
+            .or_default()
+            .insert(pr.number, pr.clone());
+    }
+    let mut details = known_details;
+    let mut details_error = None;
+    for (repo, prs) in by_repo {
+        let mut prs: Vec<_> = prs.into_values().collect();
+        if let Err(error) = client.fill_missing_branches(&repo, &mut prs) {
+            details_error = Some(error.to_string());
+        }
+        for pr in prs.into_iter().filter(|pr| pr.branches.is_some()) {
+            details.insert(
+                (repo.clone(), pr.number),
+                ListedDetails {
+                    branches: pr.branches,
+                    viewer_review: pr.viewer_review,
+                    stack: pr.stack,
+                },
+            );
+        }
+    }
     fill_details(&mut authored, &details);
     fill_details(&mut review_requested, &details);
     fill_details(&mut reviewed, &details);
@@ -147,14 +151,14 @@ fn fill_details(pull_requests: &mut [PullRequest], details: &DetailsByNumber) {
     }
 }
 
-/// Sets each of others' `pull_requests`' stack membership from `details`
-/// (none for a standalone one). Their branches and reviews stay: GraphQL's
-/// others' search covers only the newest, and their sync looks the rest up.
+/// Applies known stack membership to an overlapping queue row.
 pub fn fill_stacks(pull_requests: &mut [PullRequest], details: &DetailsByNumber) {
     for pull_request in pull_requests {
-        pull_request.stack = details
-            .get(&(pull_request.repo.clone(), pull_request.number))
-            .and_then(|found| found.stack.clone());
+        if let Some(found) = details.get(&(pull_request.repo.clone(), pull_request.number))
+            && found.branches.is_some()
+        {
+            pull_request.stack.clone_from(&found.stack);
+        }
     }
 }
 
@@ -167,17 +171,15 @@ pub fn fetch_and_cache_others(
     client: &GitHubClient,
     cache: &SharedCache,
     input: &RefreshInput,
-    details: &DetailsByNumber,
     ttl: Duration,
 ) -> anyhow::Result<FetchedOthers> {
     // Others' pull requests, with their stacks filled in.
-    let mut fetched = fetch_others(
+    let fetched = fetch_others(
         client,
         &input.watched,
         &input.known_others,
         &input.others_synced_until,
     );
-    fill_stacks(&mut fetched.pull_requests, details);
 
     // Cache them, then drop what has not been used within the TTL.
     let mut cache = cache.lock();

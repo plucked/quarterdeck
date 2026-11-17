@@ -110,21 +110,16 @@ pub fn local_review_markdown(
         }
         let _ = writeln!(markdown);
         let _ = writeln!(markdown, "### {}", note_lines_label(&note.anchor));
-        if let (
-            Some(loaded),
-            NoteAnchor::Line {
-                side,
-                line,
-                start_line,
-            },
-        ) = (
-            files.iter().find(|loaded| loaded.filename() == note.path),
-            &note.anchor,
-        ) && let Some(excerpt) = code_excerpt(loaded, *side, start_line.unwrap_or(*line), *line)
-        {
+        if let Some(head) = &note.head_sha {
+            let base = note.base_sha.as_deref().unwrap_or("unknown");
+            let _ = writeln!(markdown, "Original diff `{base}...{head}`");
+        } else if matches!(note.anchor, NoteAnchor::Line { .. }) {
+            let _ = writeln!(markdown, "Original revision unknown.");
+        }
+        if let Some(excerpt) = &note.excerpt {
             let _ = writeln!(markdown);
             let _ = writeln!(markdown, "```diff");
-            markdown.push_str(&excerpt);
+            markdown.push_str(excerpt);
             let _ = writeln!(markdown, "```");
         }
         let _ = writeln!(markdown);
@@ -145,7 +140,12 @@ fn note_line(note: &ReviewNote) -> u32 {
 
 /// The diff lines from `CONTEXT_LINES` above `first` to `last` on `side`,
 /// as `+`/`-`/` ` prefixed lines; `None` when the diff does not show them.
-fn code_excerpt(loaded: &LoadedFile, side: LineSide, first: u32, last: u32) -> Option<String> {
+pub(super) fn code_excerpt(
+    loaded: &LoadedFile,
+    side: LineSide,
+    first: u32,
+    last: u32,
+) -> Option<String> {
     for hunk in loaded.diff.hunks() {
         let number_of = |index: usize| line_number_on(&hunk.lines[index], side);
         let in_range: Vec<usize> = (0..hunk.lines.len())

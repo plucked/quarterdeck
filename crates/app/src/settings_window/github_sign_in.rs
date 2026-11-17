@@ -34,7 +34,7 @@ impl TokenSignIn {
     /// An empty one-line token field; return (or cmd-enter) in it signs
     /// in, like the button.
     pub fn new(cx: &mut Context<SettingsWindow>) -> Self {
-        let input = cx.new(|cx| TextArea::single_line("ghp_…", cx));
+        let input = cx.new(|cx| TextArea::password("ghp_…", cx));
         let subscription = cx.subscribe(&input, |settings, _, event: &TextAreaEvent, cx| {
             if *event == TextAreaEvent::Submit {
                 settings.sign_in(cx);
@@ -55,11 +55,13 @@ impl SettingsWindow {
     /// which is checked with GitHub, saved in the Keychain and used after
     /// a restart.
     pub(super) fn render_account_rows(&self, cx: &mut Context<Self>) -> AnyElement {
-        let source = cx.global::<AppServices>().token_source;
-        let account = source.map_or_else(
-            || "Not signed in: Quarterdeck shows cached data only.".to_owned(),
-            |source| format!("Signed in with {}.", source.describe()),
-        );
+        let services = cx.global::<AppServices>();
+        let source = services.token_source;
+        let account = match (source, &services.github) {
+            (Some(source), Ok(_)) => format!("Signed in with {}.", source.describe()),
+            (Some(_), Err(error)) => format!("Could not verify this credential. {error}"),
+            (None, _) => "Sign in to open your GitHub queue and saved reviews.".into(),
+        };
         let is_busy = matches!(
             self.token_sign_in().status,
             SignInStatus::Checking | SignInStatus::SignedIn(_)

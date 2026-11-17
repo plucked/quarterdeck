@@ -4,15 +4,14 @@ use gpui::Context;
 use qd_cache::{ReviewScope, ViewedFile};
 use qd_diff::DiffOptions;
 use qd_file_tree::FileTree;
-use qd_github::{GitHubClient, PullRequest, PullRequestFile};
+use qd_github::{GitHubClient, PullRequest};
 
 use super::brief_key::BriefKey;
 use super::changed_files::ChangedFiles;
 use super::context_loads::ContextLoads;
-use super::fetch_changed_files::fetch_changed_files;
+use super::fetch_changed_files::{FileSnapshot, fetch_changed_files};
 use super::fetch_combined_files::fetch_combined_files;
 use super::file_review_state::FileReviewState;
-use super::head_commit::HeadCommit;
 use super::load_progress::LoadProgress;
 use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
@@ -169,6 +168,8 @@ impl PullRequestDetail {
         self.viewed_scope = Some(fetched.scope);
         self.review.comments.notes = fetched.notes;
         self.review.comments.summary = fetched.summary.unwrap_or_default();
+        self.review.comments.head_sha.clone_from(&fetched.head_sha);
+        self.review.comments.base_sha.clone_from(&fetched.base_sha);
         self.shown_head_sha = fetched.head_sha;
         self.shown_base_sha = fetched.base_sha;
         if let Some(brief) = fetched.brief {
@@ -196,7 +197,7 @@ fn fetch_target_files(
     pull_request: &PullRequest,
     target: &ReviewTarget,
     report: &dyn Fn(LoadProgress),
-) -> anyhow::Result<Vec<PullRequestFile>> {
+) -> anyhow::Result<FileSnapshot> {
     match target {
         ReviewTarget::Layer | ReviewTarget::AwaitingStack => {
             fetch_changed_files(client, cache, pull_request, &mut |step| report(step))
@@ -209,6 +210,13 @@ fn fetch_target_files(
                     reported_bytes = download.received_bytes;
                     report(LoadProgress::DownloadingDiff(download));
                 }
+            })
+            .map(|files| FileSnapshot {
+                files,
+                revision: qd_github::PullRequestRevision {
+                    head_sha: range.head_sha.clone(),
+                    base_sha: range.base_sha.clone(),
+                },
             })
         }
     }
@@ -247,13 +255,14 @@ fn fetch_changes(
         options,
         wants_stored_brief,
     } = request;
-    let files = fetch_target_files(client, &cache, &pull_request, &target, report)?;
+    let FileSnapshot { files, revision } =
+        fetch_target_files(client, &cache, &pull_request, &target, report)?;
 
     // Build every diff here too: word comparisons can take a moment on big files.
     report(LoadProgress::BuildingDiffs { files: files.len() });
     let built: Vec<LoadedFile> = files
         .into_iter()
-        .map(|file| LoadedFile::build(file, options))
+        .map(|file| LoadedFile::at_revision(file, options, Some(&revision)))
         .collect();
 
     // Put the files in tree order, so the tree and the diff agree.
@@ -271,19 +280,8 @@ fn fetch_changes(
     let brief = wants_stored_brief
         .then(|| read_prepared_brief(&ui_state, &scope))
         .flatten();
-    let head_sha = HeadCommit::of(&target, &pull_request)
-        .resolve(&cache)
-        .ok()
-        .flatten();
-    let base_sha = match &target {
-        ReviewTarget::Combined(range) => Some(range.base_sha.clone()),
-        _ => cache
-            .lock()
-            .file_set_commits(pull_request.id)
-            .ok()
-            .flatten()
-            .map(|commits| commits.base_sha),
-    };
+    let head_sha = Some(revision.head_sha);
+    let base_sha = Some(revision.base_sha);
     let smart_filter = ui_state
         .lock()
         .smart_filter(&scope)

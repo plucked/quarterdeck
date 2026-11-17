@@ -809,6 +809,17 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
 ",
     // Retain the comparison base independently of the opaque MCP snapshot identity.
     "ALTER TABLE brief_publications ADD COLUMN base_sha TEXT;",
+    "ALTER TABLE review_notes ADD COLUMN head_sha TEXT;
+     ALTER TABLE review_notes ADD COLUMN base_sha TEXT;
+     ALTER TABLE review_notes ADD COLUMN excerpt TEXT;
+     CREATE TEMP TABLE legacy_members AS SELECT f.* FROM smart_bucket_files f
+       WHERE NOT EXISTS (SELECT 1 FROM smart_review_items i WHERE i.filter_id=f.filter_id AND i.order_id=f.order_id);
+     INSERT INTO smart_review_items SELECT filter_id,order_id,position,filename,'' FROM legacy_members;
+     INSERT INTO smart_review_item_files SELECT filter_id,order_id,position,0,filename FROM legacy_members;
+     DROP TABLE legacy_members;
+     DROP TABLE smart_bucket_files;
+     DELETE FROM pr_file_sets;
+     DELETE FROM compare_file_sets;",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

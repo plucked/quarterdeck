@@ -48,14 +48,12 @@ impl ReviewQueue {
             // (every call blocks), so they show without waiting for others'.
             let own_client = client.clone();
             let own_cache = cache.clone();
-            let watched = input.watched.clone();
+
             let known_details = std::mem::take(&mut input.known_details);
-            let own =
-                cx.background_executor()
-                    .spawn(async move {
-                        fetch_own_lists(&own_client, &own_cache, &watched, known_details)
-                    })
-                    .await;
+            let own = cx
+                .background_executor()
+                .spawn(async move { fetch_own_lists(&own_client, &own_cache, known_details) })
+                .await;
             let own = match own {
                 Ok(own) => own,
                 Err(error) => {
@@ -65,7 +63,7 @@ impl ReviewQueue {
                     return;
                 }
             };
-            let details = own.details.clone();
+
             if queue
                 .update(cx, |queue, cx| queue.show_own_lists(own, cx))
                 .is_err()
@@ -76,9 +74,7 @@ impl ReviewQueue {
             // Then others' pull requests, cached; then drop what has not been used within the TTL.
             let others = cx
                 .background_executor()
-                .spawn(
-                    async move { fetch_and_cache_others(&client, &cache, &input, &details, ttl) },
-                )
+                .spawn(async move { fetch_and_cache_others(&client, &cache, &input, ttl) })
                 .await;
 
             // Show the result and arm the next refresh; a closed view simply drops it.

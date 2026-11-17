@@ -89,6 +89,12 @@ impl PullRequestDetail {
         options: &MergeOptions,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        if self.shown_head_sha() != Some(&options.head_sha) {
+            return render_line(
+                "Refresh and review the current head before merging.",
+                theme::muted(),
+            );
+        }
         let readiness = options.readiness;
         let readiness_color = if readiness.allows_merge() {
             theme::success()
@@ -152,6 +158,12 @@ impl PullRequestDetail {
         options: &MergeOptions,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        if self.shown_head_sha() != Some(&options.head_sha) {
+            return render_line(
+                "Refresh and review the current head before merging.",
+                theme::muted(),
+            );
+        }
         let readiness = options.readiness;
         let method = panel.method;
         let can_merge = readiness.allows_merge() && method.is_some() && !panel.is_working();

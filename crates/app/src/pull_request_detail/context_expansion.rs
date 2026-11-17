@@ -4,7 +4,6 @@ use gpui::Context;
 use qd_diff::{GapPlace, SourceLines};
 
 use super::fetch_file_text::fetch_file_text;
-use super::head_commit::HeadCommit;
 use super::highlighted_diff::HighlightedDiff;
 use super::loaded_file::{FileContext, LoadedFile};
 use super::pull_request_detail::PullRequestDetail;
@@ -46,7 +45,9 @@ impl PullRequestDetail {
         let Some(pull_request) = self.pull_request() else {
             return;
         };
-        let head = HeadCommit::of(self.target(), pull_request);
+        let Some(head) = self.shown_head_sha.clone() else {
+            return;
+        };
         let repo = pull_request.repo.clone();
         let changed_file = loaded.file.clone();
         let patch_diff = loaded.patch_diff().clone();

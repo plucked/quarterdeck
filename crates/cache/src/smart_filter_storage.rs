@@ -41,18 +41,11 @@ impl UiStateStore {
                 label: row.get(1)?,
                 description: row.get(2)?,
                 suggest_viewed: row.get(3)?,
-                files: vec![],
                 items: vec![],
             })
         })?;
         for bucket in buckets {
             let mut bucket = bucket?;
-            let mut files = self.connection().prepare(
-                "SELECT filename FROM smart_bucket_files WHERE filter_id = ?1 AND order_id = ?2 ORDER BY position",
-            )?;
-            bucket.files = files
-                .query_map(params![id, bucket.order], |row| row.get(0))?
-                .collect::<rusqlite::Result<_>>()?;
             let mut statement = self.connection().prepare("SELECT position, label, description FROM smart_review_items WHERE filter_id = ?1 AND order_id = ?2 ORDER BY position")?;
             let items = statement.query_map(params![id, bucket.order], |row| {
                 Ok((
@@ -115,14 +108,6 @@ pub(crate) fn write_smart_filter(
                 bucket.suggest_viewed
             ],
         )?;
-        for (position, filename) in bucket.files.iter().enumerate() {
-            execute_cached(
-                connection,
-                "INSERT INTO smart_bucket_files (filter_id, order_id, position, filename)
-                     VALUES (?1, ?2, ?3, ?4)",
-                params![id, bucket.order, i64::try_from(position)?, filename],
-            )?;
-        }
         // Items and members are saved in the same transaction as their bucket.
         for (position, item) in bucket.items.iter().enumerate() {
             let position = i64::try_from(position)?;
@@ -158,7 +143,6 @@ mod tests {
                 label: "Generated".into(),
                 description: "Compiled schema output".into(),
                 suggest_viewed: true,
-                files: vec!["generated/a.rs".into(), "generated/b.rs".into()],
                 items: vec![SmartReviewItem {
                     label: "Generated pair".into(),
                     description: "Inspect inputs first.".into(),

@@ -16,7 +16,7 @@ query MergeOptions($owner: String!, $name: String!, $number: Int!) {
     mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed deleteBranchOnMerge viewerPermission
     pullRequest(number: $number) {
       state mergeable mergeStateStatus isInMergeQueue isMergeQueueEnabled
-      headRefName headRefOid baseRefName isCrossRepository
+      stack { number } headRefName headRefOid baseRefName isCrossRepository
       viewerCanMergeAsAdmin viewerCanClose viewerCanDeleteHeadRef headRef { name }
     }
   }
@@ -56,6 +56,7 @@ struct PullRequestNode {
     merge_state_status: String,
     #[serde(flatten)]
     queue: QueueNode,
+    stack: Option<StackNumber>,
     head_ref_name: String,
     head_ref_oid: String,
     base_ref_name: String,
@@ -68,6 +69,11 @@ struct PullRequestNode {
 
 #[derive(Deserialize)]
 struct NameNode {}
+
+#[derive(Deserialize)]
+struct StackNumber {
+    number: u64,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -134,6 +140,7 @@ impl MergeOptionsData {
                 (true, false) => MergeQueueState::Available,
                 (false, false) => MergeQueueState::NoQueue,
             },
+            stack_number: pull_request.stack.map(|s| s.number),
             head_ref: pull_request.head_ref_name,
             head_sha: pull_request.head_ref_oid,
             base_ref: pull_request.base_ref_name,

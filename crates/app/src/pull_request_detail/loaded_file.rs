@@ -50,7 +50,16 @@ pub struct FileContext {
 
 impl LoadedFile {
     /// Builds the file's diff with `options`.
+    #[cfg(test)]
     pub fn build(file: PullRequestFile, options: DiffOptions) -> Self {
+        Self::at_revision(file, options, None)
+    }
+
+    pub fn at_revision(
+        file: PullRequestFile,
+        options: DiffOptions,
+        revision: Option<&qd_github::PullRequestRevision>,
+    ) -> Self {
         let file = Arc::new(file);
         let diff = Arc::new(build_diff(&file, options));
         let facets = Arc::new(FileFacets::of(&file.filename, is_unchanged_move(&file)));
@@ -62,7 +71,7 @@ impl LoadedFile {
             patch_diff: diff.clone(),
             diff,
             context: None,
-            fingerprint: PatchFingerprint::of(&file),
+            fingerprint: PatchFingerprint::at_revision(&file, revision),
             syntax: None,
             file,
         }

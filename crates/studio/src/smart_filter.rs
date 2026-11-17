@@ -24,8 +24,15 @@ pub struct SmartBucket {
     pub label: String,
     pub description: String,
     pub suggest_viewed: bool,
-    pub files: Vec<String>,
     pub items: Vec<SmartReviewItem>,
+}
+
+impl SmartBucket {
+    pub fn files(&self) -> impl Iterator<Item = &str> {
+        self.items
+            .iter()
+            .flat_map(|item| item.files.iter().map(String::as_str))
+    }
 }
 
 #[derive(Deserialize)]
@@ -94,14 +101,12 @@ pub fn parse_smart_buckets(
         let bucket_id = bucket.order.to_string();
         let items = validated_bucket_items(&bucket_id, &bucket, &inventory)
             .map_err(|issues| legacy_validation_message(&issues))?;
-        let files: Vec<String> = items.iter().flat_map(|item| item.files.clone()).collect();
-        covered.extend(files.iter().cloned());
+        covered.extend(items.iter().flat_map(|item| item.files.iter().cloned()));
         buckets.push(SmartBucket {
             order: bucket.order,
             label: bucket.label.trim().to_owned(),
             description: bucket.description.trim().to_owned(),
             suggest_viewed: bucket.suggest_viewed,
-            files,
             items,
         });
     }
@@ -196,7 +201,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result[0].order, 1);
-        assert_eq!(result[1].files, ["src/a.rs", "src/nested/c.rs"]);
+        assert_eq!(
+            result[1].files().collect::<Vec<_>>(),
+            ["src/a.rs", "src/nested/c.rs"]
+        );
     }
 
     #[test]
@@ -257,7 +265,7 @@ mod walkthrough_tests {
             ]
         }]}), &borrowed).unwrap();
         assert_eq!(result[0].items.len(), 3);
-        assert_eq!(result[0].files[0], "tests.rs");
+        assert_eq!(result[0].files().next().unwrap(), "tests.rs");
         assert_eq!(result[0].items[2].files.len(), 300);
         assert!(!result[0].suggest_viewed);
     }

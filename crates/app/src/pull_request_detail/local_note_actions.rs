@@ -25,7 +25,25 @@ impl PullRequestDetail {
             return;
         };
         let now = unix_now();
+        let excerpt = match &anchor {
+            NoteAnchor::Line {
+                side,
+                line,
+                start_line,
+            } => self.file_of_path(&path).and_then(|index| {
+                super::local_review_export::code_excerpt(
+                    &self.loaded_files()[index],
+                    *side,
+                    start_line.unwrap_or(*line),
+                    *line,
+                )
+            }),
+            NoteAnchor::Reply { .. } => None,
+        };
         let note = ReviewNote {
+            head_sha: self.shown_head_sha.clone(),
+            base_sha: self.shown_base_sha.clone(),
+            excerpt,
             id: NoteId::generate(),
             destination,
             scope,

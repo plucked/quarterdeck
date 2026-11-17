@@ -231,12 +231,12 @@ impl GitHubClient {
         for (key, value) in query {
             request = request.query(*key, *value);
         }
-        self.read_response(request.call()?, on_progress)
+        self.read_response_body(request.call()?, on_progress, accept == RAW_MEDIA_TYPE)
     }
 
     /// Adds the headers GitHub requires for REST v3, the media type wanted
     /// and, for a conditional request, the tag of the last answer.
-    fn with_headers<B>(
+    pub(crate) fn with_headers<B>(
         &self,
         request: RequestBuilder<B>,
         accept: &str,

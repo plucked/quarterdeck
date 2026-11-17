@@ -7,7 +7,6 @@ use qd_cache::{
 use qd_github::RepoRef;
 
 use super::SharedUiStateStore;
-use super::review_change::ReviewChange;
 
 /// Changes recorded since the last write; only the latest value of each part
 /// is kept.
@@ -29,8 +28,6 @@ pub struct PendingUiState {
     pub others_filters: HashMap<RepoRef, OthersFilter>,
     /// Every viewed mark change, in the order made: unlike settings, each counts.
     pub viewed_changes: Vec<ViewedChange>,
-    /// Every review note and summary change, in the order made.
-    pub review_changes: Vec<ReviewChange>,
 }
 
 /// A change to a file's viewed mark, waiting to be written.
@@ -62,7 +59,6 @@ impl PendingUiState {
             && self.hidden_branch_rules.is_none()
             && self.others_filters.is_empty()
             && self.viewed_changes.is_empty()
-            && self.review_changes.is_empty()
     }
 
     /// Writes each recorded part to `store`, reporting failures on stderr;
@@ -131,19 +127,6 @@ impl PendingUiState {
                 }
             };
             report_failed_write("a viewed mark", written);
-        }
-        for change in &self.review_changes {
-            let written = match change {
-                ReviewChange::PutNote(note) => store.put_review_note(note),
-                ReviewChange::DeleteNote(id) => store.delete_review_note(*id),
-                ReviewChange::PutSummary(pull_request_id, summary) => {
-                    store.put_review_summary(*pull_request_id, summary)
-                }
-                ReviewChange::DeleteSummary(pull_request_id) => {
-                    store.delete_review_summary(*pull_request_id)
-                }
-            };
-            report_failed_write("a review note", written);
         }
     }
 }

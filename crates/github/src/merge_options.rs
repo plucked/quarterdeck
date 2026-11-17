@@ -13,6 +13,7 @@ pub struct MergeOptions {
     /// The repository deletes head branches after a merge by itself.
     pub deletes_branch_on_merge: bool,
     pub merge_queue: MergeQueueState,
+    pub stack_number: Option<u64>,
     pub head_ref: String,
     /// The head commit the merge must still match.
     pub head_sha: String,

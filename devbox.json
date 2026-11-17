@@ -12,7 +12,7 @@
       "echo 'Quarterdeck: devbox run app | dev | check | test | release'"
     ],
     "scripts": {
-      "app": "cargo run --release",
+      "app": "cargo run",
       "dev": "bacon",
       "test": "cargo test --workspace",
       "release": "packaging/macos/release.sh",

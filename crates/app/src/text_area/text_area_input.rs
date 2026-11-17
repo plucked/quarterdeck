@@ -50,7 +50,11 @@ impl EntityInputHandler for TextArea {
     ) -> Option<String> {
         let range = self.range_from_utf16(&range_utf16);
         actual_range.replace(self.range_to_utf16(&range));
-        Some(self.text()[range].to_owned())
+        Some(if self.secret {
+            "*".repeat(self.text()[range].encode_utf16().count())
+        } else {
+            self.text()[range].to_owned()
+        })
     }
 
     fn selected_text_range(

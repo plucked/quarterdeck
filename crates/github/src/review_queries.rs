@@ -7,18 +7,20 @@ use crate::{LineSide, PullRequestReviewState, ReviewThread, ThreadComment, Threa
 /// The review state of one pull request: threads with their comments, the
 /// viewer, and the viewer's pending review (only its author sees one).
 pub(crate) const REVIEW_STATE_QUERY: &str = r"
-query ReviewState($owner: String!, $name: String!, $number: Int!) {
+query ReviewState($owner: String!, $name: String!, $number: Int!, $cursor: String) {
   viewer { login }
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       id
       viewerDidAuthor
-      reviews(states: PENDING, first: 1) { nodes { id } }
-      reviewThreads(first: 100) {
+      reviews(states: PENDING, first: 1) { nodes { id commit { oid } } }
+      reviewThreads(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id path line startLine originalLine diffSide isResolved isOutdated
           viewerCanReply viewerCanResolve viewerCanUnresolve
           comments(first: 100) {
+            pageInfo { hasNextPage endCursor }
             nodes {
               id body createdAt viewerCanUpdate viewerCanDelete
               author { login avatarUrl }
@@ -32,11 +34,26 @@ query ReviewState($owner: String!, $name: String!, $number: Int!) {
 }
 ";
 
+pub(crate) const THREAD_COMMENTS_QUERY: &str = r"
+query ThreadComments($thread: ID!, $cursor: String!) {
+  node(id: $thread) { ... on PullRequestReviewThread {
+    comments(first: 100, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+              id body createdAt viewerCanUpdate viewerCanDelete
+              author { login avatarUrl }
+              pullRequestReview { state }
+      }
+    }
+  } }
+}
+";
+
 /// Creates the viewer's review with new threads; with an event it is
 /// submitted at once, without one it stays pending.
 pub(crate) const ADD_REVIEW_MUTATION: &str = r"
-mutation AddReview($pullRequestId: ID!, $event: PullRequestReviewEvent, $body: String, $threads: [DraftPullRequestReviewThread]) {
-  addPullRequestReview(input: {pullRequestId: $pullRequestId, event: $event, body: $body, threads: $threads}) {
+mutation AddReview($pullRequestId: ID!, $commit: GitObjectID!, $event: PullRequestReviewEvent, $body: String, $threads: [DraftPullRequestReviewThread]) {
+  addPullRequestReview(input: {pullRequestId: $pullRequestId, commitOID: $commit, event: $event, body: $body, threads: $threads}) {
     pullRequestReview { id }
   }
 }
@@ -138,13 +155,58 @@ struct RepositoryNode {
 struct PullRequestNode {
     id: String,
     viewer_did_author: bool,
-    reviews: Nodes<IdNode>,
+    reviews: Nodes<PendingReview>,
     review_threads: Nodes<ThreadNode>,
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Nodes<T> {
+    page_info: Option<PageInfo>,
     nodes: Vec<T>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PageInfo {
+    has_next_page: bool,
+    end_cursor: Option<String>,
+}
+
+impl<T> Nodes<T> {
+    fn next(&self) -> Result<Option<String>, String> {
+        if let Some(info) = &self.page_info
+            && info.has_next_page
+        {
+            return info
+                .end_cursor
+                .clone()
+                .map(Some)
+                .ok_or_else(|| "GitHub omitted the next page cursor".into());
+        }
+        Ok(None)
+    }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ThreadPage {
+    node: Option<CommentPage>,
+}
+
+#[derive(Deserialize)]
+struct CommentPage {
+    comments: Nodes<CommentNode>,
+}
+
+#[derive(Deserialize)]
+struct PendingReview {
+    id: String,
+    commit: Option<Commit>,
+}
+
+#[derive(Deserialize)]
+struct Commit {
+    oid: String,
 }
 
 #[derive(Deserialize)]
@@ -194,6 +256,32 @@ struct ReviewNode {
 }
 
 impl ReviewStateData {
+    pub(crate) fn complete_comments(
+        &mut self,
+        mut fetch: impl FnMut(&str, &str) -> Result<ThreadPage, crate::GitHubError>,
+    ) -> Result<Option<String>, crate::GitHubError> {
+        use crate::github_client::graphql_error;
+        let pr = self
+            .repository
+            .as_mut()
+            .and_then(|r| r.pull_request.as_mut())
+            .ok_or_else(|| graphql_error("GitHub knows no such pull request".into()))?;
+        for thread in &mut pr.review_threads.nodes {
+            let mut cursors = std::collections::HashSet::new();
+            while let Some(cursor) = thread.comments.next().map_err(graphql_error)? {
+                if !cursors.insert(cursor.clone()) {
+                    return Err(graphql_error("GitHub repeated a comment cursor".into()));
+                }
+                let page = fetch(&thread.id, &cursor)?
+                    .node
+                    .ok_or_else(|| graphql_error("Review thread changed during loading".into()))?;
+                thread.comments.nodes.extend(page.comments.nodes);
+                thread.comments.page_info = page.comments.page_info;
+            }
+        }
+        pr.review_threads.next().map_err(graphql_error)
+    }
+
     /// The review state, or why there is none (no such pull request).
     pub fn into_state(self) -> Result<PullRequestReviewState, String> {
         let pull_request = self
@@ -204,6 +292,12 @@ impl ReviewStateData {
             pull_request_node_id: pull_request.id,
             viewer_login: self.viewer.login,
             viewer_is_author: pull_request.viewer_did_author,
+            pending_review_commit: pull_request
+                .reviews
+                .nodes
+                .first()
+                .and_then(|r| r.commit.as_ref())
+                .map(|commit| commit.oid.clone()),
             pending_review_id: pull_request
                 .reviews
                 .nodes
@@ -302,7 +396,7 @@ mod tests {
             "viewer": {"login": "me"},
             "repository": {"pullRequest": {
                 "id": "PR_1", "viewerDidAuthor": false,
-                "reviews": {"nodes": [{"id": "R_1"}]},
+                "reviews": {"nodes": [{"id": "R_1","commit":{"oid":"original"}}]},
                 "reviewThreads": {"nodes": [{
                     "id": "T_1", "path": "src/a.rs", "line": 12, "startLine": null,
                     "originalLine": 10, "diffSide": "LEFT", "isResolved": false, "isOutdated": false,
@@ -315,9 +409,23 @@ mod tests {
                 }]}
             }}
         }}"#;
-        let response: GraphQlResponse<ReviewStateData> = serde_json::from_str(json).unwrap();
-        let state = response.into_data().unwrap().into_state().unwrap();
+        let mut json: serde_json::Value = serde_json::from_str(json).unwrap();
+        let comments =
+            &mut json["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"][0]["comments"];
+        comments["pageInfo"] = serde_json::json!({"hasNextPage":true,"endCursor":"next"});
+        let mut second = comments["nodes"][0].clone();
+        second["id"] = "C_2".into();
+        let response: GraphQlResponse<ReviewStateData> = serde_json::from_value(json).unwrap();
+        let mut data = response.into_data().unwrap();
+        let next=data.complete_comments(|thread,cursor|{
+            assert_eq!((thread,cursor),("T_1","next"));
+            Ok(serde_json::from_value(serde_json::json!({"node":{"comments":{"nodes":[second],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}))?)
+        }).unwrap();
+        assert!(next.is_none());
+        let state = data.into_state().unwrap();
+        assert_eq!(state.threads[0].comments[1].id, "C_2");
         assert_eq!(state.pending_review_id.as_deref(), Some("R_1"));
+        assert_eq!(state.pending_review_commit.as_deref(), Some("original"));
         let thread = &state.threads[0];
         assert_eq!((thread.side, thread.line), (LineSide::Old, Some(12)));
         assert!(thread.comments[0].is_pending);

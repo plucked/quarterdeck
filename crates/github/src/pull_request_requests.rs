@@ -74,7 +74,45 @@ impl GitHubClient {
 
     /// Deletes branch `branch` of `repo`.
     pub fn delete_branch(&self, repo: &RepoRef, branch: &str) -> Result<(), GitHubError> {
-        let url = format!("{}/git/refs/heads/{branch}", repo.api_url());
+        let dependents: Vec<serde_json::Value> = self.get_json(
+            &format!("{}/pulls", repo.api_url()),
+            &[("state", "open"), ("base", branch), ("per_page", "1")],
+        )?;
+        if !dependents.is_empty() {
+            return Err(graphql_error(
+                "An open pull request is based on this branch.".into(),
+            ));
+        }
+        let url = branch_ref_url(repo, branch);
         self.send_delete(&url)
+    }
+}
+
+/// Keep branch hierarchy intact while escaping URL delimiters inside each segment.
+fn branch_ref_url(repo: &RepoRef, branch: &str) -> String {
+    use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+    const REF_PATH: &percent_encoding::AsciiSet = &NON_ALPHANUMERIC
+        .remove(b'/')
+        .remove(b'-')
+        .remove(b'_')
+        .remove(b'.')
+        .remove(b'~');
+    format!(
+        "{}/git/refs/heads/{}",
+        repo.api_url(),
+        utf8_percent_encode(branch, REF_PATH)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn deletion_uses_the_entire_checked_branch_name() {
+        let repo = RepoRef::parse_input("owner/repo").unwrap();
+        assert_eq!(
+            branch_ref_url(&repo, "feature/100%#ready"),
+            "https://api.github.com/repos/owner/repo/git/refs/heads/feature/100%25%23ready"
+        );
     }
 }

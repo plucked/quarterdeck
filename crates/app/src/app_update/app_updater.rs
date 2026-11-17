@@ -28,6 +28,7 @@ impl Global for GlobalAppUpdater {}
 /// Views observe it to show [`UpdateStatus`].
 pub struct AppUpdater {
     status: UpdateStatus,
+    checking: bool,
     feed: UpdateFeed,
     /// The running bundle, once found to be updatable.
     bundle: Option<RunningBundle>,
@@ -46,6 +47,7 @@ impl AppUpdater {
         let updater = cx.new(|cx| {
             let mut updater = Self {
                 status: UpdateStatus::Starting,
+                checking: false,
                 feed: UpdateFeed::default(),
                 bundle: None,
                 work_task: None,
@@ -77,7 +79,7 @@ impl AppUpdater {
 
     /// Checks for a newer release now, unless a check, download or install runs.
     pub fn check_now(&mut self, cx: &mut Context<Self>) {
-        if self.status.can_check() {
+        if !self.checking && self.status.can_check() {
             self.check(cx);
         }
     }
@@ -158,6 +160,7 @@ impl AppUpdater {
         let Some(bundle) = self.bundle.clone() else {
             return;
         };
+        self.checking = true;
         let staged = self.ready_update().map(|ready| ready.staged.version);
         if staged.is_none() {
             self.status = UpdateStatus::Checking;
@@ -190,13 +193,16 @@ impl AppUpdater {
                 .update(cx, |updater, cx| {
                     match decision {
                         UpdateDecision::Download => {
-                            updater.status = UpdateStatus::Downloading(release.version);
+                            if updater.ready_update().is_none() {
+                                updater.status = UpdateStatus::Downloading(release.version);
+                            }
                         }
                         UpdateDecision::KeepStaged => {}
                         UpdateDecision::UpToDate => updater.status = UpdateStatus::UpToDate,
                     }
                     cx.notify();
-                    decision == UpdateDecision::Download
+                    updater.checking = decision == UpdateDecision::Download;
+                    updater.checking
                 })
                 .unwrap_or(false);
             if !should_download {
@@ -211,6 +217,7 @@ impl AppUpdater {
             updater
                 .update(cx, |updater, cx| match staged {
                     Ok(ready) => {
+                        updater.checking = false;
                         updater.status = UpdateStatus::Ready(ready);
                         cx.notify();
                     }
@@ -222,6 +229,7 @@ impl AppUpdater {
 
     /// Reports a failed check; a ready update stays ready.
     fn fail(&mut self, reason: &str, cx: &mut Context<Self>) {
+        self.checking = false;
         eprintln!("update check failed: {reason}");
         if self.ready_update().is_none() {
             self.status = UpdateStatus::Failed(reason.to_owned().into());

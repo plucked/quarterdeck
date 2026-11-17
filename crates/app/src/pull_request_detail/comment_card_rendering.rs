@@ -275,9 +275,14 @@ impl PullRequestDetail {
 
     /// One of the user's notes as a card of its own.
     fn render_note_card(&self, note: &ReviewNote, cx: &mut Context<Self>) -> impl IntoElement {
-        let label = match note.destination {
-            NoteDestination::GitHub => "Draft · posted with your review",
-            NoteDestination::Local => "Local note",
+        let label = if note.matches_revision(self.shown_head_sha(), self.shown_base_sha.as_deref())
+        {
+            match note.destination {
+                NoteDestination::GitHub => "Draft · posted with your review",
+                NoteDestination::Local => "Local note",
+            }
+        } else {
+            "Outdated note"
         };
         card_frame().child(self.render_note_body(note, label, cx))
     }

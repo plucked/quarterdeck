@@ -55,7 +55,7 @@ fn completion_requires_every_captured_path_and_explicit_bucket_order() {
         .finished_buckets(finished.receipt.unwrap().as_str())
         .unwrap();
     assert_eq!(
-        buckets[0].files,
+        buckets[0].files().collect::<Vec<_>>(),
         ["asset.bin", "generated/file", "moved.rs"]
     );
     assert_eq!(buckets[1].order, 2);

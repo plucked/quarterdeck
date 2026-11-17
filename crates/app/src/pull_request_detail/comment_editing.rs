@@ -173,6 +173,9 @@ impl PullRequestDetail {
             } => Some(CommentRange::ending_at(*file, *side, *line, *start_line)),
             EditorTarget::EditNote(id) => {
                 let note = self.review().comments.note(*id)?;
+                if !note.matches_revision(self.shown_head_sha(), self.shown_base_sha.as_deref()) {
+                    return None;
+                }
                 let NoteAnchor::Line {
                     side,
                     line,
@@ -255,6 +258,7 @@ impl PullRequestDetail {
         if let Some(editor) = self.review_mut().editor.take() {
             let file = self.editor_file(&editor.target);
             self.refresh_comment_files(&[file]);
+            self.resume_deferred_reload(cx);
             cx.notify();
         }
     }
@@ -270,6 +274,7 @@ impl PullRequestDetail {
         let body = editor.text.read(cx).text().trim().to_owned();
         if body.is_empty() {
             self.refresh_comment_files(&[file]);
+            self.resume_deferred_reload(cx);
             cx.notify();
             return;
         }
@@ -323,6 +328,7 @@ impl PullRequestDetail {
             }
         }
         self.refresh_comment_files(&[file]);
+        self.resume_deferred_reload(cx);
         cx.notify();
     }
 }

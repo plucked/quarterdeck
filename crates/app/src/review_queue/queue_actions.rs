@@ -17,9 +17,11 @@ impl ReviewQueue {
         match event {
             DetailEvent::Scrolled => self.record_view_state(cx),
             DetailEvent::OpenLayer(request) => self.open_layer(request, cx),
-            DetailEvent::PullRequestChanged => {
+            DetailEvent::PullRequestChanged(id) => {
                 // Keep it in view after the refresh drops it from the lists.
-                self.selection_origin = SelectionOrigin::Finished;
+                if self.selected_pull_request().is_some_and(|pr| pr.id == *id) {
+                    self.selection_origin = SelectionOrigin::Finished;
+                }
                 self.refresh(cx);
             }
             DetailEvent::TargetChanged => cx.notify(),

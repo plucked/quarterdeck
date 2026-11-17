@@ -9,11 +9,12 @@ use crate::{PullRequestBranches, ViewerReview};
 const LOOKUP_QUERY: AliasedPullRequestsQuery = AliasedPullRequestsQuery {
     operation: "PullRequestLookup",
     alias_prefix: "pr",
-    selection: "number headRefName baseRefName viewerLatestReview { state }",
+    selection: "number headRefName baseRefName viewerLatestReview { state } stack { number size baseRefName } stackEntry { position }",
 };
 
 /// What a lookup found of one pull request.
 pub(crate) struct LookedUpPullRequest {
+    pub stack: Option<crate::StackMembership>,
     pub branches: PullRequestBranches,
     pub viewer_review: Option<ViewerReview>,
 }
@@ -39,7 +40,21 @@ struct LookupNode {
     number: u64,
     head_ref_name: String,
     base_ref_name: String,
+    stack: Option<Stack>,
+    stack_entry: Option<Entry>,
     viewer_latest_review: Option<ReviewNode>,
+}
+
+#[derive(Deserialize)]
+struct Entry {
+    position: u64,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Stack {
+    number: u64,
+    size: u64,
+    base_ref_name: String,
 }
 
 #[derive(Deserialize)]
@@ -54,6 +69,15 @@ impl PullRequestLookupData {
             .into_pull_requests()
             .map(|node| {
                 let looked_up = LookedUpPullRequest {
+                    stack: node
+                        .stack
+                        .zip(node.stack_entry)
+                        .map(|(s, e)| crate::StackMembership {
+                            number: s.number,
+                            size: s.size,
+                            base_ref: s.base_ref_name,
+                            position: e.position,
+                        }),
                     branches: PullRequestBranches {
                         head_ref: node.head_ref_name,
                         base_ref: node.base_ref_name,
@@ -78,7 +102,7 @@ mod tests {
     fn writes_one_aliased_field_per_number() {
         assert_eq!(
             pull_request_lookup_query(&[7, 12]),
-            "query PullRequestLookup($owner: String!, $name: String!) {\n  repository(owner: $owner, name: $name) {\n    pr7: pullRequest(number: 7) { number headRefName baseRefName viewerLatestReview { state } }\n    pr12: pullRequest(number: 12) { number headRefName baseRefName viewerLatestReview { state } }\n  }\n}\n"
+            "query PullRequestLookup($owner: String!, $name: String!) {\n  repository(owner: $owner, name: $name) {\n    pr7: pullRequest(number: 7) { number headRefName baseRefName viewerLatestReview { state } stack { number size baseRefName } stackEntry { position } }\n    pr12: pullRequest(number: 12) { number headRefName baseRefName viewerLatestReview { state } stack { number size baseRefName } stackEntry { position } }\n  }\n}\n"
         );
     }
 
@@ -87,7 +111,7 @@ mod tests {
     fn reads_pull_requests_by_number() {
         let json = r#"{"data": {"repository": {
             "pr7": {"number": 7, "headRefName": "feat/x", "baseRefName": "main",
-                    "viewerLatestReview": {"state": "APPROVED"}},
+                    "viewerLatestReview": {"state": "APPROVED"},"stack":{"number":2,"size":3,"baseRefName":"main"},"stackEntry":{"position":1}},
             "pr8": {"number": 8, "headRefName": "fix/y", "baseRefName": "main",
                     "viewerLatestReview": {"state": "PENDING"}},
             "pr9": null
@@ -96,6 +120,8 @@ mod tests {
         let found = response.into_data().unwrap().into_pull_requests();
         assert_eq!(found.len(), 2);
         assert_eq!(found[&7].branches.head_ref, "feat/x");
+        assert_eq!(found[&7].stack.as_ref().unwrap().number, 2);
+        assert_eq!(found[&8].stack, None);
         assert_eq!(found[&7].viewer_review, Some(ViewerReview::Approved));
         assert_eq!(found[&8].viewer_review, None);
     }

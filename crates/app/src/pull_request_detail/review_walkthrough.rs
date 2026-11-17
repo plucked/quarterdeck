@@ -57,21 +57,7 @@ impl ReviewWalkthrough {
         let mut covered = HashSet::new();
         if let Some(plan) = plan {
             for bucket in &plan.buckets {
-                let legacy: Vec<_>;
-                let items = if bucket.items.is_empty() {
-                    legacy = bucket
-                        .files
-                        .iter()
-                        .map(|path| SmartReviewItem {
-                            label: path.clone(),
-                            description: String::new(),
-                            files: vec![path.clone()],
-                        })
-                        .collect();
-                    &legacy
-                } else {
-                    &bucket.items
-                };
+                let items = &bucket.items;
                 let prepared = items
                     .iter()
                     .filter_map(|item| {
@@ -418,7 +404,6 @@ mod tests {
                 label: "Format".into(),
                 description: "Read the format".into(),
                 suggest_viewed: false,
-                files: paths[..3].iter().map(|path| (*path).into()).collect(),
                 items: vec![
                     SmartReviewItem {
                         label: "Format".into(),

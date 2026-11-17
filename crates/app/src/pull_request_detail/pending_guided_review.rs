@@ -116,7 +116,6 @@ mod tests {
                     label: run_id.into(),
                     description: "Review the change.".into(),
                     suggest_viewed: false,
-                    files: vec!["source.rs".into()],
                     items: vec![],
                 }],
             },

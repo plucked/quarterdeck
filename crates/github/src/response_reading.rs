@@ -17,9 +17,19 @@ impl GitHubClient {
     /// success with an empty body.
     pub(crate) fn read_response(
         &self,
-        mut response: Response<Body>,
+        response: Response<Body>,
         on_progress: &mut dyn FnMut(DownloadProgress),
     ) -> Result<HttpResponse, GitHubError> {
+        self.read_response_body(response, on_progress, false)
+    }
+
+    pub(crate) fn read_response_body(
+        &self,
+        mut response: Response<Body>,
+        on_progress: &mut dyn FnMut(DownloadProgress),
+        raw_blob: bool,
+    ) -> Result<HttpResponse, GitHubError> {
+        use crate::file_text_requests::{MAX_FILE_TEXT_BYTES, check_text_size};
         // Count it and keep the budget before judging the answer.
         let status = response.status();
         let headers = response.headers().clone();
@@ -29,13 +39,32 @@ impl GitHubClient {
 
         // Read the whole body (so an error status can carry GitHub's message), in chunks to report progress.
         let total_bytes = response.body().content_length();
-        let mut reader = response.body_mut().as_reader();
+        let bounded = raw_blob && status.is_success();
+        if bounded && let Some(size) = total_bytes {
+            check_text_size(size)?;
+        }
+        let mut reader = response.body_mut().as_reader().take(if bounded {
+            MAX_FILE_TEXT_BYTES + 1
+        } else {
+            u64::MAX
+        });
         let mut bytes = Vec::new();
         let mut chunk = vec![0; READ_CHUNK_BYTES];
         loop {
             let read = reader.read(&mut chunk).map_err(ureq::Error::from)?;
             if read == 0 {
                 break;
+            }
+            if bounded {
+                let probe = crate::file_text_requests::BINARY_PROBE_BYTES
+                    .saturating_sub(bytes.len())
+                    .min(read);
+                if chunk[..probe].contains(&0) {
+                    return Err(GitHubError::NoFileText {
+                        reason: "is binary",
+                    });
+                }
+                check_text_size((bytes.len() + read) as u64)?;
             }
             bytes.extend_from_slice(&chunk[..read]);
             on_progress(DownloadProgress {
@@ -121,6 +150,18 @@ mod tests {
     use ureq::http::HeaderValue;
 
     use super::*;
+
+    #[test]
+    fn chunked_blobs_stop_at_the_text_limit_and_binary_probe() {
+        let client = GitHubClient::new("unused");
+        for (byte, reason) in [(b'x', "is larger than 8 MB"), (0, "is binary")] {
+            // An infinite body can only finish if the reader stops early.
+            let response = Response::new(Body::builder().reader(std::io::repeat(byte)));
+            assert!(
+                matches!(client.read_response_body(response,&mut |_|{},true),Err(GitHubError::NoFileText {reason:r}) if r==reason)
+            );
+        }
+    }
 
     fn headers(pairs: &[(&'static str, &'static str)]) -> HeaderMap {
         let mut headers = HeaderMap::new();

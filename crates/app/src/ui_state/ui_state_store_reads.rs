@@ -11,7 +11,8 @@ pub fn read_review_notes(
     store: &SharedUiStateStore,
     scope: &ReviewScope,
 ) -> (Vec<ReviewNote>, Option<ReviewSummary>) {
-    let store = store.lock();
+    let shared = store;
+    let store = shared.lock();
     let mut notes = Vec::new();
     for destination in [NoteDestination::Local, NoteDestination::GitHub] {
         match store.review_notes(scope, destination) {
@@ -19,7 +20,7 @@ pub fn read_review_notes(
             Err(error) => eprintln!("ui state: ignoring review notes: {error:#}"),
         }
     }
-    let summary = match scope {
+    let mut summary = match scope {
         ReviewScope::PullRequest(pull_request_id) => store
             .review_summary(*pull_request_id)
             .unwrap_or_else(|error| {
@@ -28,6 +29,9 @@ pub fn read_review_notes(
             }),
         ReviewScope::CombinedLayers { .. } => None,
     };
+    for change in shared.review_writes().iter() {
+        change.overlay(scope, &mut notes, &mut summary);
+    }
     (notes, summary)
 }
 

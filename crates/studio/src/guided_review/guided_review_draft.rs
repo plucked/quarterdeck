@@ -396,11 +396,6 @@ impl GuidedReviewDraft {
                     label: accepted.candidate.label.trim().into(),
                     description: accepted.candidate.description.trim().into(),
                     suggest_viewed: accepted.candidate.suggest_viewed,
-                    files: accepted
-                        .items
-                        .iter()
-                        .flat_map(|item| item.files.clone())
-                        .collect(),
                     items: accepted.items.clone(),
                 }
             })

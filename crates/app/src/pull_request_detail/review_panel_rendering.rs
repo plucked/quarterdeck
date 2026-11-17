@@ -46,6 +46,16 @@ impl PullRequestDetail {
                     .render()
                     .map(|status| div().flex_none().child(status)),
             )
+            .children(
+                cx.global::<crate::ui_state::UiStateRecorder>()
+                    .review_save_error
+                    .as_ref()
+                    .map(|e| {
+                        div()
+                            .text_color(theme::danger())
+                            .child(format!("Draft changes are unsaved. Retrying: {e}"))
+                    }),
+            )
             .child(body)
     }
 
@@ -84,7 +94,7 @@ impl PullRequestDetail {
             .flex_col()
             .gap_3()
             .child(SectionLabel::new(format!("Your drafts ({count})")).compact())
-            .child(Self::render_note_list(&drafts, "Click + beside a line in the diff to comment on it. Drafts are posted when you submit.", cx))
+            .child(self.render_note_list(&drafts, "Click + beside a line in the diff to comment on it. Drafts are posted when you submit.", cx))
             .when(has_pending, |panel| {
                 panel.child(
                     div()
@@ -165,7 +175,7 @@ impl PullRequestDetail {
             .when(picker.is_some(), |panel| panel.flex_1().min_h_0())
             .child(div().flex_none().child(SectionLabel::new(format!("Local notes ({count})")).compact()))
             // The note count remains visible; closing sessions restores the full preview.
-            .when(picker.is_none(), |panel| panel.child(Self::render_note_list(&notes, "Click + beside a line in the diff to note something. Notes stay on this Mac.", cx)))
+            .when(picker.is_none(), |panel| panel.child(self.render_note_list(&notes, "Click + beside a line in the diff to note something. Notes stay on this Mac.", cx)))
             .child(
                 div()
                     .flex_none()
@@ -200,6 +210,7 @@ impl PullRequestDetail {
     /// The notes as a list by file: lines and the note's first line;
     /// clicking jumps to it in the diff, × deletes it.
     fn render_note_list(
+        &self,
         notes: &[&ReviewNote],
         empty: &'static str,
         cx: &mut Context<Self>,
@@ -223,7 +234,15 @@ impl PullRequestDetail {
                 current_path = Some(&note.path);
             }
             let id = note.id;
-            let lines = note_lines_label(&note.anchor);
+            let outdated =
+                !note.matches_revision(self.shown_head_sha(), self.shown_base_sha.as_deref());
+            let label = note_lines_label(&note.anchor);
+            let lines = if outdated {
+                format!("Outdated · {label}")
+            } else {
+                label
+            };
+            let body = note.body.clone();
             let first_line = note.body.lines().next().unwrap_or_default().to_owned();
             let key = SharedString::from(format!("{id:?}"));
             list = list.child(
@@ -251,6 +270,18 @@ impl PullRequestDetail {
                             .child(NumberFlow::label(lines)),
                     )
                     .child(div().flex_1().min_w_0().truncate().child(first_line))
+                    .when(outdated, |row| {
+                        row.child(
+                            Button::new(element_id("copy-outdated", &key), "Copy draft").on_click(
+                                cx.listener(move |_, _, _, cx| {
+                                    cx.stop_propagation();
+                                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                        body.clone(),
+                                    ));
+                                }),
+                            ),
+                        )
+                    })
                     .child(
                         div()
                             .id(element_id("note-delete", &key))

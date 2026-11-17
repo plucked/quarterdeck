@@ -4,6 +4,7 @@ use crate::{LineSide, ReviewEvent};
 /// diff and replies to existing ones.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReviewSubmission {
+    pub head_sha: String,
     pub event: ReviewEvent,
     /// Markdown; may be empty when there are comments.
     pub body: String,

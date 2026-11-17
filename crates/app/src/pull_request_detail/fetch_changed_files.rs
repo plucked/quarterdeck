@@ -10,6 +10,12 @@ use crate::shared_cache::SharedCache;
 /// Above this count, try one diff download before fetching individual API pages.
 const DIFF_DOWNLOAD_FILE_THRESHOLD: u64 = 500;
 
+/// Files and the two immutable commits that identify the displayed diff.
+pub(super) struct FileSnapshot {
+    pub files: Vec<PullRequestFile>,
+    pub revision: qd_github::PullRequestRevision,
+}
+
 /// Where a pull request's files come from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FileSource {
@@ -51,14 +57,46 @@ pub fn fetch_changed_files(
     cache: &SharedCache,
     pull_request: &PullRequest,
     on_progress: &mut dyn FnMut(LoadProgress),
-) -> Result<Vec<PullRequestFile>> {
+) -> Result<FileSnapshot> {
+    let first = fetch_once(client.clone(), cache, pull_request, on_progress);
+    if first
+        .as_ref()
+        .is_err_and(anyhow::Error::is::<RevisionChanged>)
+    {
+        fetch_once(client, cache, pull_request, on_progress)
+    } else {
+        first
+    }
+}
+
+#[derive(Debug)]
+struct RevisionChanged;
+impl std::fmt::Display for RevisionChanged {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            "The pull request changed during download. Refresh to review its current files.",
+        )
+    }
+}
+impl std::error::Error for RevisionChanged {}
+
+fn fetch_once(
+    client: Result<GitHubClient, String>,
+    cache: &SharedCache,
+    pull_request: &PullRequest,
+    on_progress: &mut dyn FnMut(LoadProgress),
+) -> Result<FileSnapshot> {
     // Step 1: a set confirmed for this version needs no request.
     let cached = cache.lock().file_set(pull_request.id)?;
-    if let Some(set) = &cached
-        && set.is_current_for(pull_request)
-    {
-        return Ok(cached.map(|set| set.files).unwrap_or_default());
-    }
+    let cached = match cached {
+        Some(set) if set.is_current_for(pull_request) => {
+            return Ok(FileSnapshot {
+                files: set.files,
+                revision: set.revision.commits,
+            });
+        }
+        other => other,
+    };
 
     // Step 2: ask for the commits, free when nothing changed since the tag.
     let client = client.map_err(anyhow::Error::msg)?;
@@ -76,7 +114,10 @@ pub fn fetch_changed_files(
     match update {
         FileSetUpdate::Confirm { files, revision } => {
             cache.lock().confirm_files(pull_request, &revision)?;
-            Ok(files)
+            Ok(FileSnapshot {
+                files,
+                revision: revision.commits,
+            })
         }
         FileSetUpdate::Refetch {
             revision,
@@ -88,18 +129,23 @@ pub fn fetch_changed_files(
                         fetched: 0,
                         total: Some(expected_files),
                     });
-                    client
-                        .pull_request_files(
-                            &pull_request.repo,
-                            pull_request.number,
-                            &mut |fetched| {
-                                on_progress(LoadProgress::FetchingFiles {
-                                    fetched,
-                                    total: Some(expected_files),
-                                });
-                            },
-                        )
-                        .map_err(Into::into)
+                    let files = client.pull_request_files(
+                        &pull_request.repo,
+                        pull_request.number,
+                        &mut |fetched| {
+                            on_progress(LoadProgress::FetchingFiles {
+                                fetched,
+                                total: Some(expected_files),
+                            });
+                        },
+                    )?;
+                    let checked = client.pull_request_revision(
+                        &pull_request.repo,
+                        pull_request.number,
+                        None,
+                    )?;
+                    verify_page_revision(&revision.commits, checked)?;
+                    Ok(files)
                 }
                 FileSource::WholeDiff => {
                     on_progress(LoadProgress::DownloadingDiff(DownloadProgress {
@@ -117,10 +163,25 @@ pub fn fetch_changed_files(
                 }
             })?;
             cache.lock().put_files(pull_request, &files, &revision)?;
-            Ok(files)
+            Ok(FileSnapshot {
+                files,
+                revision: revision.commits,
+            })
         }
         // Asked again without a tag, GitHub cannot answer "not modified".
-        FileSetUpdate::AskWithoutTag => Ok(Vec::new()),
+        FileSetUpdate::AskWithoutTag => bail!("GitHub returned no revision to display"),
+    }
+}
+
+fn verify_page_revision(
+    expected: &qd_github::PullRequestRevision,
+    answer: qd_github::ConditionalResponse<qd_github::RevisionCheck>,
+) -> Result<()> {
+    if matches!(answer, qd_github::ConditionalResponse::Modified {value, ..} if value.revision == *expected)
+    {
+        Ok(())
+    } else {
+        Err(RevisionChanged.into())
     }
 }
 
@@ -327,6 +388,35 @@ mod tests {
             })
             .unwrap_err();
             assert!(error.downcast_ref::<GitHubError>().unwrap().is_throttled());
+        }
+    }
+}
+
+#[cfg(test)]
+mod revision_tests {
+    use super::*;
+    use qd_github::{ConditionalResponse, PullRequestRevision, RevisionCheck};
+    #[test]
+    fn equal_counts_do_not_hide_a_push_or_rebase() {
+        let rev = |head: &str, base: &str| PullRequestRevision {
+            head_sha: head.into(),
+            base_sha: base.into(),
+        };
+        for (head, base, valid) in [("h", "b", true), ("new", "b", false), ("h", "new", false)] {
+            assert_eq!(
+                verify_page_revision(
+                    &rev("h", "b"),
+                    ConditionalResponse::Modified {
+                        value: RevisionCheck {
+                            revision: rev(head, base),
+                            changed_files: 2
+                        },
+                        etag: None
+                    }
+                )
+                .is_ok(),
+                valid
+            );
         }
     }
 }

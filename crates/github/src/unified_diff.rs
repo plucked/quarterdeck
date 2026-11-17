@@ -13,7 +13,7 @@ const INDEX_HEADER: &str = "index ";
 /// answer) into one changed file per section, shaped like the files API's
 /// entries: the patch is the section from its first hunk header, as the
 /// files API gives it, and absent for binary files and pure renames.
-pub(crate) fn files_of_unified_diff(diff: &str) -> Vec<PullRequestFile> {
+pub(crate) fn files_of_unified_diff(diff: &str) -> Option<Vec<PullRequestFile>> {
     // Cut the text at every file header, then read each section on its own.
     let mut sections: Vec<Vec<&str>> = Vec::new();
     for line in diff.lines() {
@@ -21,17 +21,21 @@ pub(crate) fn files_of_unified_diff(diff: &str) -> Vec<PullRequestFile> {
             (true, _) => sections.push(vec![line]),
             (false, Some(section)) => section.push(line),
             // Text before the first header (none in git's output) belongs to no file.
-            (false, None) => {}
+            (false, None) if line.trim().is_empty() => {}
+            (false, None) => return None,
         }
     }
     sections
         .iter()
-        .filter_map(|section| file_of_section(section))
+        .map(|section| file_of_section(section))
         .collect()
 }
 
 /// The file one section describes; `None` when no path can be read.
 fn file_of_section(section: &[&str]) -> Option<PullRequestFile> {
+    if section.len() < 2 {
+        return None;
+    }
     let first_hunk = section
         .iter()
         .position(|line| line.starts_with(HUNK_HEADER))
@@ -41,7 +45,7 @@ fn file_of_section(section: &[&str]) -> Option<PullRequestFile> {
     // Read the extended headers: they say how the file changed and its paths.
     let mut header = SectionHeader::default();
     for line in headers {
-        header.read(line);
+        header.read(line)?;
     }
 
     // Count the changed lines of the hunks; header lines start with "@@".
@@ -50,7 +54,7 @@ fn file_of_section(section: &[&str]) -> Option<PullRequestFile> {
     let (filename, previous_filename) = header.paths(section[0])?;
     Some(PullRequestFile {
         status: header.kind.status().to_owned(),
-        previous_filename: (header.kind == ChangeKind::Renamed)
+        previous_filename: (matches!(header.kind, ChangeKind::Renamed | ChangeKind::Copied))
             .then_some(previous_filename)
             .flatten(),
         filename,
@@ -101,30 +105,31 @@ struct SectionHeader {
 impl SectionHeader {
     /// Takes in one header line; lines it does not know (modes,
     /// `similarity index`, `Binary files …`) change nothing.
-    fn read(&mut self, line: &str) {
+    fn read(&mut self, line: &str) -> Option<()> {
         if line.starts_with("new file mode") {
             self.kind = ChangeKind::Added;
         } else if line.starts_with("deleted file mode") {
             self.kind = ChangeKind::Removed;
         } else if let Some(path) = line.strip_prefix("rename from ") {
             self.kind = ChangeKind::Renamed;
-            self.old_path = Some(unquoted(path));
+            self.old_path = Some(unquoted(path)?);
         } else if let Some(path) = line.strip_prefix("rename to ") {
             self.kind = ChangeKind::Renamed;
-            self.new_path = Some(unquoted(path));
+            self.new_path = Some(unquoted(path)?);
         } else if let Some(path) = line.strip_prefix("copy from ") {
             self.kind = ChangeKind::Copied;
-            self.old_path = Some(unquoted(path));
+            self.old_path = Some(unquoted(path)?);
         } else if let Some(path) = line.strip_prefix("copy to ") {
             self.kind = ChangeKind::Copied;
-            self.new_path = Some(unquoted(path));
+            self.new_path = Some(unquoted(path)?);
         } else if let Some(path) = line.strip_prefix("--- ") {
-            self.old_path = self.old_path.take().or_else(|| side_path(path, "a/"));
+            read_side_path(&mut self.old_path, path, "a/")?;
         } else if let Some(path) = line.strip_prefix("+++ ") {
-            self.new_path = self.new_path.take().or_else(|| side_path(path, "b/"));
+            read_side_path(&mut self.new_path, path, "b/")?;
         } else if let Some(blobs) = line.strip_prefix(INDEX_HEADER) {
             self.new_blob = new_blob_of_index(blobs);
         }
+        Some(())
     }
 
     /// The file's path (the old one for a deleted file) and the path before;
@@ -152,14 +157,13 @@ fn new_blob_of_index(blobs: &str) -> Option<String> {
     (is_hex && !is_deleted).then(|| new.to_owned())
 }
 
-/// The path of a `---`/`+++` line without its `a/`/`b/` prefix; `None` for
-/// `/dev/null` (the side that does not exist).
-fn side_path(path: &str, prefix: &str) -> Option<String> {
-    let path = unquoted(path);
-    if path == NO_FILE {
-        return None;
+/// Read a side header, retaining extended rename/copy headers when present.
+fn read_side_path(slot: &mut Option<String>, raw: &str, prefix: &str) -> Option<()> {
+    let path = unquoted(raw.split('\t').next()?)?;
+    if path != NO_FILE {
+        slot.get_or_insert(path.strip_prefix(prefix)?.to_owned());
     }
-    Some(path.strip_prefix(prefix).unwrap_or(&path).to_owned())
+    Some(())
 }
 
 /// The two paths of `diff --git a/OLD b/NEW`. Paths with spaces are
@@ -167,33 +171,57 @@ fn side_path(path: &str, prefix: &str) -> Option<String> {
 /// paths wins (the common unchanged-path case), else the first ` b/`.
 fn header_line_paths(line: &str) -> Option<(String, String)> {
     let paths = line.strip_prefix(FILE_HEADER)?;
-    if let Some((old, new)) = quoted_pair(paths) {
-        return Some((old, new));
+    // Find a delimiter outside a quoted path. Unquoted paths may contain
+    // spaces and even " b/"; identical halves identify ordinary changes.
+    let mut candidate = None;
+    for (i, _) in paths.match_indices(' ') {
+        let (Some(old), Some(new)) = (unquoted(&paths[..i]), unquoted(&paths[i + 1..])) else {
+            continue;
+        };
+        let (Some(old), Some(new)) = (old.strip_prefix("a/"), new.strip_prefix("b/")) else {
+            continue;
+        };
+        if old == new {
+            return Some((old.into(), new.into()));
+        }
+        candidate.get_or_insert_with(|| (old.into(), new.into()));
     }
-    let rest = paths.strip_prefix("a/")?;
-    let half = rest.len().saturating_sub(2) / 2;
-    if rest.get(half..half + 3) == Some(" b/") && rest[..half] == rest[half + 3..] {
-        return Some((rest[..half].to_owned(), rest[half + 3..].to_owned()));
-    }
-    let (old, new) = rest.split_once(" b/")?;
-    Some((old.to_owned(), new.to_owned()))
+    candidate
 }
 
-/// The paths of a header whose paths git quoted (`"a/x y" "b/x y"`).
-fn quoted_pair(paths: &str) -> Option<(String, String)> {
-    let rest = paths.strip_prefix("\"a/")?;
-    let (old, rest) = rest.split_once('"')?;
-    let new = rest.trim_start().strip_prefix("\"b/")?.strip_suffix('"')?;
-    Some((old.to_owned(), new.to_owned()))
-}
-
-/// A path without the quotes git puts around unusual names; octal escapes
-/// inside stay as written.
-fn unquoted(path: &str) -> String {
-    path.strip_prefix('"')
-        .and_then(|inner| inner.strip_suffix('"'))
-        .unwrap_or(path)
-        .to_owned()
+/// Decode Git's C-style quoted bytes before interpreting them as UTF-8.
+fn unquoted(path: &str) -> Option<String> {
+    if !path.starts_with('"') {
+        return Some(path.to_owned());
+    }
+    let mut input = path.strip_prefix('"')?.strip_suffix('"')?.bytes();
+    let mut out = Vec::new();
+    while let Some(ch) = input.next() {
+        out.push(match ch {
+            b'"' => return None,
+            b'\\' => match input.next()? {
+                b'a' => 7,
+                b'b' => 8,
+                b't' => 9,
+                b'n' => 10,
+                b'v' => 11,
+                b'f' => 12,
+                b'r' => 13,
+                c @ (b'"' | b'\\') => c,
+                a @ b'0'..=b'3' => {
+                    let b = input.next()?;
+                    let c = input.next()?;
+                    if !(b'0'..=b'7').contains(&b) || !(b'0'..=b'7').contains(&c) {
+                        return None;
+                    }
+                    (a - b'0') * 64 + (b - b'0') * 8 + (c - b'0')
+                }
+                _ => return None,
+            },
+            c => c,
+        });
+    }
+    String::from_utf8(out).ok()
 }
 
 #[cfg(test)]
@@ -234,7 +262,7 @@ Binary files a/logo.png and b/logo.png differ
     /// Each section becomes a file with the files API's status, paths, counts and patch.
     #[test]
     fn splits_sections_into_files() {
-        let files = files_of_unified_diff(DIFF);
+        let files = files_of_unified_diff(DIFF).unwrap();
         let summary: Vec<(&str, &str, u64, u64, bool)> = files
             .iter()
             .map(|file| {
@@ -264,7 +292,7 @@ Binary files a/logo.png and b/logo.png differ
     /// The blob after the change comes from the `index` line; deleted files and renames without one have none.
     #[test]
     fn reads_the_new_blob_from_the_index_line() {
-        let files = files_of_unified_diff(DIFF);
+        let files = files_of_unified_diff(DIFF).unwrap();
         let blobs: Vec<Option<&str>> = files.iter().map(|file| file.sha.as_deref()).collect();
         assert_eq!(
             blobs,
@@ -281,10 +309,26 @@ Binary files a/logo.png and b/logo.png differ
     /// The patch starts at the first hunk header, like the files API's.
     #[test]
     fn patch_starts_at_first_hunk() {
-        let files = files_of_unified_diff(DIFF);
+        let files = files_of_unified_diff(DIFF).unwrap();
         assert_eq!(
             files[0].patch.as_deref(),
             Some("@@ -1,2 +1,2 @@\n fn main() {\n-    old();\n+    new();")
+        );
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+    #[test]
+    fn handles_mixed_quoted_rename_and_space_terminator() {
+        let diff = "diff --git a/source \"b/na\\303\\257ve\"\nrename from source\nrename to \"na\\303\\257ve\"\ndiff --git a/a b b/a b\n+++ b/a b\t\n@@ -1 +1 @@\n+x";
+        let files = files_of_unified_diff(diff).unwrap();
+        assert_eq!(files[0].filename, "naïve");
+        assert_eq!(files[1].filename, "a b");
+        assert!(files_of_unified_diff(&format!("{diff}\ndiff --git malformed")).is_none());
+        assert!(
+            files_of_unified_diff(&format!("{diff}\ndiff --git a/truncated b/truncated")).is_none()
         );
     }
 }

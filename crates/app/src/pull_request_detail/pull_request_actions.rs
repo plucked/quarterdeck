@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use gpui::{BackgroundExecutor, Context};
 use qd_github::{GitHubClient, GitHubError, MergeMethod, MergeOptions, MergeOutcome, RepoRef};
 
-use super::action_panel::{ActionPanel, ArmedAction, PanelAction};
+use super::action_panel::{ActionPanel, ArmedAction, ConfirmedAction, PanelAction};
 use super::detail_event::DetailEvent;
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
@@ -73,8 +73,18 @@ impl PullRequestDetail {
         let Some(options) = options else {
             return false;
         };
+        let known_stack = self
+            .pull_request()
+            .and_then(|pr| pr.stack.as_ref())
+            .map(|stack| stack.number);
         options.permissions.can_delete_head_ref
             && !options.is_cross_repository
+            && options.stack_number.or(known_stack).is_none_or(|number| {
+                !self.is_stack_loading()
+                    && self.stack_error().is_none()
+                    && self.stack().is_some_and(|stack| stack.number == number)
+                    && self.current_layer_index().is_some()
+            })
             && self.layer_above_head().is_none()
     }
 
@@ -119,20 +129,23 @@ impl PullRequestDetail {
     /// rules), followed until GitHub finishes it, or closing; then deletes
     /// the head branch when asked. The queue refreshes after it.
     pub(super) fn run_armed_action(&mut self, cx: &mut Context<Self>) {
-        let Some(panel) = self.action_panel() else {
+        let (Some(pull_request), Ok(client)) =
+            (self.pull_request().cloned(), self.services().github.clone())
+        else {
             return;
         };
-        let (Some(armed), Some(options), Some(pull_request), Ok(client)) = (
-            panel.armed,
-            panel.options.clone(),
-            self.pull_request().cloned(),
-            self.services().github.clone(),
-        ) else {
+        let may_delete =
+            self.can_delete_head_branch(self.action_panel().and_then(|p| p.options.as_ref()));
+        let shown_head = self.shown_head_sha.clone();
+        let Some(panel) = self.action_panel_mut() else {
             return;
         };
-        let method = panel.method;
-        // The branch goes when asked, and always for a finished pull request's branch.
-        let delete_branch = panel.delete_branch || armed == ArmedAction::DeleteBranch;
+        let Some((command, delete_branch)) = panel.confirm(shown_head.as_deref(), may_delete)
+        else {
+            cx.notify();
+            return;
+        };
+        let armed = command.kind();
         let working = match armed {
             ArmedAction::Merge | ArmedAction::AdminMerge => "Merging on GitHub…",
             ArmedAction::Close => "Closing on GitHub…",
@@ -143,14 +156,13 @@ impl PullRequestDetail {
             let number = pull_request.number;
 
             // The action itself: start a merge, or close.
-            let started = match armed {
-                ArmedAction::Merge | ArmedAction::AdminMerge => {
-                    let Some(method) = method else {
-                        return;
-                    };
-                    let (start_client, start_repo, head_sha) =
-                        (client.clone(), repo.clone(), options.head_sha.clone());
-                    let bypass = armed == ArmedAction::AdminMerge;
+            let started = match command {
+                ConfirmedAction::Merge {
+                    method,
+                    head_sha,
+                    bypass,
+                } => {
+                    let (start_client, start_repo) = (client.clone(), repo.clone());
                     cx.background_executor()
                         .spawn(async move {
                             start_client.start_merge(&start_repo, number, method, &head_sha, bypass)
@@ -158,8 +170,8 @@ impl PullRequestDetail {
                         .await
                 }
                 // The pull request is finished already; only the branch goes.
-                ArmedAction::DeleteBranch => Ok(MergeOutcome::Merged),
-                ArmedAction::Close => {
+                ConfirmedAction::DeleteBranch => Ok(MergeOutcome::Merged),
+                ConfirmedAction::Close => {
                     let (close_client, close_repo) = (client.clone(), repo.clone());
                     cx.background_executor()
                         .spawn(async move { close_client.close_pull_request(&close_repo, number) })
@@ -175,8 +187,10 @@ impl PullRequestDetail {
 
             // The branch goes once the pull request is merged or closed (not while queued).
             let mut branch_error = None;
-            if delete_branch && matches!(outcome, Ok(MergeOutcome::Merged)) {
-                let (branch_client, branch) = (client.clone(), options.head_ref.clone());
+            if let Some(branch) = delete_branch
+                && matches!(outcome, Ok(MergeOutcome::Merged))
+            {
+                let branch_client = client.clone();
                 if let Err(error) = cx
                     .background_executor()
                     .spawn(async move { branch_client.delete_branch(&repo, &branch) })
@@ -190,12 +204,12 @@ impl PullRequestDetail {
                 .update(cx, |detail, cx| {
                     let progress = action_result(armed, &outcome, branch_error.as_deref());
                     let is_done = matches!(progress, OperationStatus::Done(_));
-                    if let Some(panel) = detail.action_panel_mut() {
+                    if let Some(panel) = detail.panel_for_operation(pull_request.id) {
                         panel.progress = progress;
                         panel.armed = None;
                     }
                     if is_done {
-                        cx.emit(DetailEvent::PullRequestChanged);
+                        cx.emit(DetailEvent::PullRequestChanged(pull_request.id));
                     }
                     cx.notify();
                 })

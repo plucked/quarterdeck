@@ -46,16 +46,16 @@ enum SyncMode {
 }
 
 impl SyncMode {
-    /// Since the last sync's end when known; else since the newest known
-    /// pull request; else Full.
-    fn decide(known: &[PullRequest], synced_until: Option<&str>) -> Self {
-        let newest_known = known
-            .iter()
-            .map(|pull_request| pull_request.updated_at.as_str())
-            .max();
-        synced_until
-            .or(newest_known)
-            .map_or(Self::Full, |since| Self::Since(since.to_owned()))
+    fn page_limit(&self) -> usize {
+        match self {
+            Self::Full => usize::MAX,
+            Self::Since(_) => MAX_ISSUE_PAGES,
+        }
+    }
+
+    /// Only a completed sync supplies an incremental cursor.
+    fn decide(synced_until: Option<&str>) -> Self {
+        synced_until.map_or(Self::Full, |since| Self::Since(since.to_owned()))
     }
 }
 
@@ -84,7 +84,7 @@ impl GitHubClient {
     ) -> Result<OtherPullRequestsUpdate, GitHubError> {
         // Fetch every change since the last sync; when that did not reach back
         // to its start, every open one instead.
-        let mut mode = SyncMode::decide(known, synced_until);
+        let mut mode = SyncMode::decide(synced_until);
         let mut fetched = self.repository_issues(repo, &mode)?;
         if !fetched.is_complete && mode != SyncMode::Full {
             mode = SyncMode::Full;
@@ -125,6 +125,15 @@ impl GitHubClient {
 
         // The branches and reviews of the ones read anew, which the issues API lacks.
         self.fill_missing_branches(repo, &mut pull_requests)?;
+        let known_by_id: std::collections::HashMap<_, _> =
+            known.iter().map(|pr| (pr.id, pr)).collect();
+        for pr in pull_requests.iter_mut().filter(|pr| pr.branches.is_none()) {
+            if let Some(previous) = known_by_id.get(&pr.id) {
+                pr.branches.clone_from(&previous.branches);
+                pr.stack.clone_from(&previous.stack);
+                pr.viewer_review = previous.viewer_review;
+            }
+        }
         Ok(OtherPullRequestsUpdate {
             pull_requests,
             synced_until: next_synced_until,
@@ -133,9 +142,9 @@ impl GitHubClient {
 
     /// Looks up the branches and the viewer's latest review of
     /// `pull_requests` (all of `repo`) that have no branches yet,
-    /// [`BRANCH_LOOKUPS_PER_REQUEST`] per GraphQL request. One GraphQL does
+    /// up to 100 per GraphQL request. One GraphQL does
     /// not report keeps none.
-    fn fill_missing_branches(
+    pub fn fill_missing_branches(
         &self,
         repo: &RepoRef,
         pull_requests: &mut [PullRequest],
@@ -156,6 +165,7 @@ impl GitHubClient {
                 if let Some(looked_up) = found.remove(&pull_request.number) {
                     pull_request.branches = Some(looked_up.branches);
                     pull_request.viewer_review = looked_up.viewer_review;
+                    pull_request.stack = looked_up.stack;
                 }
             }
         }
@@ -163,7 +173,7 @@ impl GitHubClient {
     }
 
     /// The issues and pull requests of `repo` that `mode` asks for, newest
-    /// first, each once, following up to [`MAX_ISSUE_PAGES`] pages.
+    /// first, each once. Full baselines follow every page.
     fn repository_issues(
         &self,
         repo: &RepoRef,
@@ -187,7 +197,7 @@ impl GitHubClient {
         let is_complete = self.linked_pages(
             &format!("{}/issues", repo.api_url()),
             &parameters,
-            MAX_ISSUE_PAGES,
+            mode.page_limit(),
             &mut |page: Vec<RepositoryIssue>| {
                 // GitHub answers a renamed repository under its new name; say so instead of listing it apart.
                 if let Some(moved_to) = page
@@ -221,9 +231,14 @@ mod tests {
     /// of the last sync wins over the newest known pull request.
     #[test]
     fn syncs_from_the_last_sync_when_known() {
-        assert_eq!(SyncMode::decide(&[], None), SyncMode::Full);
+        assert_eq!(SyncMode::decide(None), SyncMode::Full);
+        assert!(SyncMode::decide(None).page_limit() > MAX_ISSUE_PAGES);
         assert_eq!(
-            SyncMode::decide(&[], Some("2026-01-02T00:00:00Z")),
+            SyncMode::decide(Some("cursor")).page_limit(),
+            MAX_ISSUE_PAGES
+        );
+        assert_eq!(
+            SyncMode::decide(Some("2026-01-02T00:00:00Z")),
             SyncMode::Since("2026-01-02T00:00:00Z".to_owned())
         );
     }

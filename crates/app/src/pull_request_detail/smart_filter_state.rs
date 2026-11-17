@@ -102,7 +102,6 @@ mod tests {
                 label: label.into(),
                 description: "Read the changed behavior.".into(),
                 suggest_viewed: false,
-                files: vec!["source.rs".into()],
                 items: vec![],
             }],
         }

@@ -8,7 +8,7 @@ pub enum DetailEvent {
     /// The user asked to show another layer of the shown stack.
     OpenLayer(LayerRequest),
     /// The pull request was merged or closed: the lists change.
-    PullRequestChanged,
+    PullRequestChanged(u64),
     /// The files shown are of another target (one layer or combined
     /// layers); the sidebar marks a stack under combined review.
     TargetChanged,

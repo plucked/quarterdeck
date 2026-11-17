@@ -121,6 +121,8 @@ pub struct PullRequestDetail {
     pub(super) review: ReviewPane,
     /// The merge or close panel in the Actions tab, while open.
     action_panel: Option<ActionPanel>,
+    deferred_reload: Option<PullRequest>,
+    background_panels: HashMap<u64, ActionPanel>,
     /// The selected detail mode, AI-written briefs and the run in flight.
     pub(super) brief: BriefPane,
     /// The head commit of the shown files, when known: what a brief's
@@ -202,6 +204,8 @@ impl PullRequestDetail {
             row_tops: ListRowTops::from_heights([]),
             row_tops_width: None,
             action_panel: None,
+            deferred_reload: None,
+            background_panels: HashMap::new(),
             brief: BriefPane::new(detail_brief_handlers(cx)),
             shown_head_sha: None,
             shown_base_sha: None,
@@ -390,6 +394,23 @@ impl PullRequestDetail {
         self.action_panel.as_mut()
     }
 
+    pub(super) fn panel_for_operation(&mut self, id: u64) -> Option<&mut ActionPanel> {
+        if self.pull_request.as_ref().is_some_and(|pr| pr.id == id) {
+            self.action_panel.as_mut()
+        } else {
+            self.background_panels.get_mut(&id)
+        }
+    }
+
+    fn switch_action_panel(&mut self, next: Option<u64>) {
+        if let (Some(pr), Some(panel)) = (&self.pull_request, self.action_panel.take())
+            && panel.is_working()
+        {
+            self.background_panels.insert(pr.id, panel);
+        }
+        self.action_panel = next.and_then(|id| self.background_panels.remove(&id));
+    }
+
     pub(super) fn set_action_panel(&mut self, panel: Option<ActionPanel>) {
         self.action_panel = panel;
     }
@@ -461,12 +482,18 @@ impl PullRequestDetail {
         restore: Option<DetailScrollPosition>,
         cx: &mut Context<Self>,
     ) {
+        self.deferred_reload = None;
         let Some(pull_request) = pull_request else {
             self.focus_drawer.reset_contents();
             self.viewed_undo.clear();
+            self.switch_action_panel(None);
             self.pull_request = None;
             self.description = None;
             self.changed_files = None;
+            self.viewed_scope = None;
+            self.shown_head_sha = None;
+            self.shown_base_sha = None;
+            self.reset_review();
             self.files_task = None;
             self.pending_scroll = None;
             // A new stack state also cancels the stack's load.
@@ -489,6 +516,9 @@ impl PullRequestDetail {
             ShowChange::SameVersion { loads_stack } => {
                 // The stack membership can arrive later than the pull request.
                 self.pull_request = Some(pull_request);
+                if matches!(self.changed_files, Some(ChangedFiles::Failed(_))) {
+                    self.load_changed_files(cx);
+                }
                 if loads_stack {
                     self.load_stack(cx);
                 }
@@ -496,6 +526,10 @@ impl PullRequestDetail {
                 cx.notify();
             }
             ShowChange::NewVersion { is_other_stack } => {
+                if self.review.editor.is_some() {
+                    self.deferred_reload = Some(pull_request);
+                    return;
+                }
                 // A reload keeps the reader's place.
                 self.pending_scroll = restore.or_else(|| Some(self.scroll_position()));
                 if is_other_stack {
@@ -506,13 +540,21 @@ impl PullRequestDetail {
             ShowChange::OtherPullRequest { is_other_stack } => {
                 // Another pull request starts with no action panel and its summary at the top.
                 self.pending_scroll = restore;
-                self.action_panel = None;
+                self.switch_action_panel(Some(pull_request.id));
                 self.summary_scroll.set_offset(gpui::point(px(0.), px(0.)));
                 if is_other_stack {
                     self.stack.drop_layers();
                 }
                 self.show_new_version(pull_request, cx);
             }
+        }
+    }
+
+    pub(super) fn resume_deferred_reload(&mut self, cx: &mut Context<Self>) {
+        if let Some(pr) = self.deferred_reload.take() {
+            self.show(Some(pr), None, cx);
+        } else {
+            self.retarget(cx);
         }
     }
 
@@ -571,5 +613,97 @@ impl PullRequestDetail {
 
     pub(super) fn summary_scroll(&self) -> &ScrollHandle {
         &self.summary_scroll
+    }
+}
+
+#[cfg(test)]
+mod refresh_tests {
+    use super::super::action_panel::PanelAction;
+    use super::super::comment_editor::{CommentEditor, EditorTarget};
+    use super::super::operation_status::OperationStatus;
+    use super::*;
+    use crate::shared_cache::SharedCache;
+    use crate::text_area::{TextArea, TextAreaEvent};
+
+    fn pr(id: u64, version: &str) -> PullRequest {
+        PullRequest {
+            id,
+            number: id,
+            repo: qd_github::RepoRef {
+                owner: "owner".into(),
+                name: "repo".into(),
+            },
+            title: "title".into(),
+            body: None,
+            author: qd_github::User {
+                login: "user".into(),
+                avatar_url: String::new(),
+            },
+            html_url: String::new(),
+            draft: false,
+            created_at: "start".into(),
+            updated_at: version.into(),
+            labels: vec![],
+            stack: None,
+            branches: None,
+            viewer_review: None,
+        }
+    }
+
+    #[gpui::test]
+    fn automatic_refresh_keeps_the_composer_and_navigation_keeps_the_operation(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("cache");
+        let recorder = UiStateRecorder::open(&database).unwrap();
+        let services = AppServices {
+            github: Err("offline".into()),
+            token_source: None,
+            cache: SharedCache::new(qd_cache::GitHubCache::open(&database).unwrap()),
+            database,
+        };
+        cx.update(|app| {
+            app.set_global(AppSettings::load(&recorder));
+            app.set_global(recorder);
+            AvatarImages::install(app);
+        });
+        let detail = cx.new(|cx| PullRequestDetail::new(services, cx));
+        detail.update(cx, |detail, cx| {
+            detail.pull_request = Some(pr(1, "old"));
+            let text = cx.new(|cx| {
+                let mut area = TextArea::new("", cx);
+                area.set_text("unsaved comment", cx);
+                area
+            });
+            detail.review.editor = Some(CommentEditor {
+                target: EditorTarget::Reply {
+                    path: "a.rs".into(),
+                    thread_id: "thread".into(),
+                },
+                _subscription: cx.subscribe(&text, |_, _, _: &TextAreaEvent, _| {}),
+                text: text.clone(),
+            });
+            detail.show(Some(pr(1, "new")), None, cx);
+            assert_eq!(
+                detail.review.editor.as_ref().unwrap().text.read(cx).text(),
+                "unsaved comment"
+            );
+            assert_eq!(detail.deferred_reload.as_ref().unwrap().updated_at, "new");
+            detail.review.editor = None;
+            detail.resume_deferred_reload(cx);
+            assert_eq!(detail.pull_request.as_ref().unwrap().updated_at, "new");
+
+            let mut panel = ActionPanel::new(PanelAction::Close);
+            panel.progress = OperationStatus::Working("still closing".into());
+            panel.task = Some(cx.spawn(async |_, _| futures::future::pending::<()>().await));
+            detail.set_action_panel(Some(panel));
+            detail.show(Some(pr(2, "new")), None, cx);
+            assert!(detail.action_panel().is_none());
+            let background = detail.panel_for_operation(1).unwrap();
+            assert!(background.task.is_some());
+            detail.show(Some(pr(1, "new")), None, cx);
+            assert!(detail.action_panel().is_some_and(ActionPanel::is_working));
+        });
     }
 }

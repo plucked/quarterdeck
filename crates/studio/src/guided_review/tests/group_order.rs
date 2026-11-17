@@ -22,7 +22,10 @@ fn explicit_group_order_survives_recovery_and_finish() {
         .finished_buckets(finished.receipt.unwrap().as_str())
         .unwrap();
     assert_eq!(buckets[0].items[0].files, proposal.items[0].paths);
-    assert_eq!(buckets[0].files, proposal.items[0].paths);
+    assert_eq!(
+        buckets[0].files().collect::<Vec<_>>(),
+        proposal.items[0].paths
+    );
 }
 
 /// Explicit priority paths precede folder remainder, with duplicates keeping their first position.

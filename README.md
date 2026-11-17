@@ -51,7 +51,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Switch a pull request from **Diff** to **Brief** and click **Write brief**: Claude Code reads the change's diffs and walks you through it the way a colleague would: why it exists, the context you need, what changes and what stays the same, the order to read it in, how it works, and its limits. It explains; it does not review or judge the change.
 - Before writing, say how well you know the area: **I know this code well** gives just the change, **I know the area roughly** explains the mechanisms it touches, and **I'm new to this area** starts with background on that part of the system, read from the surrounding code. Quarterdeck remembers the answer per repository until you quit.
 - Briefs are kept: a ✦ in the sidebar marks pull requests that have one, and a brief says above it which commit it was written for, and warns with **Write again** when the pull request has moved on since.
-- Something wrong or weird in a brief? **Report…** at the right of the line above it saves your words with everything about how the brief was made (prompt, instructions, Claude's raw answer, what it read, plus the MCP receipt and repair history) to `~/Library/Application Support/Quarterdeck/brief-reports/`. Hand the folder's `report.md` to a Claude Code session in this repository to improve the brief tool. Code in the brief is quoted from the diff itself, and every quote opens the diff at that line. A larger change reads like a short presentation: pages from the overview through each mechanism to what to check, with tabs to jump and buttons to the next page. Where a picture explains more, the brief draws diagrams: who owns what and where data goes (before and after, when the change reshapes it), state machines, and message sequences.
+- Something wrong or weird in a brief? **Report…** at the right of the line above it saves your feedback, the brief, and available publication evidence (including the MCP receipt and repair history). Reports made in the session that generated the brief also include the accepted raw artifact and transcript. Reports are written to `~/Library/Application Support/Quarterdeck/brief-reports/`. Hand the folder's `report.md` to a Claude Code session in this repository to improve the brief tool. Code in the brief is quoted from the diff itself, and every quote opens the diff at that line. A larger change reads like a short presentation: pages from the overview through each mechanism to what to check, with tabs to jump and buttons to the next page. Where a picture explains more, the brief draws diagrams: who owns what and where data goes (before and after, when the change reshapes it), state machines, and message sequences.
 - Claude gets a shallow checkout of the pull request's head commit (Git LFS files left out), plus its diff, to follow callers, types and tests. It can only read files in that checkout, which is deleted when the brief is done; it cannot run or change anything. The code it reads is sent to Anthropic.
 - Needs [Claude Code](https://claude.ai/code) installed and logged in, and `git` (Xcode's command line tools). Saved briefs survive relaunch and cache cleanup.
 - **Window → Brief Gallery** shows every part a brief can have on sample text, without running Claude.
@@ -62,14 +62,16 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Close a pull request, and delete its branch.
 
 **Light on GitHub**
-- Everything is cached locally, so the app opens instantly and works offline with what it last saw.
-- Unchanged pull requests cost no requests: GitHub's "not modified" answers are free, and stacks and combined diffs are fetched once per commit. A file's full text is fetched only when you expand around its changes, and once per version of the file.
+- Each GitHub account has its own local queue, drafts, and file cache. A previously verified credential opens that account’s cached data offline.
+- A cached file set at the same pull request timestamp opens locally. When the timestamp changes, Quarterdeck checks the commits. Paged downloads check both commits again before saving. Expanding context fetches the selected file. The first nonempty **Contents** query can fetch every uncached changed file at the displayed revision. Later searches reuse cached blobs.
+
+Line notes retain the original diff excerpt and commit pair. After a push or rebase, outdated drafts stay in the Review panel. Use **Copy draft** to recover the text, recreate the comment on the current line, and remove the outdated draft before submitting. Merges and GitHub reviews use the head commit displayed in the diff.
 
 ## Install
 
 Download `Quarterdeck-<version>.dmg` from the [latest release](https://github.com/plucked/quarterdeck/releases/latest), open it and drag Quarterdeck into Applications. It needs a Mac with Apple silicon and macOS 13 or later; it is signed and notarized, so it opens like any other app.
 
-**Signing in.** Quarterdeck uses the [GitHub CLI](https://cli.github.com)'s login when `gh` is installed and logged in (`gh auth login`). Otherwise open Settings → GitHub, paste a [personal access token](https://github.com/settings/tokens/new?scopes=repo,read:org&description=Quarterdeck) with the `repo` and `read:org` scopes and click Sign in: it is checked with GitHub, saved in your Keychain, and the app restarts with it.
+**Signing in.** Quarterdeck checks `GITHUB_TOKEN`, the token saved in Keychain, then the [GitHub CLI](https://cli.github.com) login (`gh auth login`). To save a token in Keychain, open Settings → GitHub, paste a [personal access token](https://github.com/settings/tokens/new?scopes=repo,read:org&description=Quarterdeck) with the `repo` and `read:org` scopes and click Sign in: it is checked with GitHub, saved in your Keychain, and the app restarts with it.
 
 **Updates.** Quarterdeck looks for a new version shortly after launch and every few hours, downloads and checks it in the background (it must be signed by the same developer and notarized), and installs it when you quit. To install it at once, click **Restart to update** in the top bar, or in Settings → Updates, which also shows what's new. Quarterdeck → Check for Updates… checks right away. Updates need the app to be in a folder you can write to, such as Applications.
 
@@ -79,12 +81,12 @@ You need macOS, [Rust](https://rustup.rs) (stable; `rust-toolchain.toml` picks i
 
 ```bash
 gh auth login              # or: export GITHUB_TOKEN=<a token with repo access>
-cargo run --release
+cargo run
 # Open immediately for testing, without the startup splash:
 cargo run -- --no-splash
 ```
 
-Quarterdeck uses `GITHUB_TOKEN` when it is set, then a token saved in Settings → GitHub, then the GitHub CLI's login (found on `PATH` or where Homebrew installs it). Without any it shows what it has cached. Builds from source don't update themselves.
+Quarterdeck uses `GITHUB_TOKEN` when it is set, then a token saved in Settings → GitHub, then the GitHub CLI's login (found on `PATH` or where Homebrew installs it). Without a credential, Quarterdeck opens a separate signed-out profile. Builds from source don't update themselves.
 
 Use `--no-splash` for UI testing and visual checks: `cargo run -- --no-splash`, or `target/debug/Quarterdeck.app/Contents/MacOS/Quarterdeck --no-splash` for a development bundle. Launch with the flag before attaching UI automation, including after a restart; querying a stopped app can launch it without arguments. Keep only one development instance running. Omit the flag only when testing the startup movie or its fade transition.
 
@@ -146,7 +148,11 @@ bacon
 
 ## Data
 
-The cache and what the app remembers (viewed files, notes, layout) live in `~/Library/Application Support/Quarterdeck/`. Development builds (`bacon`, `cargo run`) keep their own copy in `Quarterdeck Dev/`, started from the installed app's data the first time, so trying a newer build never changes what the installed app uses. Settings → GitHub shows how much space it takes and clears the cache. Deleting the folder resets everything.
+Quarterdeck keeps the queue, review notes, viewed marks, and preferences for each verified GitHub account in `~/Library/Application Support/Quarterdeck/accounts/<account-id>.sqlite`. Rotating a token for the same account opens the same database. Signing out opens a separate profile. Settings → GitHub shows cache usage and can clear fetched data.
+
+`cargo run`, `devbox run app`, and the debug app bundle use `Quarterdeck Dev/accounts/`. An explicit `cargo run --release` uses the installed app’s data directory and can migrate its schema beyond the version an older release understands.
+
+Earlier versions kept one `cache.sqlite` without an account identifier. Quarterdeck preserves that file and starts fresh account profiles. To recover a legacy database that you know belongs entirely to one account, quit Quarterdeck and back up both databases with SQLite’s backup command. Restore the legacy backup to that account’s profile only if you intend to replace its current local data. Reopening Quarterdeck migrates the restored notes and guides. Legacy line notes with no recorded revision appear as outdated.
 
 ## License
 

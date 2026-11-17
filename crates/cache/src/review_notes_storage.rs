@@ -14,7 +14,7 @@ use crate::{
 
 /// The columns every note query reads, in order.
 const NOTE_COLUMNS: &str = "id, destination, pr_id, repo_owner, repo_name, first_number,
-    last_number, path, side, line, start_line, reply_to_thread, body, created_at, updated_at";
+    last_number, path, side, line, start_line, reply_to_thread, body, created_at, updated_at, head_sha, base_sha, excerpt";
 
 impl UiStateStore {
     /// The notes of `scope` going to `destination`, by file, then line, then age.
@@ -57,8 +57,8 @@ impl UiStateStore {
         };
         self.connection().execute(
             "INSERT INTO review_notes (pr_id, repo_owner, repo_name, first_number, last_number,
-                id, destination, path, side, line, start_line, reply_to_thread, body, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                id, destination, path, side, line, start_line, reply_to_thread, body, created_at, updated_at, head_sha, base_sha, excerpt)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
              ON CONFLICT (id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at",
             columns.as_params_followed_by(params![
                 note.id.as_sql_integer(),
@@ -70,8 +70,21 @@ impl UiStateStore {
                 reply_to_thread,
                 note.body,
                 note.created_at,
-                note.updated_at
+                note.updated_at, note.head_sha, note.base_sha, note.excerpt
             ]),
+        )?;
+        Ok(())
+    }
+
+    /// Clears only the draft actually submitted. A later edit belongs to the next review.
+    pub fn clear_submitted_summary(&self, id: u64, submitted: &ReviewSummary) -> Result<()> {
+        self.connection().execute(
+            "DELETE FROM review_summaries WHERE pr_id=?1 AND event=?2 AND body=?3",
+            params![
+                sql_integer(id)?,
+                review_event_as_sql_text(submitted.event),
+                submitted.body
+            ],
         )?;
         Ok(())
     }
@@ -177,6 +190,9 @@ fn note_from_row(row: &Row<'_>) -> rusqlite::Result<Result<ReviewNote>> {
             scope,
             path,
             anchor,
+            head_sha: row.get(15)?,
+            base_sha: row.get(16)?,
+            excerpt: row.get(17)?,
             body,
             created_at,
             updated_at,
@@ -197,6 +213,9 @@ mod tests {
             scope,
             path: "src/a.rs".into(),
             anchor,
+            head_sha: Some("head".into()),
+            base_sha: Some("base".into()),
+            excerpt: Some("+original".into()),
             body: body.into(),
             created_at: 1,
             updated_at: 1,

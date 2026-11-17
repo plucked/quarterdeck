@@ -29,9 +29,11 @@ fn finishing_seals_and_replays_exact_receipt() {
     assert!(draft.finished_buckets("invented").is_err());
     let receipt = finished.receipt.unwrap();
     let mut output = draft.finished_buckets(receipt.as_str()).unwrap();
-    output[0].files.clear();
+    output[0].items.clear();
     assert_eq!(
-        draft.finished_buckets(receipt.as_str()).unwrap()[0].files,
+        draft.finished_buckets(receipt.as_str()).unwrap()[0]
+            .files()
+            .collect::<Vec<_>>(),
         ["a"]
     );
 }
@@ -46,7 +48,9 @@ fn captured_inventory_and_receipt_identity_are_stable() {
     let first_finished = first.finish_guide(1, &order(&["core"]), "finish");
     let receipt = first_finished.receipt.unwrap();
     assert_eq!(
-        first.finished_buckets(receipt.as_str()).unwrap()[0].files,
+        first.finished_buckets(receipt.as_str()).unwrap()[0]
+            .files()
+            .collect::<Vec<_>>(),
         ["src/a"]
     );
 

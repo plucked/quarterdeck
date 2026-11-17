@@ -51,6 +51,7 @@ pub struct TextArea {
     pub(super) last_layout: Option<TextAreaLayout>,
     pub(super) last_bounds: Option<Bounds<Pixels>>,
     is_selecting: bool,
+    pub(super) secret: bool,
 }
 
 impl EventEmitter<TextAreaEvent> for TextArea {}
@@ -81,6 +82,21 @@ impl TextArea {
         Self::with_line_mode(placeholder, LineMode::SingleLine, cx)
     }
 
+    pub fn password(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+        Self {
+            secret: true,
+            ..Self::single_line(placeholder, cx)
+        }
+    }
+
+    pub(super) fn displayed_text(&self) -> String {
+        if self.secret {
+            "*".repeat(self.text.len())
+        } else {
+            self.text.clone()
+        }
+    }
+
     /// An empty text area of `line_mode` showing `placeholder`.
     fn with_line_mode(
         placeholder: impl Into<SharedString>,
@@ -98,6 +114,7 @@ impl TextArea {
             last_layout: None,
             last_bounds: None,
             is_selecting: false,
+            secret: false,
         }
     }
 
@@ -394,6 +411,9 @@ impl TextArea {
     }
 
     fn on_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+        if self.secret {
+            return;
+        }
         if !self.selected_range.is_empty() {
             let selected = self.text[self.selected_range.clone()].to_owned();
             cx.write_to_clipboard(ClipboardItem::new_string(selected));
@@ -401,6 +421,9 @@ impl TextArea {
     }
 
     fn on_cut(&mut self, _: &Cut, _: &mut Window, cx: &mut Context<Self>) {
+        if self.secret {
+            return;
+        }
         if !self.selected_range.is_empty() {
             let selected = self.text[self.selected_range.clone()].to_owned();
             cx.write_to_clipboard(ClipboardItem::new_string(selected));
@@ -491,5 +514,20 @@ impl Render for TextArea {
             .bg(theme::background())
             .text_sm()
             .child(TextAreaElement::new(cx.entity()))
+    }
+}
+
+#[cfg(test)]
+mod password_tests {
+    use super::*;
+    #[gpui::test]
+    fn password_field_masks_pasted_text_and_keeps_editing_offsets(cx: &mut gpui::TestAppContext) {
+        let field = cx.new(|cx| TextArea::password("Token", cx));
+        field.update(cx, |area, cx| {
+            area.set_text("ghp_éx", cx);
+            assert_eq!(area.displayed_text(), "*******");
+            assert_eq!(area.text(), "ghp_éx");
+            assert_eq!(area.cursor_offset(), area.displayed_text().len());
+        });
     }
 }

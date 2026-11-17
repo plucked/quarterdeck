@@ -10,5 +10,6 @@ pub struct PullRequestReviewState {
     /// The viewer opened it: GitHub refuses approving or requesting changes.
     pub viewer_is_author: bool,
     pub pending_review_id: Option<String>,
+    pub pending_review_commit: Option<String>,
     pub threads: Vec<ReviewThread>,
 }

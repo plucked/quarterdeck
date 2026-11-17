@@ -168,7 +168,6 @@ mod tests {
                 label: "Source".into(),
                 description: "Read the source".into(),
                 suggest_viewed: false,
-                files: vec!["a.rs".into()],
                 items: vec![SmartReviewItem {
                     label: "Entry".into(),
                     description: "Check behavior".into(),

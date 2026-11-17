@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -17,9 +18,10 @@ use super::review_change::ReviewChange;
 const WRITE_DELAY: Duration = Duration::from_millis(300);
 
 /// A batch of pending changes taken for one write, with the store to write them to.
+#[derive(Clone)]
 struct PendingWrite {
     store: SharedUiStateStore,
-    pending: PendingUiState,
+    pending: Arc<Mutex<Option<PendingUiState>>>,
 }
 
 /// The gpui global through which views read the UI state saved before the
@@ -27,26 +29,29 @@ struct PendingWrite {
 ///
 /// Writes are batched: the first change starts a short timer, later changes
 /// overwrite the pending values, and one write task saves them in order, so
-/// an older value never lands after a newer one. Saving is best effort: a
-/// failed write is reported on stderr, since losing it only costs the
-/// restored position.
+/// an older value never lands after a newer one. Review edits stay queued until SQLite accepts them,
+/// and orderly shutdown drains both pending and in-flight changes.
 pub struct UiStateRecorder {
     /// Shared with the write running on the background executor.
     store: SharedUiStateStore,
     pending: PendingUiState,
     /// The task waiting to write or writing; while it runs, changes join it.
     write_task: Option<Task<()>>,
+    in_flight: Option<PendingWrite>,
+    pub review_save_error: Option<String>,
 }
 
 impl Global for UiStateRecorder {}
 
 impl UiStateRecorder {
     /// Opens the UI state tables of the default database.
-    pub fn open_default() -> Result<Self> {
+    pub fn open(path: &std::path::Path) -> Result<Self> {
         Ok(Self {
-            store: SharedUiStateStore::new(UiStateStore::open_default()?),
+            store: SharedUiStateStore::new(UiStateStore::open(path)?),
             pending: PendingUiState::default(),
             write_task: None,
+            in_flight: None,
+            review_save_error: None,
         })
     }
 
@@ -253,7 +258,10 @@ impl UiStateRecorder {
 
     /// Records a change to the review notes and schedules a write.
     pub fn record_review_change(cx: &mut App, change: ReviewChange) {
-        Self::record(cx, |pending| pending.review_changes.push(change));
+        cx.update_global::<Self, _>(|rec, cx| {
+            rec.store.review_writes().push_back(change);
+            rec.schedule_write(WRITE_DELAY, cx);
+        });
     }
 
     /// Records the window's placement and schedules a write.
@@ -278,13 +286,21 @@ impl UiStateRecorder {
     /// window loses focus: switching to the editor comes before the rebuild
     /// that kills and relaunches the app.
     pub fn write_soon(cx: &mut App) {
-        cx.update_global::<Self, _>(|recorder, cx| recorder.schedule_write(Duration::ZERO, cx));
+        cx.update_global::<Self, _>(|rec, cx| {
+            if rec.in_flight.is_some() {
+                return;
+            }
+            rec.write_task.take();
+            rec.schedule_write(Duration::ZERO, cx);
+        });
     }
 
     /// Starts the write task unless one is running; a running one picks up
     /// the new changes before it ends.
     fn schedule_write(&mut self, delay: Duration, cx: &mut App) {
-        if self.write_task.is_some() || self.pending.is_empty() {
+        if self.write_task.is_some()
+            || (self.pending.is_empty() && self.store.review_writes().is_empty())
+        {
             return;
         }
         self.write_task = Some(cx.spawn(async move |cx| {
@@ -297,14 +313,40 @@ impl UiStateRecorder {
     /// there are none. Both happen in one main-thread step, so a change
     /// recorded right after always finds either a running task or none.
     fn take_pending_or_finish(&mut self) -> Option<PendingWrite> {
-        if self.pending.is_empty() {
+        if self.pending.is_empty() && self.store.review_writes().is_empty() {
             self.write_task = None;
             return None;
         }
-        Some(PendingWrite {
+        let write = PendingWrite {
             store: self.store.clone(),
-            pending: std::mem::take(&mut self.pending),
-        })
+            pending: Arc::new(Mutex::new(Some(std::mem::take(&mut self.pending)))),
+        };
+        self.in_flight = Some(write.clone());
+        Some(write)
+    }
+}
+
+impl PendingWrite {
+    fn flush(&self) {
+        let mut pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(batch) = pending.take() {
+            batch.write_to(&self.store);
+        }
+    }
+}
+
+impl UiStateRecorder {
+    pub fn flush_on_quit(&mut self) {
+        if let Some(write) = self.in_flight.take() {
+            write.flush();
+        }
+        self.pending.write_to(&self.store);
+        if let Err(error) = self.store.flush_reviews() {
+            eprintln!("Cannot save review drafts on quit: {error:#}");
+        }
     }
 }
 
@@ -320,9 +362,29 @@ async fn write_until_nothing_pending(cx: &mut AsyncApp) {
         };
 
         // Write off the main thread: SQLite may wait for the disk.
-        cx.background_executor()
-            .spawn(async move { write.pending.write_to(&write.store) })
+        let error = cx
+            .background_executor()
+            .spawn(async move {
+                write.flush();
+                write.store.flush_reviews().err().map(|e| e.to_string())
+            })
             .await;
+        let retry = error.is_some();
+        if cx
+            .update_global::<UiStateRecorder, _>(|rec, cx| {
+                rec.in_flight = None;
+                if rec.review_save_error != error {
+                    rec.review_save_error = error;
+                    cx.refresh_windows();
+                }
+            })
+            .is_err()
+        {
+            return;
+        }
+        if retry {
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+        }
     }
 }
 
@@ -330,4 +392,112 @@ async fn write_until_nothing_pending(cx: &mut AsyncApp) {
 fn report_unreadable<T>(part: &str, error: &anyhow::Error) -> Option<T> {
     eprintln!("ui state: ignoring saved {part}: {error:#}");
     None
+}
+
+#[cfg(test)]
+mod durability_tests {
+    use super::super::read_review_notes;
+    use super::*;
+    use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewSummary};
+    fn note(scope: &ReviewScope) -> ReviewNote {
+        ReviewNote {
+            id: NoteId::generate(),
+            scope: scope.clone(),
+            destination: NoteDestination::GitHub,
+            path: "a.rs".into(),
+            anchor: NoteAnchor::Line {
+                side: qd_github::LineSide::New,
+                line: 3,
+                start_line: None,
+            },
+            head_sha: Some("head".into()),
+            base_sha: Some("base".into()),
+            excerpt: Some("+original".into()),
+            body: "draft".into(),
+            created_at: 1,
+            updated_at: 1,
+        }
+    }
+
+    #[test]
+    fn quit_drains_in_flight_and_later_changes_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cache");
+        let mut rec = UiStateRecorder::open(&path).unwrap();
+        rec.pending.sidebar_width = Some(200.);
+        let worker = rec.take_pending_or_finish().unwrap();
+        rec.pending.sidebar_width = Some(300.);
+        let scope = ReviewScope::PullRequest(1);
+        let original = note(&scope);
+        rec.store
+            .review_writes()
+            .push_back(ReviewChange::PutNote(original.clone()));
+        rec.flush_on_quit();
+        worker.flush();
+        let reopened = UiStateRecorder::open(&path).unwrap();
+        assert_eq!(reopened.saved_panel_widths().unwrap().sidebar, 300.);
+        assert_eq!(read_review_notes(&reopened.store, &scope).0, vec![original]);
+    }
+
+    #[test]
+    fn failed_draft_write_stays_visible_and_retries_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("cache");
+        let rec = UiStateRecorder::open(&db).unwrap();
+        let sql = rusqlite::Connection::open(&db).unwrap();
+        sql.execute_batch("CREATE TRIGGER fail_draft BEFORE INSERT ON review_notes BEGIN SELECT RAISE(FAIL,'test write failure'); END;").unwrap();
+        let scope = ReviewScope::PullRequest(2);
+        let original = note(&scope);
+        rec.store
+            .review_writes()
+            .push_back(ReviewChange::PutNote(original.clone()));
+        assert!(rec.store.flush_reviews().is_err());
+        assert_eq!(
+            read_review_notes(&rec.store, &scope).0,
+            vec![original.clone()]
+        );
+        rec.store
+            .review_writes()
+            .push_back(ReviewChange::DeleteNote(original.id));
+        assert_eq!(
+            read_review_notes(&rec.store, &scope).0,
+            Vec::<ReviewNote>::new()
+        );
+        sql.execute_batch("DROP TRIGGER fail_draft").unwrap();
+        rec.store.flush_reviews().unwrap();
+        assert!(rec.store.review_writes().is_empty());
+        assert_eq!(
+            read_review_notes(&rec.store, &scope).0,
+            Vec::<ReviewNote>::new()
+        );
+    }
+
+    #[test]
+    fn newer_summary_and_original_note_context_survive_refresh() {
+        let dir = tempfile::tempdir().unwrap();
+        let rec = UiStateRecorder::open(&dir.path().join("cache")).unwrap();
+        let submitted = ReviewSummary {
+            body: "one".into(),
+            ..ReviewSummary::default()
+        };
+        let mut next = submitted.clone();
+        next.body = "two".into();
+        let scope = ReviewScope::PullRequest(1);
+        let note = note(&scope);
+        rec.store.review_writes().extend([
+            ReviewChange::PutNote(note),
+            ReviewChange::PutSummary(1, submitted.clone()),
+            ReviewChange::PutSummary(1, next.clone()),
+            ReviewChange::DeleteSummary(1, submitted),
+        ]);
+        for _ in 0..2 {
+            let (notes, summary) = read_review_notes(&rec.store, &scope);
+            assert_eq!(summary, Some(next.clone()));
+            assert!(notes[0].matches_revision(Some("head"), Some("base")));
+            assert!(!notes[0].matches_revision(Some("push"), Some("base")));
+            assert!(!notes[0].matches_revision(Some("head"), Some("rebase")));
+            assert_eq!(notes[0].excerpt.as_deref(), Some("+original"));
+            rec.store.flush_reviews().unwrap();
+        }
+    }
 }

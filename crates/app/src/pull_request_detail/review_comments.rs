@@ -21,6 +21,8 @@ pub struct ReviewComments {
     pub is_loading_github: bool,
     /// The user's notes of the shown scope, both destinations.
     pub notes: Vec<ReviewNote>,
+    pub head_sha: Option<String>,
+    pub base_sha: Option<String>,
     pub summary: ReviewSummary,
     /// Parsed bodies by comment key (a GitHub node id, or `note-<id>`), with
     /// the text they were parsed from.
@@ -74,7 +76,9 @@ impl ReviewComments {
                 cards.push(PlacedCard {
                     card: CommentCard::Note(note.id),
                     path: note.path.clone(),
-                    anchor: Some((*side, *line)),
+                    anchor: note
+                        .matches_revision(self.head_sha.as_deref(), self.base_sha.as_deref())
+                        .then_some((*side, *line)),
                     start_line: *start_line,
                 });
             }

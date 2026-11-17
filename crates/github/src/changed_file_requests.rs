@@ -48,6 +48,14 @@ impl GitHubClient {
     ) -> Result<Vec<PullRequestFile>, GitHubError> {
         let url = format!("{}/compare/{base_sha}...{head_sha}", repo.api_url());
         let response = self.get(&url, &[], None, DIFF_MEDIA_TYPE, on_progress)?;
-        Ok(files_of_unified_diff(&response.body))
+        if response.status != ureq::http::StatusCode::OK {
+            return Err(GitHubError::Api {
+                status: response.status.as_u16(),
+                body: "GitHub has not prepared this comparison yet".into(),
+            });
+        }
+        files_of_unified_diff(&response.body).ok_or_else(|| {
+            crate::github_client::graphql_error("GitHub returned an unreadable diff section".into())
+        })
     }
 }

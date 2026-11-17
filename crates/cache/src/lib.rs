@@ -205,3 +205,5 @@ pub use updated_within::UpdatedWithin;
 pub use viewed_file::ViewedFile;
 pub use window_mode::WindowMode;
 pub use window_placement::WindowPlacement;
+
+pub use database_connection::accounts_directory;

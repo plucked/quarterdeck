@@ -29,6 +29,14 @@ pub(crate) fn default_database_path() -> Result<PathBuf> {
     Ok(data_directory.join(build_directory()).join(DATABASE_FILE))
 }
 
+/// The account profiles owned by this build. Legacy unowned databases remain in place.
+pub fn accounts_directory() -> Result<PathBuf> {
+    Ok(dirs::data_dir()
+        .context("no data directory")?
+        .join(build_directory())
+        .join("accounts"))
+}
+
 /// Gets the data folder ready before the default database opens; the
 /// stores call it first. A release build moves the data kept under the
 /// app's former name (`quick-check`) once; a debug build starts its own

@@ -36,8 +36,6 @@
 //! - `revision_check.rs`: `RevisionCheck`, a pull request's commits and file count.
 //! - `download_progress.rs`: `DownloadProgress`, the bytes of a body received so far.
 //! - `stack_membership.rs`: `StackMembership`, where a pull request sits in its stack.
-//! - `listed_pull_request_details.rs`: `ListedPullRequestDetails`, a listed pull request's branches and stack membership.
-//! - `listed_details_query.rs`: the GraphQL query for those details and its response.
 //! - `pull_request_branches.rs`: `PullRequestBranches`, the branches a pull request comes from and goes into.
 //! - `aliased_pull_requests_query.rs`: `AliasedPullRequestsQuery`, a GraphQL query reading chosen pull requests of one repository under one alias each, and its data.
 //! - `pull_request_lookup_query.rs`: the GraphQL query for the branches and viewer review of chosen pull requests of one repository.
@@ -96,8 +94,6 @@ mod keychain_token;
 mod label;
 mod layer_conflicts_query;
 mod line_side;
-mod listed_details_query;
-mod listed_pull_request_details;
 mod merge_conflict;
 mod merge_method;
 mod merge_options;
@@ -158,7 +154,6 @@ pub use github_error::GitHubError;
 pub use keychain_token::{delete_stored_token, store_token};
 pub use label::Label;
 pub use line_side::LineSide;
-pub use listed_pull_request_details::ListedPullRequestDetails;
 pub use merge_conflict::{ConflictLocation, MergeConflict};
 pub use merge_method::MergeMethod;
 pub use merge_options::{

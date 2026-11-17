@@ -29,7 +29,7 @@ impl PullRequestDetail {
     }
 
     /// Reads GitHub's conversations and the viewer's pending review for the
-    /// shown pull request (one GraphQL request); combined reviews have none.
+    /// shown pull request, following any additional thread and comment pages; combined reviews have none.
     pub(super) fn load_github_review(&mut self, cx: &mut Context<Self>) {
         if !self.can_review_on_github() {
             return;
@@ -165,11 +165,27 @@ impl PullRequestDetail {
             return;
         };
 
+        if self
+            .review()
+            .comments
+            .notes_to(NoteDestination::GitHub)
+            .any(|note| {
+                !note.matches_revision(self.shown_head_sha(), self.shown_base_sha.as_deref())
+            })
+        {
+            self.review_mut().status = OperationStatus::Failed("An outdated draft refers to earlier code. Recreate it on the current diff and remove the old draft before submitting.".into());
+            cx.notify();
+            return;
+        }
+        let original_summary = self.review().comments.summary.clone();
+        let Some(head_sha) = self.shown_head_sha() else {
+            return;
+        };
         let CollectedSubmission {
             mut submission,
             thread_notes,
             reply_notes,
-        } = self.collect_submission();
+        } = self.collect_submission(head_sha.to_owned());
         // GitHub refuses approving or requesting changes on one's own pull request.
         if state.viewer_is_author {
             submission.event = ReviewEvent::Comment;
@@ -202,7 +218,7 @@ impl PullRequestDetail {
             let submitted = submitted.await;
             detail
                 .update(cx, |detail, cx| {
-                    detail.finish_submission(pull_request_id, submitted, cx);
+                    detail.finish_submission(pull_request_id, submitted, &original_summary, cx);
                 })
                 .ok();
         });
@@ -218,6 +234,7 @@ impl PullRequestDetail {
         &mut self,
         pull_request_id: u64,
         submitted: Result<(), GitHubError>,
+        original_summary: &ReviewSummary,
         cx: &mut Context<Self>,
     ) {
         // This task ends here: let go of its handle without cancelling it.
@@ -227,7 +244,10 @@ impl PullRequestDetail {
 
         // The saved summary of a submitted review goes, whatever shows now.
         if submitted.is_ok() {
-            UiStateRecorder::record_review_change(cx, ReviewChange::DeleteSummary(pull_request_id));
+            UiStateRecorder::record_review_change(
+                cx,
+                ReviewChange::DeleteSummary(pull_request_id, original_summary.clone()),
+            );
         }
 
         // Another pull request or range shows now: its review stays as it is.
@@ -238,6 +258,9 @@ impl PullRequestDetail {
 
         // Say how it went and read the conversations again.
         self.review_mut().status = match submitted {
+            Ok(()) if self.review().comments.summary != *original_summary => {
+                OperationStatus::Done("Review submitted. Your newer draft was kept.".into())
+            }
             Ok(()) => {
                 self.review_mut().comments.summary = ReviewSummary::default();
                 if let Some(area) = self.review().summary_editor.clone() {
@@ -254,7 +277,7 @@ impl PullRequestDetail {
 
     /// The GitHub review to submit from the drafts and the summary, with
     /// the note ids of its threads and replies in order.
-    fn collect_submission(&self) -> CollectedSubmission {
+    fn collect_submission(&self, head_sha: String) -> CollectedSubmission {
         // The drafts: new conversations and replies, with their note ids.
         let drafts: Vec<ReviewNote> = self
             .review()
@@ -293,6 +316,7 @@ impl PullRequestDetail {
         }
         let summary: ReviewSummary = self.review().comments.summary.clone();
         let submission = ReviewSubmission {
+            head_sha,
             event: summary.event,
             body: summary.body.trim().to_owned(),
             threads,

@@ -24,7 +24,7 @@ fn repairs_via_mcp_and_launches_with_exact_isolation() {
     )
     .unwrap();
     assert_eq!(result.buckets.len(), 1);
-    assert_eq!(result.buckets[0].files, paths);
+    assert_eq!(result.buckets[0].files().collect::<Vec<_>>(), paths);
     assert_eq!(result.answer.model.as_deref(), Some("offline-opus"));
     assert_eq!(result.answer.cost_usd, Some(0.0));
     assert!(

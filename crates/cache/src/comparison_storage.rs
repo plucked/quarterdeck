@@ -19,7 +19,8 @@ impl GitHubCache {
         head_sha: &str,
     ) -> Result<Option<Vec<PullRequestFile>>> {
         let key = params![repo.owner, repo.name, base_sha, head_sha];
-        let touched = self.connection().execute(
+        let transaction = self.connection().unchecked_transaction()?;
+        let touched = transaction.execute(
             "UPDATE compare_file_sets SET last_used_at = ?5
              WHERE repo_owner = ?1 AND repo_name = ?2 AND base_sha = ?3 AND head_sha = ?4",
             params![repo.owner, repo.name, base_sha, head_sha, unix_now()],
@@ -27,7 +28,7 @@ impl GitHubCache {
         if touched == 0 {
             return Ok(None);
         }
-        let mut statement = self.connection().prepare(
+        let mut statement = transaction.prepare(
             "SELECT filename, previous_filename, status, additions, deletions, patch, sha
              FROM compare_files
              WHERE repo_owner = ?1 AND repo_name = ?2 AND base_sha = ?3 AND head_sha = ?4
@@ -36,6 +37,8 @@ impl GitHubCache {
         let files = statement
             .query_map(key, pull_request_file_from_row)?
             .collect::<rusqlite::Result<_>>()?;
+        drop(statement);
+        transaction.commit()?;
         Ok(Some(files))
     }
 
