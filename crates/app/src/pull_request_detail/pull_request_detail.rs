@@ -650,6 +650,124 @@ mod refresh_tests {
         }
     }
 
+    /// Reopens a cached diff before the viewed-mark writer runs, then lets the writer finish.
+    fn check_viewed_reload(cx: &mut gpui::TestAppContext, initially_viewed: bool) {
+        use qd_cache::{FileSetRevision, PullRequestListKey, ReviewScope};
+        use qd_github::{PullRequestFile, PullRequestRevision};
+
+        // Both PRs contain the same file, so navigating also checks that marks stay scoped.
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("cache");
+        let recorder = UiStateRecorder::open(&database).unwrap();
+        let store = recorder.shared_store();
+        let mut cache = qd_cache::GitHubCache::open(&database).unwrap();
+        let first = pr(1, "current");
+        let second = pr(2, "current");
+        let scope = ReviewScope::PullRequest(first.id);
+        let file = PullRequestFile {
+            filename: "a.rs".into(),
+            previous_filename: None,
+            status: "added".into(),
+            additions: 1,
+            deletions: 0,
+            patch: Some("@@ -0,0 +1 @@\n+hello".into()),
+            sha: None,
+        };
+        let revision = FileSetRevision {
+            commits: PullRequestRevision {
+                head_sha: "head".into(),
+                base_sha: "base".into(),
+            },
+            etag: None,
+        };
+        cache
+            .replace_list(
+                PullRequestListKey::REVIEW_REQUESTED,
+                &[first.clone(), second.clone()],
+            )
+            .unwrap();
+        for pull_request in [&first, &second] {
+            cache
+                .put_files(pull_request, std::slice::from_ref(&file), &revision)
+                .unwrap();
+        }
+        let services = AppServices {
+            github: Err("offline".into()),
+            token_source: None,
+            cache: SharedCache::new(cache),
+            database,
+        };
+        cx.update(|app| {
+            app.set_global(AppSettings::load(&recorder));
+            app.set_global(recorder);
+            AvatarImages::install(app);
+        });
+        let detail = cx.new(|cx| PullRequestDetail::new(services, cx));
+        let show = |pull_request: &PullRequest, cx: &mut gpui::TestAppContext| {
+            detail.update(cx, |detail, cx| {
+                detail.show(Some(pull_request.clone()), None, cx);
+            });
+            cx.run_until_parked();
+            detail.update(cx, |detail, _| assert_eq!(detail.loaded_files().len(), 1));
+        };
+        let flush = |cx: &mut gpui::TestAppContext| {
+            cx.run_until_parked();
+            cx.executor()
+                .advance_clock(std::time::Duration::from_secs(1));
+            cx.run_until_parked();
+        };
+        let saved = || !store.lock().viewed_files(&scope).unwrap().is_empty();
+
+        // Start the unmark case with a durable mark, then make the edit under test.
+        show(&first, cx);
+        if initially_viewed {
+            detail.update(cx, |detail, cx| detail.toggle_file_viewed(0, cx));
+            flush(cx);
+        }
+        detail.update(cx, |detail, cx| {
+            detail.toggle_file_viewed(0, cx);
+            if !detail.file_tree().filter().hide_viewed {
+                detail.toggle_hide_viewed(cx);
+            }
+        });
+        show(&second, cx);
+        detail.update(cx, |detail, _| {
+            assert_eq!(detail.file_review.viewed_count(), 0);
+        });
+        show(&first, cx);
+        assert_eq!(
+            saved(),
+            initially_viewed,
+            "reload finished before the write"
+        );
+
+        // The checkbox, fold and Hide viewed filter agree on either side of the write.
+        let assert_display = |cx: &mut gpui::TestAppContext| {
+            detail.update(cx, |detail, _| {
+                let state = detail.file_review.state_of(&detail.loaded_files()[0]);
+                assert_eq!(state.is_viewed, !initially_viewed);
+                assert_eq!(state.is_collapsed, !initially_viewed);
+                assert_eq!(detail.rows().file_start(0).is_some(), initially_viewed);
+            });
+        };
+        assert_display(cx);
+        flush(cx);
+        assert_eq!(saved(), !initially_viewed);
+        assert_display(cx);
+    }
+
+    /// Returning before the batched save keeps a newly viewed file checked and hidden.
+    #[gpui::test]
+    fn viewed_reload_keeps_pending_mark(cx: &mut gpui::TestAppContext) {
+        check_viewed_reload(cx, false);
+    }
+
+    /// Returning before the batched save keeps a newly unviewed file open and visible.
+    #[gpui::test]
+    fn viewed_reload_keeps_pending_unmark(cx: &mut gpui::TestAppContext) {
+        check_viewed_reload(cx, true);
+    }
+
     #[gpui::test]
     fn automatic_refresh_keeps_the_composer_and_navigation_keeps_the_operation(
         cx: &mut gpui::TestAppContext,

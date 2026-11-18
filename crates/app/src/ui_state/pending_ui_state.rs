@@ -26,8 +26,6 @@ pub struct PendingUiState {
     pub hidden_branch_rules: Option<Vec<HiddenBranchRule>>,
     /// The latest Others filter of each repository changed.
     pub others_filters: HashMap<RepoRef, OthersFilter>,
-    /// Every viewed mark change, in the order made: unlike settings, each counts.
-    pub viewed_changes: Vec<ViewedChange>,
 }
 
 /// A change to a file's viewed mark, waiting to be written.
@@ -58,15 +56,14 @@ impl PendingUiState {
             && self.watched_repositories.is_none()
             && self.hidden_branch_rules.is_none()
             && self.others_filters.is_empty()
-            && self.viewed_changes.is_empty()
     }
 
     /// Writes each recorded part to `store`, reporting failures on stderr;
     /// a part that fails does not stop the rest.
     ///
     /// Blocking: runs on the background executor.
-    pub fn write_to(&self, store: &SharedUiStateStore) {
-        let store = store.lock();
+    pub fn write_to(&self, shared: &SharedUiStateStore) {
+        let store = shared.lock();
 
         // The one-value parts, each written when recorded.
         if let Some(placement) = &self.window_placement {
@@ -118,8 +115,10 @@ impl PendingUiState {
             report_failed_write("the folder heatmap", store.put_folder_heatmap(enabled));
         }
 
-        // Viewed marks and review notes, every change in the order made.
-        for change in &self.viewed_changes {
+        // Take the queue under the database lock so a reader sees each edit either
+        // here or in SQLite. Release the queue before disk I/O so clicks can continue.
+        let viewed_changes = std::mem::take(&mut *shared.viewed_changes());
+        for change in &viewed_changes {
             let written = match change {
                 ViewedChange::Mark { scope, file } => store.mark_file_viewed(scope, file),
                 ViewedChange::Unmark { scope, filename } => {

@@ -1,25 +1,41 @@
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use qd_cache::UiStateStore;
+
+use super::ReviewChange;
+use super::pending_ui_state::ViewedChange;
 
 /// The UI state store, shared by the `UiStateRecorder` global, its batched
 /// writes and the reads views run on the background executor, which end
 /// independently of each other. Clones share one connection.
 #[derive(Clone)]
-pub struct SharedUiStateStore(
-    Arc<Mutex<UiStateStore>>,
-    Arc<Mutex<std::collections::VecDeque<super::ReviewChange>>>,
-);
+pub struct SharedUiStateStore {
+    database: Arc<Mutex<UiStateStore>>,
+    review_writes: Arc<Mutex<VecDeque<ReviewChange>>>,
+    viewed_changes: Arc<Mutex<Vec<ViewedChange>>>,
+}
 
 impl SharedUiStateStore {
     pub fn new(store: UiStateStore) -> Self {
-        Self(Arc::new(Mutex::new(store)), Arc::default())
+        Self {
+            database: Arc::new(Mutex::new(store)),
+            review_writes: Arc::default(),
+            viewed_changes: Arc::default(),
+        }
     }
 
-    pub(super) fn review_writes(
-        &self,
-    ) -> MutexGuard<'_, std::collections::VecDeque<super::ReviewChange>> {
-        self.1.lock().unwrap_or_else(PoisonError::into_inner)
+    pub(super) fn review_writes(&self) -> MutexGuard<'_, VecDeque<ReviewChange>> {
+        self.review_writes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Edits in click order. Readers and flushes acquire the database lock first.
+    pub(super) fn viewed_changes(&self) -> MutexGuard<'_, Vec<ViewedChange>> {
+        self.viewed_changes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     pub(super) fn flush_reviews(&self) -> anyhow::Result<()> {
@@ -42,6 +58,6 @@ impl SharedUiStateStore {
     /// A poisoned lock is used as is: every store write is a single SQL
     /// statement, so a panic while holding the lock leaves the rows consistent.
     pub fn lock(&self) -> MutexGuard<'_, UiStateStore> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+        self.database.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }

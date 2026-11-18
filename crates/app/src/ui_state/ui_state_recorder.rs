@@ -240,19 +240,19 @@ impl UiStateRecorder {
 
     /// Records that a file is viewed at its current patch and schedules a write.
     pub fn record_file_viewed(cx: &mut App, scope: ReviewScope, file: ViewedFile) {
-        Self::record(cx, |pending| {
-            pending
-                .viewed_changes
-                .push(ViewedChange::Mark { scope, file });
-        });
+        Self::record_viewed_change(cx, ViewedChange::Mark { scope, file });
     }
 
     /// Records that a file is no longer viewed and schedules a write.
     pub fn record_file_unviewed(cx: &mut App, scope: ReviewScope, filename: String) {
-        Self::record(cx, |pending| {
-            pending
-                .viewed_changes
-                .push(ViewedChange::Unmark { scope, filename });
+        Self::record_viewed_change(cx, ViewedChange::Unmark { scope, filename });
+    }
+
+    /// Makes the edit available to background reads as soon as the checkbox changes.
+    fn record_viewed_change(cx: &mut App, change: ViewedChange) {
+        cx.update_global::<Self, _>(|recorder, cx| {
+            recorder.store.viewed_changes().push(change);
+            recorder.schedule_write(WRITE_DELAY, cx);
         });
     }
 
@@ -298,9 +298,7 @@ impl UiStateRecorder {
     /// Starts the write task unless one is running; a running one picks up
     /// the new changes before it ends.
     fn schedule_write(&mut self, delay: Duration, cx: &mut App) {
-        if self.write_task.is_some()
-            || (self.pending.is_empty() && self.store.review_writes().is_empty())
-        {
+        if self.write_task.is_some() || !self.has_pending_changes() {
             return;
         }
         self.write_task = Some(cx.spawn(async move |cx| {
@@ -309,11 +307,18 @@ impl UiStateRecorder {
         }));
     }
 
+    /// Whether a batch still has settings, viewed marks or review edits to save.
+    fn has_pending_changes(&self) -> bool {
+        !self.pending.is_empty()
+            || !self.store.viewed_changes().is_empty()
+            || !self.store.review_writes().is_empty()
+    }
+
     /// Takes the pending changes for a write, or ends the write task when
     /// there are none. Both happen in one main-thread step, so a change
     /// recorded right after always finds either a running task or none.
     fn take_pending_or_finish(&mut self) -> Option<PendingWrite> {
-        if self.pending.is_empty() && self.store.review_writes().is_empty() {
+        if !self.has_pending_changes() {
             self.write_task = None;
             return None;
         }
@@ -396,7 +401,7 @@ fn report_unreadable<T>(part: &str, error: &anyhow::Error) -> Option<T> {
 
 #[cfg(test)]
 mod durability_tests {
-    use super::super::read_review_notes;
+    use super::super::{read_review_notes, read_viewed_files};
     use super::*;
     use qd_cache::{NoteAnchor, NoteDestination, NoteId, ReviewNote, ReviewSummary};
     fn note(scope: &ReviewScope) -> ReviewNote {
@@ -417,6 +422,45 @@ mod durability_tests {
             created_at: 1,
             updated_at: 1,
         }
+    }
+
+    /// A reload sees edits handed to the writer and a later unmark of the same file.
+    #[test]
+    fn viewed_changes_remain_visible_across_writer_handoff() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut recorder = UiStateRecorder::open(&directory.path().join("cache")).unwrap();
+        let scope = ReviewScope::PullRequest(1);
+        let file = qd_github::PullRequestFile {
+            filename: "a.rs".into(),
+            previous_filename: None,
+            status: "added".into(),
+            additions: 1,
+            deletions: 0,
+            patch: Some("@@ -0,0 +1 @@\n+hello".into()),
+            sha: None,
+        };
+        let mark = ViewedFile {
+            filename: file.filename.clone(),
+            fingerprint: qd_cache::PatchFingerprint::of(&file),
+        };
+
+        // Hold the writer between the foreground handoff and its database write.
+        recorder.store.viewed_changes().push(ViewedChange::Mark {
+            scope: scope.clone(),
+            file: mark.clone(),
+        });
+        let worker = recorder.take_pending_or_finish().unwrap();
+        assert_eq!(read_viewed_files(&recorder.store, &scope), [mark]);
+        recorder.store.viewed_changes().push(ViewedChange::Unmark {
+            scope: scope.clone(),
+            filename: file.filename,
+        });
+        assert_eq!(read_viewed_files(&recorder.store, &scope), []);
+
+        // Orderly shutdown must also keep the later edit if the worker runs again.
+        recorder.flush_on_quit();
+        worker.flush();
+        assert_eq!(recorder.store.lock().viewed_files(&scope).unwrap(), []);
     }
 
     #[test]
