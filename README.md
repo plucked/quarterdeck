@@ -100,6 +100,8 @@ It is signed for this Mac only; releases are signed and notarized by the release
 
 ### Releasing
 
+Use `$release` in Codex or `/release` in Claude Code. Both follow the [same release workflow](.claude/skills/release/SKILL.md) and accept an optional `patch`, `minor`, `major`, or exact version.
+
 Releases are built, signed, notarized and published from a Mac with the Developer ID certificate, no CI:
 
 ```bash
