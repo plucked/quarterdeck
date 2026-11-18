@@ -820,6 +820,8 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
      DROP TABLE smart_bucket_files;
      DELETE FROM pr_file_sets;
      DELETE FROM compare_file_sets;",
+    // Older search results mixed team and personal requests. Refresh their membership from GitHub.
+    "DELETE FROM pr_lists WHERE list_key = 'review_requested';",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

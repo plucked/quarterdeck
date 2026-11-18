@@ -21,7 +21,7 @@ struct ChipTally {
 /// What an Others filter decides from besides the filter itself: which
 /// pull requests ask for the viewer's review, and the time now.
 pub struct FilterContext<'a> {
-    /// Ids of the pull requests in the Review tab.
+    /// Ids of the pull requests in the To review tab.
     pub review_requested: &'a HashSet<u64>,
     /// Unix seconds.
     pub now: i64,

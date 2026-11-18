@@ -6,6 +6,7 @@ use qd_github::{
     GitHubError, NewReviewThread, NewThreadReply, ReviewEvent, ReviewSubmission, SubmittedPart,
 };
 
+use super::detail_event::DetailEvent;
 use super::operation_status::OperationStatus;
 use super::pull_request_detail::PullRequestDetail;
 use super::review_target::ReviewTarget;
@@ -244,6 +245,7 @@ impl PullRequestDetail {
 
         // The saved summary of a submitted review goes, whatever shows now.
         if submitted.is_ok() {
+            cx.emit(DetailEvent::PullRequestChanged(pull_request_id));
             UiStateRecorder::record_review_change(
                 cx,
                 ReviewChange::DeleteSummary(pull_request_id, original_summary.clone()),

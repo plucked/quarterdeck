@@ -37,9 +37,8 @@ impl QueueRow {
     /// (in the order of its most recently updated pull request, as the list
     /// is sorted), then, unless it is collapsed, its pull requests in list
     /// order. A stack's header takes the place of its first listed layer,
-    /// and its layers follow bottom first unless it is collapsed. With the
-    /// stack's layers in `stacks`, every layer shows, listed or not;
-    /// without, only the listed ones.
+    /// and its known layers follow bottom first unless it is collapsed. Layers
+    /// outside the list appear as context and do not count towards the queue.
     pub fn build_all(
         list: &[PullRequest],
         collapsed: &CollapsedGroups,
@@ -173,12 +172,8 @@ fn repository_rows(
                 .map_or(0, |membership| membership.position)
         });
 
-        // The header, then every layer when the stack is known, else the listed ones.
+        // Count the listed layers separately from the size of the whole stack.
         let stack = stacks.get(&key);
-        let layers = match stack {
-            Some(stack) => stack_layer_rows(&key, stack, list, &listed),
-            None => listed.iter().copied().map(QueueRow::StackLayer).collect(),
-        };
         let is_collapsed = collapsed_stacks.contains(&key);
         rows.push(QueueRow::StackHeader(StackGroup {
             size: stack.map_or(membership.size, |stack| {
@@ -190,10 +185,18 @@ fn repository_rows(
             ),
             listed: listed.len(),
             is_collapsed,
-            key,
+            key: key.clone(),
         }));
-        if !is_collapsed {
-            rows.extend(layers);
+        if is_collapsed {
+            continue;
+        }
+        match stack {
+            Some(stack) => {
+                rows.extend(stack_layer_rows(&key, stack, list, &listed));
+            }
+            None => {
+                rows.extend(listed.into_iter().map(QueueRow::StackLayer));
+            }
         }
     }
     rows
@@ -415,9 +418,9 @@ mod tests {
         );
     }
 
-    /// With the stack known, every layer shows: listed ones by list index, others by stack place.
+    /// A request for the middle layer shows both neighboring layers while counting just the request.
     #[test]
-    fn known_stack_shows_every_layer() {
+    fn requested_layer_shows_the_whole_stack() {
         let list = [pull_request(12, Some((9, 2)))];
         let key = StackKey::of(&list[0]).unwrap();
         let stack = PullRequestStack {
@@ -427,11 +430,10 @@ mod tests {
             is_open: true,
             layers: vec![layer(11), layer(12), layer(13)],
         };
-        let rows = QueueRow::build_all(
-            &list,
-            &CollapsedGroups::default(),
-            &HashMap::from([(key.clone(), stack)]),
-        );
+        let stacks = HashMap::from([(key.clone(), stack)]);
+        let collapsed = CollapsedGroups::default();
+        let rows = QueueRow::build_all(&list, &collapsed, &stacks);
+        assert!(matches!(&rows[0], QueueRow::RepoHeader(group) if group.pull_requests == 1));
         assert!(
             matches!(&rows[1], QueueRow::StackHeader(group) if group.listed == 1 && group.size == 3)
         );

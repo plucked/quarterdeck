@@ -8,7 +8,7 @@ pub enum SelectionAfterRefresh<'lists> {
     /// Nothing was selected, or the listed pull request left every list.
     Cleared,
     /// The selection stays as it is (a stack layer in no list, or a pull
-    /// request just merged or closed).
+    /// request just reviewed, merged or closed).
     Unchanged,
     /// The same pull request, as the refreshed list has it (its stack
     /// membership may be new); the detail reloads it if `updated_at` moved.
@@ -90,7 +90,7 @@ mod tests {
         );
     }
 
-    /// A pull request just merged or closed stays selected after leaving the lists.
+    /// A pull request just reviewed, merged or closed stays selected after leaving the lists.
     #[test]
     fn finished_pull_request_stays() {
         assert_eq!(

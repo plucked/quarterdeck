@@ -97,7 +97,7 @@ pub fn install_app_commands(cx: &mut App) {
                 MenuItem::action("Mark Viewed and Next File", MarkViewedAndNext),
                 MenuItem::separator(),
                 MenuItem::action("My Pull Requests", ShowAuthored),
-                MenuItem::action("Review Requests", ShowReviewRequested),
+                MenuItem::action("To Review", ShowReviewRequested),
                 MenuItem::action("Others' Pull Requests", ShowOthers),
                 MenuItem::separator(),
                 MenuItem::action("Next Stack Layer", NextLayer),

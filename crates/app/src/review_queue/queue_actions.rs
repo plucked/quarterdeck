@@ -11,7 +11,7 @@ use crate::pull_request_detail::{DetailEvent, PullRequestDetail};
 
 impl ReviewQueue {
     /// Handles the detail pane's events: its scrolling (saved), a layer it
-    /// opens, a pull request it merged or closed, a changed review target
+    /// opens, a pull request it reviewed, merged or closed, a changed review target
     /// (the sidebar's stack highlight), a stored brief (the sidebar's marks).
     pub(super) fn on_detail_event(&mut self, event: &DetailEvent, cx: &mut Context<Self>) {
         match event {

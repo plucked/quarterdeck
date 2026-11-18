@@ -61,8 +61,8 @@ impl SavedQueueState {
 }
 
 /// The main view: the viewer's own pull requests, those that request their
-/// review or that they reviewed, and others' in the watched repositories on
-/// the left (the Mine, Review and Others tabs, grouped by repository and
+/// review, and others' in the watched repositories on
+/// the left (the Mine, To review and Others tabs, grouped by repository and
 /// stack), and the selected one in a [`PullRequestDetail`] on the right.
 ///
 /// The lists are shown from the cache at once and refreshed from GitHub in
@@ -88,8 +88,6 @@ pub struct ReviewQueue {
     pub(super) lists: QueueLists,
     /// The hidden branch rules `lists` were made with.
     pub(super) hidden_branch_rules: Vec<HiddenBranchRule>,
-    /// What the Review tab shows: `lists`' review requests and reviewed ones merged.
-    pub(super) review_tab: Vec<PullRequest>,
     tab: QueueTab,
     /// Whether the sidebar (the lists) shows.
     sidebar_visibility: PanelVisibility,
@@ -173,7 +171,6 @@ impl ReviewQueue {
         let mut queue = Self {
             services,
             focus,
-            review_tab: shown_lists.review_tab(),
             lists: shown_lists,
             fetched: lists,
             hidden_branch_rules,
@@ -298,19 +295,13 @@ impl ReviewQueue {
         std::mem::take(&mut self.fetched)
     }
 
-    /// The pull requests of the shown tab: in the Review tab, review
-    /// requests and reviewed ones; in the Others tab, those its filters let through.
+    /// The pull requests in the active tab after its filters.
     pub(super) fn shown_list(&self) -> &[PullRequest] {
         match self.tab {
             QueueTab::Authored => &self.lists.authored,
-            QueueTab::ReviewRequested => &self.review_tab,
+            QueueTab::ReviewRequested => self.lists.review_tab(),
             QueueTab::Others => self.others_tab.shown(),
         }
-    }
-
-    /// What the Review tab shows, whichever tab is shown.
-    pub(super) fn review_tab(&self) -> &[PullRequest] {
-        &self.review_tab
     }
 
     pub(super) fn others_tab(&self) -> &OthersTab {

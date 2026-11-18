@@ -28,7 +28,7 @@ pub struct OthersTab {
     open_filter: Option<RepoRef>,
     /// The chips of that filter, worked out with what passes.
     open_filter_chips: Option<OpenFilterChips>,
-    /// Ids of the pull requests in the Review tab, for Hide review requests.
+    /// Ids of the pull requests in the To review tab, for Hide review requests.
     review_requested: HashSet<u64>,
     /// The chip rows showing all their chips, not just the most common.
     expanded_chip_rows: HashSet<(RepoRef, OthersFacet)>,

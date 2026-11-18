@@ -4,7 +4,7 @@
 |---|---|
 | `github_client` | `GitHubClient`: authenticated blocking REST calls (headers, GET, JSON, GraphQL; `pull_request_by_number`, `pull_request_revision`, `pull_request_stack`); `token()` hands the token to git for a brief's checkout |
 | `http_response` / `response_reading` | `HttpResponse` (status, body, ETag, next page); `read_response`: counts the request, keeps the budget, reads the body in 64 KB chunks, turns a refusal (403/429) into `RateLimited` / `SlowDown` and other error statuses into `Api` (crate-private) |
-| `search_requests` | Paged REST searches for authored, review-requested and previously reviewed PRs. Incomplete searches report an error. |
+| `search_requests` | Paged REST searches for authored PRs, direct review requests (`user-review-requested:@me`), and previously reviewed PRs. Incomplete searches report an error. |
 | `changed_file_requests` | `pull_request_files` (paged, `MAX_LISTED_FILES`), `compare_files` (one `git diff`) |
 | `github_error` | `GitHubError` |
 | `resolve_token` / `resolved_token` / `token_source` | token lookup → `ResolvedToken` with its `TokenSource`: `GITHUB_TOKEN`, then the Keychain, then `gh auth token` (`gh` on `PATH`, `/opt/homebrew/bin/gh`, `/usr/local/bin/gh`: a Finder launch has neither Homebrew folder on `PATH`) |

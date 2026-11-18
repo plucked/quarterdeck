@@ -37,6 +37,7 @@
 | `smart_filter_storage` | scope-owned Guided reviews: ordered buckets, ordered review items with guidance and exact member paths; atomic replacements, legacy membership migration, never expired by cache cleanup |
 
 - One database file; each store opens its own connection, with room for 64 cached prepared statements.
+- The cached `review_requested` list holds only direct requests. Upgrading clears its old membership, which also included team requests.
 - Pull requests keep their labels in `pr_labels` (position order, cascade-deleted with the pull request). Migration 20 added it, the Others tables and `queue_tab = 'others'` (the column re-made with the wider CHECK, its value kept).
 - Schema changes append a new entry to `SCHEMA_MIGRATIONS`; never edit a shipped one. A database whose `user_version` is past the known migrations (a newer app ran) is refused, not opened.
 - Every field is its own typed column; nothing is stored as JSON. An enum's text is `as_sql_text` / `from_sql_text` (decoding finds the value in the enum's `ALL` whose text matches, so the two cannot drift); another crate's enum gets `<name>_as_sql_text` / `<name>_from_sql_text` in a `…_sql_text.rs` file. Changed files are `pr_file_sets` (version tag) + `pr_files` (one row per file, `position` keeps GitHub's order).

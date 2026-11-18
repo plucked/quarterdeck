@@ -1,4 +1,5 @@
 use gpui::{AnyElement, Context, FontWeight, SharedString, div, prelude::*, px};
+use qd_cache::QueueTab;
 use qd_github::{PullRequest, PullRequestBranches};
 
 use super::ReviewQueue;
@@ -15,8 +16,6 @@ const STATE_RING_SIZE: f32 = 10.;
 const BRIEF_MARK_SIZE: f32 = 11.;
 /// The author's avatar in a pull request row's second line.
 const ROW_AVATAR_SIZE: f32 = 14.;
-/// Element id of a row's review verdict badge (unique within its row).
-pub(super) const VERDICT_BADGE_ID: &str = "review-verdict";
 /// Space above the state ring, so it sits level with the title's first line.
 const STATE_RING_TOP: f32 = 4.;
 
@@ -59,6 +58,7 @@ impl PullRequestState {
 /// verdict, a Draft pill, and a mark when it has a stored brief, then `base ← head` once its branches are
 /// known; clicking selects it.
 pub(super) fn render_pull_request_row(
+    tab: QueueTab,
     pull_request: &PullRequest,
     list_index: usize,
     is_selected: bool,
@@ -117,7 +117,7 @@ pub(super) fn render_pull_request_row(
                         .children(
                             pull_request
                                 .viewer_review
-                                .map(|review| ReviewVerdictBadge::new(VERDICT_BADGE_ID, review)),
+                                .map(|review| ReviewVerdictBadge::new(Some(tab), review)),
                         )
                         .when(state == PullRequestState::Draft, |meta| {
                             meta.child(Pill::draft())

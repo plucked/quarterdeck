@@ -5,9 +5,9 @@ use qd_cache::QueueTab;
 use qd_github::{PullRequest, RepoRef, StackLayer, ViewerReview};
 
 use super::ReviewQueue;
-use super::pull_request_row_rendering::{VERDICT_BADGE_ID, render_brief_mark};
+use super::pull_request_row_rendering::render_brief_mark;
 use super::review_verdict_badge::ReviewVerdictBadge;
-use super::sidebar_rendering::{render_meta, row_frame};
+use super::sidebar_rendering::row_frame;
 use super::stack_group::StackGroup;
 use crate::controls::{FoldChevron, FoldState, NumberFlow, Pill, PillStyle};
 use crate::theme;
@@ -42,7 +42,13 @@ impl ReviewQueue {
             meta: format!("#{}{draft_marker}", pull_request.number).into(),
             is_listed: true,
             marks: LayerMarks {
-                needs_review: self.needs_review(&pull_request.repo, pull_request.number),
+                show_review_badge: match self.tab() {
+                    // A prior verdict already gives this requested layer a "Review again" badge.
+                    QueueTab::ReviewRequested => pull_request.viewer_review.is_none(),
+                    QueueTab::Authored | QueueTab::Others => {
+                        self.needs_review(&pull_request.repo, pull_request.number)
+                    }
+                },
                 has_brief: self.has_brief(&pull_request.repo, pull_request.number),
                 viewer_review: pull_request.viewer_review,
             },
@@ -70,7 +76,7 @@ impl ReviewQueue {
             meta: format!("#{}{}", stack_layer.number, layer_state_marker(stack_layer)).into(),
             is_listed: false,
             marks: LayerMarks {
-                needs_review: self.needs_review(repo, stack_layer.number),
+                show_review_badge: self.needs_review(repo, stack_layer.number),
                 has_brief: self.has_brief(repo, stack_layer.number),
                 viewer_review: self
                     .lists()
@@ -112,13 +118,12 @@ pub(super) fn render_stack_header(
     let open_key = group.key.clone();
     let toggle_key = group.key.clone();
     let is_all = u64::try_from(group.listed).is_ok_and(|listed| listed == group.size);
-    let listed = match (tab, is_all) {
-        (QueueTab::Authored, true) => "all yours".to_owned(),
-        (QueueTab::Authored, false) => format!("{} yours", group.listed),
-        (QueueTab::ReviewRequested, true) => "all to review".to_owned(),
-        (QueueTab::ReviewRequested, false) => format!("{} to review", group.listed),
-        (QueueTab::Others, true) => "all listed".to_owned(),
-        (QueueTab::Others, false) => format!("{} listed", group.listed),
+    let summary = match (tab, is_all) {
+        (QueueTab::Authored, true) => format!("{} layers · all yours", group.size),
+        (QueueTab::Authored, false) => format!("{} layers · {} yours", group.size, group.listed),
+        (QueueTab::ReviewRequested, _) => format!("{} of {} to review", group.listed, group.size),
+        (QueueTab::Others, true) => format!("{} layers · all listed", group.size),
+        (QueueTab::Others, false) => format!("{} layers · {} listed", group.size, group.listed),
     };
     let row_id = SharedString::from(format!(
         "stack-header-{}-{}",
@@ -159,7 +164,7 @@ pub(super) fn render_stack_header(
                                 .child(format!("→ {}", group.base_ref)),
                         ),
                 )
-                .child(render_meta(format!("{} layers · {listed}", group.size))),
+                .child(div().text_xs().text_color(theme::subtle()).child(summary)),
         )
         .child(
             FoldChevron::new(("stack-fold", row_index), FoldState::of(group.is_collapsed))
@@ -212,8 +217,8 @@ pub(super) struct LayerRow {
 
 /// What a layer row marks beside its title.
 struct LayerMarks {
-    /// It asks for the viewer's review (a badge says so).
-    needs_review: bool,
+    /// Show the Review badge beside the title.
+    show_review_badge: bool,
     /// It has a stored brief (a star says so).
     has_brief: bool,
     /// The viewer's latest review (a badge says which), when known.
@@ -226,6 +231,7 @@ struct LayerMarks {
 /// review verdict, and `#number` (with its state) on the
 /// right. Layers the list lacks are muted; clicking any opens it.
 pub(super) fn render_layer_row(
+    tab: QueueTab,
     row: LayerRow,
     on_click: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
@@ -269,14 +275,14 @@ pub(super) fn render_layer_row(
                 .when(!row.is_listed, |title| title.text_color(theme::muted()))
                 .child(row.title),
         )
-        .when(row.marks.needs_review, |line| {
+        .when(row.marks.show_review_badge, |line| {
             line.child(Pill::new("Review", PillStyle::Accent))
         })
         .when(row.marks.has_brief, |line| line.child(render_brief_mark()))
         .children(
             row.marks
                 .viewer_review
-                .map(|review| ReviewVerdictBadge::new(VERDICT_BADGE_ID, review)),
+                .map(|review| ReviewVerdictBadge::new(row.is_listed.then_some(tab), review)),
         )
         .child(
             div()

@@ -240,7 +240,6 @@ impl ReviewQueue {
             self.selection_origin,
             refreshed.as_ref(),
         );
-        self.review_tab = lists.review_tab();
         self.lists = lists;
         self.update_others_shown();
         self.request_author_avatars(cx);

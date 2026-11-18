@@ -3,12 +3,12 @@ use crate::search_issue::SearchIssue;
 use crate::search_response::SearchResponse;
 use crate::{GitHubClient, GitHubError, PullRequest};
 
-const REVIEW_REQUESTED_QUERY: &str = "is:pr is:open archived:false review-requested:@me";
+const REVIEW_REQUESTED_QUERY: &str = "is:pr is:open archived:false user-review-requested:@me";
 const AUTHORED_QUERY: &str = "is:pr is:open archived:false author:@me";
 /// Open pull requests by others that the viewer submitted a review on.
 const REVIEWED_QUERY: &str = "is:pr is:open archived:false reviewed-by:@me -author:@me";
 impl GitHubClient {
-    /// Open pull requests that request the viewer's review, most recently
+    /// Open pull requests that directly request the viewer's review, most recently
     /// updated first. Follows every result page.
     pub fn review_requested(&self) -> Result<Vec<PullRequest>, GitHubError> {
         self.search_pull_requests(REVIEW_REQUESTED_QUERY)

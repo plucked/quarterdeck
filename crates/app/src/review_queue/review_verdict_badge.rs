@@ -1,12 +1,11 @@
 //! `ReviewVerdictBadge`: a small round mark saying how the viewer last
 //! reviewed a pull request.
 
-use gpui::{
-    App, ElementId, FontWeight, IntoElement, RenderOnce, Rgba, Window, div, prelude::*, px,
-};
+use gpui::{App, FontWeight, IntoElement, RenderOnce, Rgba, Window, div, prelude::*, px};
+use qd_cache::QueueTab;
 use qd_github::ViewerReview;
 
-use crate::controls::TextTooltip;
+use crate::controls::{Pill, PillStyle, TextTooltip};
 use crate::theme;
 
 /// Diameter of the badge.
@@ -20,7 +19,7 @@ const GLYPH_SIZE: f32 = 9.;
 /// (dismissed); hovering says it in words.
 #[derive(IntoElement)]
 pub struct ReviewVerdictBadge {
-    id: ElementId,
+    listed_in: Option<QueueTab>,
     review: ViewerReview,
 }
 
@@ -34,12 +33,10 @@ struct BadgeLook {
 }
 
 impl ReviewVerdictBadge {
-    /// The badge of `review`; `id` must be unique among its siblings.
-    pub fn new(id: impl Into<ElementId>, review: ViewerReview) -> Self {
-        Self {
-            id: id.into(),
-            review,
-        }
+    /// A previous verdict in the queue, labeled "Review again" on a pending request.
+    /// An unlisted stack layer shows its last verdict.
+    pub fn new(listed_in: Option<QueueTab>, review: ViewerReview) -> Self {
+        Self { listed_in, review }
     }
 }
 
@@ -76,9 +73,14 @@ fn look_of(review: ViewerReview) -> BadgeLook {
 impl RenderOnce for ReviewVerdictBadge {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let look = look_of(self.review);
-        div()
-            .id(self.id)
+        let badge = div()
+            .id("review-verdict")
             .flex_none()
+            .tooltip(TextTooltip::builder(look.words));
+        if self.listed_in == Some(QueueTab::ReviewRequested) {
+            return badge.child(Pill::new("Review again", PillStyle::Outlined).compact());
+        }
+        badge
             .size(px(BADGE_SIZE))
             .rounded_full()
             .flex()
@@ -91,7 +93,6 @@ impl RenderOnce for ReviewVerdictBadge {
             .text_size(px(GLYPH_SIZE))
             .font_weight(FontWeight::BOLD)
             .text_color(look.glyph_color)
-            .tooltip(TextTooltip::builder(look.words))
             .child(look.glyph)
     }
 }

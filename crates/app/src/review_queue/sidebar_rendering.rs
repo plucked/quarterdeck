@@ -81,7 +81,7 @@ impl ReviewQueue {
         )
     }
 
-    /// The Mine / Review / Others tabs atop the list, and what is going on
+    /// The Mine / To review / Others tabs atop the list, and what is going on
     /// (refreshing, opening a layer, a failure) while it lasts.
     fn render_sidebar_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let status = self.render_status_line();
@@ -96,12 +96,12 @@ impl ReviewQueue {
             .children(status)
     }
 
-    /// The Mine / Review / Others tabs with their counts (Others: those its
+    /// The Mine / To review / Others tabs with their counts (Others: those its
     /// filters show).
     fn render_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let tab = self.tab();
         let authored = self.lists().authored.len();
-        let review_requested = self.review_tab().len();
+        let review_requested = self.lists().review_tab().len();
         let others = self.others_tab().shown().len();
         let queue = cx.entity().downgrade();
         let show_tab = |tab| view_option(&queue, tab, ReviewQueue::show_tab);
@@ -113,7 +113,7 @@ impl ReviewQueue {
                 show_tab(QueueTab::Authored),
             )
             .option(
-                format!("Review  {review_requested}"),
+                format!("To review  {review_requested}"),
                 tab == QueueTab::ReviewRequested,
                 show_tab(QueueTab::ReviewRequested),
             )
@@ -170,6 +170,7 @@ impl ReviewQueue {
             QueueRow::PullRequest(list_index) => {
                 let pull_request = self.shown_list().get(*list_index)?;
                 render_pull_request_row(
+                    self.tab(),
                     pull_request,
                     *list_index,
                     selected_id == Some(pull_request.id),
@@ -188,7 +189,7 @@ impl ReviewQueue {
                     move |queue, cx| queue.select(list_index, cx),
                     cx,
                 );
-                render_layer_row(row, on_click)
+                render_layer_row(self.tab(), row, on_click)
             }
             QueueRow::OtherLayer { key, layer } => {
                 let stack_layer = self.stack(key)?.layers.get(*layer)?;
@@ -200,7 +201,7 @@ impl ReviewQueue {
                     move |queue, cx| queue.open_other_layer(&open_key, layer, cx),
                     cx,
                 );
-                render_layer_row(row, on_click)
+                render_layer_row(self.tab(), row, on_click)
             }
             QueueRow::StackHeader(group) => {
                 let is_reviewed = self.is_stack_reviewed(&group.key, cx);

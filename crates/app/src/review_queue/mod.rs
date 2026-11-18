@@ -1,6 +1,6 @@
 //! The main view: the viewer's own pull requests, those that request
-//! their review or that they reviewed, and others' in watched repositories
-//! on the left (Mine, Review and Others tabs, grouped by repository and stack), and the selected one in the
+//! their review, and others' in watched repositories
+//! on the left (Mine, To review and Others tabs, grouped by repository and stack), and the selected one in the
 //! detail pane on the right. It opens
 //! stack layers the detail asks for, and records the tab, selection and
 //! detail scroll as UI state to restore them after a relaunch.
