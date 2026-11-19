@@ -53,7 +53,7 @@
 //! - `diff_selection_actions.rs`: selecting code in the diff with the mouse and copying it.
 //! - `row_rendering.rs`: renders the pane's layout and each diff row.
 //! - `row_height_estimate.rs`: where each row starts, estimated without layout, for the scrollbar.
-//! - `sticky_header_rendering.rs`: the header: identity, centered view tabs, metadata and title.
+//! - `sticky_header_rendering.rs`: the one-row header: status, title and repository left; author, branches, update time and the activity pill right.
 //! - `summary_rendering.rs`: the PR's Markdown description in its own scrollable Summary tab.
 //! - `sticky_file_header.rs`: pins the top file's header while its diff scrolls underneath.
 //! - `github_link.rs`: `GitHubLink`, GitHub's mark as an icon button opening the pull request on GitHub.
@@ -84,7 +84,6 @@
 //! - `batch_progress.rs`: `BatchProgress`, how many of the syntax coloring's batches are done.
 //! - `review_target.rs`: `ReviewTarget`, one layer or a combined range of stack layers.
 //! - `fetch_combined_files.rs`: gets a combined range's files from the cache or one diff download.
-//! - `stack_mode_rendering.rs`: Layer / Combined inside the expanding view bubble; range details on hover.
 //! - `review_pane.rs`: `ReviewPane`, the detail's review state: comments, cards, editor, tab.
 //! - `review_comments.rs`: `ReviewComments`, GitHub's conversations and the user's notes, as cards.
 //! - `comment_card.rs`: `CommentCard`, one card of comments: a GitHub conversation or a note.
@@ -116,6 +115,7 @@
 //! - `fetch_file_text.rs`: gets a file's text after the change from the cache by blob SHA, else from GitHub.
 //! - `context_loads.rs`: `ContextLoads`, the file texts being fetched and their tasks.
 //! - `detail_mode.rs`: `DetailMode`, the summary, diff, guided review or brief in the main column.
+//! - `detail_mode_switch.rs`: `DetailModeSwitch`, the view tabs with a stack's Layer / Combined beside them (range details on hover), placed in the window's top bar by the queue.
 //! - `detail_mode_actions.rs`: separate review surfaces, their navigation and retained step selection.
 //! - `brief_pane_tests.rs`: retained saved briefs, stale completion and publication/cancellation regression cases.
 //! - `brief_pane.rs`: `BriefPane`, the briefs written this session, the run in flight, the brief's rows.
@@ -167,6 +167,7 @@ mod detail_content;
 mod detail_event;
 mod detail_mode;
 mod detail_mode_actions;
+mod detail_mode_switch;
 mod detail_row;
 mod detail_row_list;
 mod diff_line_ref;
@@ -230,7 +231,6 @@ mod smart_filter_actions;
 mod smart_filter_job;
 mod smart_filter_state;
 mod stack_actions;
-mod stack_mode_rendering;
 mod stack_state;
 mod sticky_file_header;
 mod sticky_header_rendering;
@@ -241,6 +241,7 @@ mod thread_resolution;
 mod viewed_toggle;
 
 pub use detail_event::DetailEvent;
+pub use detail_mode_switch::DetailModeSwitch;
 pub use layer_request::LayerRequest;
 pub use pull_request_detail::PullRequestDetail;
 
