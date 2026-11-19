@@ -21,7 +21,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 **Stacked pull requests**
 - Review a stack layer by layer, or combined: every change from the bottom of the stack up to the layer you are on, as one diff.
-- In **Diff** and **Guided review**, **Layer / Combined** appears right beside the view tabs in the window's top bar. Summary and Brief tuck those options away. Choose individual layers in the sidebar.
+- In **Diff** and **Guided review**, the selected tab in the window's top bar extends to show **Layer / Combined**. Summary and Brief tuck those options away. Choose individual layers in the sidebar.
 - Step through layers with `{` and `}`, switch between layer and combined with `c`, and ⇧-click a layer in the sidebar to start the combined range there.
 
 **Reading diffs**

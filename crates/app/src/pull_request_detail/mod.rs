@@ -119,7 +119,7 @@
 //! - `fetch_file_text.rs`: gets a file's text after the change from the cache by blob SHA, else from GitHub.
 //! - `context_loads.rs`: `ContextLoads`, the file texts being fetched and their tasks.
 //! - `detail_mode.rs`: `DetailMode`, the summary, diff, guided review or brief in the main column.
-//! - `detail_mode_switch.rs`: `DetailModeSwitch`, the view tabs with a stack's Layer / Combined beside them (range details on hover), placed in the window's top bar by the queue.
+//! - `detail_mode_switch.rs`: `DetailModeSwitch`, the view tabs with a stack's Layer / Combined inside the selected diff tab (range details on hover), placed in the window's top bar by the queue.
 //! - `detail_mode_actions.rs`: separate review surfaces, their navigation and retained step selection.
 //! - `brief_pane_tests.rs`: retained saved briefs, stale completion and publication/cancellation regression cases.
 //! - `brief_pane.rs`: `BriefPane`, the briefs written this session, the run in flight, the brief's rows.

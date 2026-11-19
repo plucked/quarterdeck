@@ -1,5 +1,6 @@
 //! `DetailModeSwitch`: the shown pull request's view tabs, with a stack's
-//! Layer / Combined choice beside them, for the window's top bar.
+//! Layer / Combined choice inside the selected diff tab, for the window's
+//! top bar.
 
 use gpui::{App, Entity, IntoElement, RenderOnce, WeakEntity, Window, div, prelude::*};
 use qd_cache::StackReviewMode;
@@ -11,8 +12,8 @@ use crate::controls::{SegmentedControl, TextTooltip, view_option};
 
 /// Summary / Diff / Guided review / Brief for the pull request a
 /// [`PullRequestDetail`] shows, centered in the space the switch is given.
-/// A stacked pull request on a diff view adds Layer / Combined right of the
-/// tabs, which keep their place when it comes and goes.
+/// For a stacked pull request the selected Diff or Guided review tab extends
+/// to hold Layer / Combined as a small switch after its label.
 #[derive(IntoElement)]
 pub struct DetailModeSwitch {
     detail: Entity<PullRequestDetail>,
@@ -29,33 +30,24 @@ impl RenderOnce for DetailModeSwitch {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let handle = self.detail.downgrade();
         let detail = self.detail.read(cx);
-        // Equal flexible sides center the tabs; the stack choice starts the
-        // right side, so showing it moves nothing.
         div()
             .size_full()
             .flex()
             .items_center()
-            .gap_2()
-            .child(div().flex_1())
+            .justify_center()
             .child(mode_tabs(detail, &handle))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .children(stack_mode_choice(detail, &handle)),
-            )
     }
 }
 
-/// The four views of the main column, the shown one selected.
+/// The four views of the main column, the shown one selected and, on a diff
+/// view of a stacked pull request, holding the stack mode choice.
 fn mode_tabs(
     detail: &PullRequestDetail,
     handle: &WeakEntity<PullRequestDetail>,
 ) -> SegmentedControl {
     let shown = detail.brief().mode;
     let pick = |mode| view_option(handle, mode, PullRequestDetail::select_detail_mode);
-    SegmentedControl::new("detail-mode")
+    let tabs = SegmentedControl::new("detail-mode")
         .large()
         .quiet()
         .option(
@@ -69,11 +61,15 @@ fn mode_tabs(
             shown == DetailMode::GuidedReview,
             pick(DetailMode::GuidedReview),
         )
-        .option("Brief", shown == DetailMode::Brief, pick(DetailMode::Brief))
+        .option("Brief", shown == DetailMode::Brief, pick(DetailMode::Brief));
+    match stack_mode_choice(detail, handle) {
+        Some(choice) => tabs.selected_detail(choice),
+        None => tabs,
+    }
 }
 
-/// Layer / Combined for a stacked pull request while a diff view shows,
-/// `None` otherwise. Its tooltip holds the range, loading and failure
+/// Layer / Combined as a small switch for a stacked pull request while a
+/// diff view shows, `None` otherwise. Its tooltip holds the range, loading and failure
 /// details; layer navigation belongs to the sidebar.
 fn stack_mode_choice(
     detail: &PullRequestDetail,
@@ -108,7 +104,7 @@ fn stack_mode_choice(
             .tooltip(TextTooltip::builder(hint))
             .child(
                 SegmentedControl::new("stack-review-mode")
-                    .quiet()
+                    .inset()
                     .option(
                         "Layer",
                         mode == StackReviewMode::Layer,
