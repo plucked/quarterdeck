@@ -3,7 +3,7 @@ use super::line_counts::LineCounts;
 
 /// What a folder's tree row shows about the files under it, worked out once
 /// per row refresh so drawing a row costs nothing: the matching files' changed
-/// lines, count and heat, and whether the files the chips let through are viewed.
+/// lines, count, heat and viewed state.
 #[derive(Debug, Clone, Copy)]
 pub struct FolderSummary {
     pub lines: LineCounts,

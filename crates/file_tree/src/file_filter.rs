@@ -19,8 +19,7 @@ impl FileFilter {
         !(self.hide_viewed && file.is_viewed) && self.shows_ignoring_viewed(file)
     }
 
-    /// Whether `file` passes the kind and type rows; a folder's viewed
-    /// checkbox covers these files, viewed or not.
+    /// Whether `file` passes the kind and type rows.
     pub fn shows_ignoring_viewed(&self, file: &FilteredFile<'_>) -> bool {
         self.kinds.admits(&file.kind()) && self.file_types.admits(file.file_type())
     }

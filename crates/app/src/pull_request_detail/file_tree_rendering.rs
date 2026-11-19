@@ -206,9 +206,10 @@ impl PullRequestDetail {
             .child(
                 div()
                     .id(("folder-viewed", index))
-                    .tooltip(TextTooltip::builder(
-                        "Toggle every file in this folder viewed, including hidden files",
-                    ))
+                    .tooltip(TextTooltip::builder(match state {
+                        FolderViewedState::All => "Mark matching files in this folder as unviewed",
+                        _ => "Mark matching files in this folder as viewed",
+                    }))
                     .flex_none()
                     .on_click(cx.listener(move |detail, _, _, cx| {
                         cx.stop_propagation();

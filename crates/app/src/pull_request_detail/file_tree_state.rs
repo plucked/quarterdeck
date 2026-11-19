@@ -33,7 +33,8 @@ pub struct FileTreeState {
     type_counts: Vec<FacetCount<String>>,
     /// Files the filter shows, of all loaded, as of the last row refresh.
     shown_count: usize,
-    file_count: usize,
+    /// Filter matches by loaded file index, including descendants of folded folders.
+    matching_files: Vec<bool>,
     /// Whether the type row shows every type, not only the most common.
     are_types_expanded: bool,
     /// Each folder's changed lines, file count, heat and viewed state, as of the last refresh.
@@ -65,7 +66,7 @@ impl FileTreeState {
             kind_counts: Vec::new(),
             type_counts: Vec::new(),
             shown_count: 0,
-            file_count: 0,
+            matching_files: Vec::new(),
             are_types_expanded: false,
             folder_summaries: HashMap::new(),
             widest_line_counts: LineCounts::default(),
@@ -108,7 +109,7 @@ impl FileTreeState {
 
     /// Files shown and files loaded.
     pub fn shown_of_total(&self) -> (usize, usize) {
-        (self.shown_count, self.file_count)
+        (self.shown_count, self.matching_files.len())
     }
 
     /// Folder `folder`'s changed lines, file count, heat and viewed state.
@@ -159,10 +160,10 @@ impl FileTreeState {
     /// Recomputes the visible rows and the chips' counts after files,
     /// filters, marks or folders changed.
     pub fn refresh_rows(&mut self, files: &[LoadedFile], review: &FileReviewState) {
-        let shown = self.shown_files(files, review);
-        self.rows = self.tree.visible_rows(&self.collapsed_folders, |file| {
-            shown.get(file).copied().unwrap_or(false)
-        });
+        self.matching_files = self.shown_files(files, review);
+        self.rows = self
+            .tree
+            .visible_rows(&self.collapsed_folders, |file| self.file_matches(file));
 
         // The counts every chip shows, given the other row and the viewed switch.
         let filtered: Vec<FilteredFile<'_>> = files
@@ -192,8 +193,7 @@ impl FileTreeState {
                 .find(|other| other.value == count.value)
                 .map_or(0, |other| other.matching);
         }
-        self.shown_count = shown.iter().filter(|is_shown| **is_shown).count();
-        self.file_count = files.len();
+        self.shown_count = self.matching_files.iter().filter(|shown| **shown).count();
 
         // Every folder's totals in one walk, so drawing a row looks them up.
         let mut summaries = HashMap::new();
@@ -227,25 +227,18 @@ impl FileTreeState {
     ) -> NodeTotals {
         match &self.tree.node(node).kind {
             TreeNodeKind::File { file } => {
-                let Some(loaded) = files.get(*file) else {
+                if !self.file_matches(*file) {
                     return NodeTotals::default();
-                };
-                // Folder actions cover every descendant, even while filters hide it.
-                let filtered = filtered_file(loaded, review);
-                let mut totals = NodeTotals {
-                    covered: 1,
-                    viewed: usize::from(filtered.is_viewed),
-                    ..NodeTotals::default()
-                };
-                // Counts and heat describe only files that pass the active filters.
-                if self.shows(loaded, review) {
-                    totals.file_count = 1;
-                    totals.lines = LineCounts {
+                }
+                let loaded = &files[*file];
+                NodeTotals {
+                    lines: LineCounts {
                         additions: loaded.file.additions,
                         deletions: loaded.file.deletions,
-                    };
+                    },
+                    file_count: 1,
+                    viewed: usize::from(review.is_viewed(loaded.filename())),
                 }
-                totals
             }
             TreeNodeKind::Folder { children } => {
                 let totals = children
@@ -258,7 +251,7 @@ impl FileTreeState {
                         lines: totals.lines,
                         file_count: totals.file_count,
                         heat: 0.,
-                        viewed: FolderViewedState::of(totals.viewed, totals.covered),
+                        viewed: FolderViewedState::of(totals.viewed, totals.file_count),
                     },
                 );
                 totals
@@ -366,32 +359,16 @@ impl FileTreeState {
         }
     }
 
-    /// Every loaded descendant of a folder, including files hidden by search or facets.
-    pub fn folder_files(&self, folder: NodeId, files: &[LoadedFile]) -> Vec<usize> {
-        self.tree
-            .files_under(folder)
-            .into_iter()
-            .filter(|file| *file < files.len())
-            .collect()
+    /// Whether the file passed the filters when the tree rows were built.
+    fn file_matches(&self, file: usize) -> bool {
+        self.matching_files.get(file).copied().unwrap_or(false)
     }
 
-    /// How much of a folder is viewed.
-    pub fn folder_viewed_state(
-        &self,
-        folder: NodeId,
-        files: &[LoadedFile],
-        review: &FileReviewState,
-    ) -> FolderViewedState {
-        let covered = self.folder_files(folder, files);
-        let viewed = covered
-            .iter()
-            .filter(|file| {
-                files
-                    .get(**file)
-                    .is_some_and(|loaded| review.is_viewed(loaded.filename()))
-            })
-            .count();
-        FolderViewedState::of(viewed, covered.len())
+    /// Matching descendants in tree order, including files under folded folders.
+    pub fn matching_folder_files(&self, folder: NodeId) -> Vec<usize> {
+        let mut files = self.tree.files_under(folder);
+        files.retain(|file| self.file_matches(*file));
+        files
     }
 }
 
@@ -400,9 +377,7 @@ impl FileTreeState {
 struct NodeTotals {
     lines: LineCounts,
     file_count: usize,
-    /// All loaded descendants (a folder checkbox covers these).
-    covered: usize,
-    /// Of those, the viewed ones.
+    /// Matching descendants marked as viewed.
     viewed: usize,
 }
 
@@ -411,7 +386,6 @@ impl NodeTotals {
         Self {
             lines: self.lines.plus(other.lines),
             file_count: self.file_count + other.file_count,
-            covered: self.covered + other.covered,
             viewed: self.viewed + other.viewed,
         }
     }
@@ -445,28 +419,62 @@ mod tests {
 
     use super::*;
 
-    /// Kind, type, search and viewed filters compose, while folder actions cover hidden files.
+    fn modified_file(path: &str) -> LoadedFile {
+        LoadedFile::build(
+            PullRequestFile {
+                filename: path.into(),
+                previous_filename: None,
+                status: "modified".into(),
+                additions: 1,
+                deletions: 0,
+                patch: None,
+                sha: None,
+            },
+            DiffOptions::default(),
+        )
+    }
+
+    /// A folder checkbox targets only matching descendants, even when the folder is folded.
+    #[test]
+    fn folder_viewed_respects_file_type_filter() {
+        let paths = ["assets/nested/data.bin", "assets/notes.txt"];
+        let files = paths.map(modified_file);
+        let mut state = FileTreeState::new(ReviewLayoutState::default());
+        let mut review = FileReviewState::default();
+        state.reset_for(FileTree::build(&paths));
+        let folder = state.tree.roots()[0];
+        state.click_file_type(".bin", ChipClick::Pick);
+        state.collapse_all_folders();
+        state.refresh_rows(&files, &review);
+
+        // Marking the folder checks it even though the text file is still unviewed.
+        for index in state.matching_folder_files(folder) {
+            review.set_viewed(&files[index], true);
+        }
+        assert!(review.is_viewed(paths[0]));
+        assert!(!review.is_viewed(paths[1]));
+        state.refresh_rows(&files, &review);
+        assert_eq!(
+            state.folder_summary(folder).unwrap().viewed,
+            FolderViewedState::All
+        );
+
+        // Clearing the filter shows the mixed folder and includes both files again.
+        state.clear_chips();
+        state.refresh_rows(&files, &review);
+        assert_eq!(
+            state.folder_summary(folder).unwrap().viewed,
+            FolderViewedState::Some
+        );
+        assert_eq!(state.matching_folder_files(folder), [0, 1]);
+    }
+
+    /// Kind, type, search and viewed filters compose for folder actions.
     #[test]
     fn ordinary_filters_compose_with_search_and_folder_review() {
         // Search matches one Rust file and the Markdown file, across all loaded facets.
         let paths = ["src/a.rs", "src/b_test.rs", "src/readme.md", "src/new.rs"];
-        let files: Vec<_> = paths
-            .iter()
-            .map(|path| {
-                LoadedFile::build(
-                    PullRequestFile {
-                        filename: (*path).into(),
-                        previous_filename: None,
-                        status: "modified".into(),
-                        additions: 1,
-                        deletions: 0,
-                        patch: None,
-                        sha: None,
-                    },
-                    DiffOptions::default(),
-                )
-            })
-            .collect();
+        let files = paths.map(modified_file);
         let mut state = FileTreeState::new(ReviewLayoutState::default());
         state.reset_for(FileTree::build(&paths));
         state.search.query = "a".into();
@@ -483,9 +491,9 @@ mod tests {
         state.refresh_rows(&files, &review);
         assert_eq!(state.shown_of_total(), (2, 4));
         let folder = state.tree.roots()[0];
-        assert_eq!(state.folder_files(folder, &files), [0, 1, 3, 2]);
+        assert_eq!(state.matching_folder_files(folder), [0, 2]);
         assert_eq!(
-            state.folder_viewed_state(folder, &files, &review),
+            state.folder_summary(folder).unwrap().viewed,
             FolderViewedState::Some
         );
         let rust_count = state
@@ -497,12 +505,12 @@ mod tests {
         assert_eq!(rust_count.matching, 1);
         assert!(!state.shows(&files[3], &review));
 
-        // Type and viewed controls narrow the search; folder coverage stays complete.
+        // Hide viewed removes the only Rust file matching the search.
         state.click_file_type(".rs", ChipClick::Pick);
         state.toggle_hide_viewed();
         state.refresh_rows(&files, &review);
         assert_eq!(state.shown_of_total(), (0, 4));
-        assert_eq!(state.folder_files(folder, &files), [0, 1, 3, 2]);
+        assert_eq!(state.matching_folder_files(folder), Vec::<usize>::new());
         state.clear_chips();
         state.refresh_rows(&files, &review);
         assert_eq!(state.shown_of_total(), (1, 4));
@@ -606,8 +614,7 @@ mod tests {
         assert!(state.folder_summaries.is_empty());
     }
 
-    /// Hidden viewed files contribute neither counts nor lines nor heat,
-    /// while folder checkboxes still track reviewed descendants.
+    /// Hidden viewed files are excluded from folder counts, lines, heat and checkbox state.
     #[test]
     fn folder_totals_follow_visible_files() {
         // A fully reviewed folder starts largest; another is partly reviewed.
@@ -670,12 +677,12 @@ mod tests {
             }
         );
         assert!((summary.heat - 1.).abs() < f64::EPSILON);
-        assert_eq!(summary.viewed, FolderViewedState::Some);
+        assert_eq!(summary.viewed, FolderViewedState::None);
         assert_eq!(state.folder_summary(nested).unwrap().file_count, 1);
         assert_eq!(state.folder_summary(reviewed).unwrap().file_count, 0);
         assert_eq!(
             state.folder_summary(reviewed).unwrap().viewed,
-            FolderViewedState::All
+            FolderViewedState::None
         );
         assert!(!state.rows.iter().any(|row| row.node == reviewed));
 

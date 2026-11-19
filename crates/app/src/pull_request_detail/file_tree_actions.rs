@@ -79,15 +79,15 @@ impl PullRequestDetail {
         cx.notify();
     }
 
-    /// Marks every file a folder covers as viewed, or, when all already
-    /// are, as not viewed; saves the marks.
+    /// Marks the folder's matching files as viewed, or clears their marks if all are viewed.
     pub(super) fn toggle_folder_viewed(&mut self, folder: NodeId, cx: &mut Context<Self>) {
-        let files = self.file_tree.folder_files(folder, self.loaded_files());
-        let mark_viewed =
-            self.file_tree
-                .folder_viewed_state(folder, self.loaded_files(), &self.file_review)
-                != FolderViewedState::All;
-        self.set_files_viewed(&files, mark_viewed, cx);
+        let Some(summary) = self.file_tree.folder_summary(folder) else {
+            return;
+        };
+        if summary.file_count > 0 {
+            let files = self.file_tree.matching_folder_files(folder);
+            self.set_files_viewed(&files, summary.viewed != FolderViewedState::All, cx);
+        }
     }
 
     /// Clears every viewed mark in the loaded review scope, including files
