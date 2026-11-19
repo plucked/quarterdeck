@@ -4,10 +4,10 @@ use qd_github::{PullRequest, PullRequestStack};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShowChange {
     /// The version shown already: only its data is taken, and its stack is
-    /// loaded when `loads_stack` (its membership arrived only now).
+    /// loaded when `loads_stack` (the layers are still missing).
     SameVersion { loads_stack: bool },
-    /// A new version of the shown pull request: its files reload where the
-    /// reader is; `is_other_stack` when the loaded stack's layers no longer apply.
+    /// A new timestamp or stack membership requires checking the review.
+    /// `is_other_stack` means the loaded layers no longer apply.
     NewVersion { is_other_stack: bool },
     /// Another pull request: it starts at the top (or at a restored
     /// position); `is_other_stack` as for a new version.
@@ -25,7 +25,9 @@ impl ShowChange {
         let Some(shown) = shown.filter(|shown| shown.id == next.id) else {
             return Self::OtherPullRequest { is_other_stack };
         };
-        if shown.updated_at == next.updated_at {
+        let same_membership = shown.stack.as_ref().map(|membership| membership.number)
+            == next.stack.as_ref().map(|membership| membership.number);
+        if shown.updated_at == next.updated_at && same_membership {
             Self::SameVersion {
                 loads_stack: is_other_stack && next.stack.is_some(),
             }
@@ -118,7 +120,9 @@ mod tests {
         let shown = pull_request(1, "a", None);
         assert_eq!(
             ShowChange::decide(Some(&shown), None, &pull_request(1, "a", Some(9))),
-            ShowChange::SameVersion { loads_stack: true }
+            ShowChange::NewVersion {
+                is_other_stack: true
+            }
         );
     }
 

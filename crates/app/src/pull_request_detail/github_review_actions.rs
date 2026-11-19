@@ -54,20 +54,30 @@ impl PullRequestDetail {
                     comments.is_loading_github = false;
                     match state {
                         Ok(state) => {
-                            // The comment cards show their authors' avatars.
-                            let avatars: Vec<String> = state
-                                .threads
-                                .iter()
-                                .flat_map(|thread| &thread.comments)
-                                .map(|comment| comment.author_avatar_url.clone())
-                                .collect();
-                            comments.github = Some(state);
                             comments.github_error = None;
-                            AvatarImages::load(cx, avatars);
+                            // Only thread changes affect the inline cards, their authors and row heights.
+                            let threads_changed = comments
+                                .github
+                                .as_ref()
+                                .map_or(&[][..], |shown| &shown.threads)
+                                != state.threads;
+                            if threads_changed {
+                                AvatarImages::load(
+                                    cx,
+                                    state
+                                        .threads
+                                        .iter()
+                                        .flat_map(|thread| &thread.comments)
+                                        .map(|comment| comment.author_avatar_url.clone()),
+                                );
+                            }
+                            comments.github = Some(state);
+                            if threads_changed {
+                                detail.rebuild_rows_in_place();
+                            }
                         }
                         Err(error) => comments.github_error = Some(format!("{error:#}").into()),
                     }
-                    detail.rebuild_rows_in_place();
                     cx.notify();
                 })
                 .ok();

@@ -10,8 +10,7 @@ pub enum SelectionAfterRefresh<'lists> {
     /// The selection stays as it is (a stack layer in no list, or a pull
     /// request just reviewed, merged or closed).
     Unchanged,
-    /// The same pull request, as the refreshed list has it (its stack
-    /// membership may be new); the detail reloads it if `updated_at` moved.
+    /// The same pull request with the latest metadata, including stack membership.
     Refreshed(&'lists PullRequest),
 }
 

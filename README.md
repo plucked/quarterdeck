@@ -12,7 +12,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Three lists: **Mine** (pull requests you opened), **To review** (open PRs with a pending request for you personally, including repeat requests) and **Others** (everyone else's open pull requests in repositories you choose), with counts.
 - PRs are grouped by repository and stack. **To review** shows the whole stack when any layer needs your review. Other layers are dimmed and can still be opened. Only pending requests count toward the tab total. Groups fold, and stay folded across launches.
 - Each row shows whether it is a draft, its number, author, how long ago it changed, the branch it goes into and the one it comes from (`main ← feat/login`), and how you last reviewed it: a green check (approved), a red cross (changes requested), a ring with … (commented) or a dash (your review was dismissed); hover it for the words. A pending request on a PR you previously reviewed is labeled **Review again**. Requested stack layers carry a **Review** or **Review again** badge.
-- Refreshes on its own (at launch, every 5 minutes, and when you come back to the window after a while) or with ⌘R.
+- Refreshes on its own (at launch, every 5 minutes, and when you come back to the window after a while) or with ⌘R. An unchanged review keeps your scroll position, file search and folded files.
 
 **Following other people's work**
 - Choose repositories in Settings → Repositories (type `owner/name` or paste a GitHub link, or pick one your queue already has), and the Others tab lists their open pull requests that you did not open.

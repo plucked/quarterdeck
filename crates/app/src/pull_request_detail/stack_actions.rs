@@ -71,6 +71,7 @@ impl PullRequestDetail {
             return;
         }
         self.target = target;
+        self.layer_refresh_error = None;
         self.pending_scroll = None;
         cx.emit(DetailEvent::TargetChanged);
         self.load_changed_files(cx);
@@ -103,7 +104,7 @@ impl PullRequestDetail {
                 .await;
             let applied = detail.update(cx, |detail, cx| {
                 if let Ok(Some(stack)) = cached {
-                    detail.apply_stack(stack, cx);
+                    detail.apply_stack(&stack, cx);
                 }
             });
             if applied.is_err() {
@@ -119,7 +120,7 @@ impl PullRequestDetail {
                 .update(cx, |detail, cx| {
                     detail.stack.is_loading = false;
                     match refreshed {
-                        Ok(stack) => detail.apply_stack(stack, cx),
+                        Ok(stack) => detail.apply_stack(&stack, cx),
                         Err(error) => {
                             detail.stack.error = Some(format!("{error:#}").into());
                             // Without layers a combined review cannot start; show the layer.
@@ -135,19 +136,39 @@ impl PullRequestDetail {
         }));
     }
 
-    /// Shows `stack`'s layers if it is still the shown pull request's stack.
-    fn apply_stack(&mut self, stack: PullRequestStack, cx: &mut Context<Self>) {
-        let belongs = self.pull_request.as_ref().is_some_and(|pull_request| {
+    /// A confirmed queue result supersedes the detail pane's own cache read or stack request.
+    pub(crate) fn show_refreshed_stack(
+        &mut self,
+        stack: &PullRequestStack,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.belongs_to_stack(stack) {
+            return;
+        }
+        if self.stack.is_loading || self.stack.error.is_some() {
+            self.stack.stop_loading();
+            self.stack.error = None;
+            cx.notify();
+        }
+        self.apply_stack(stack, cx);
+    }
+
+    fn belongs_to_stack(&self, stack: &PullRequestStack) -> bool {
+        self.pull_request.as_ref().is_some_and(|pull_request| {
             pull_request.repo == stack.repo
                 && pull_request
                     .stack
                     .as_ref()
                     .is_some_and(|membership| membership.number == stack.number)
-        });
-        if !belongs || self.stack.loaded.as_ref() == Some(&stack) {
+        })
+    }
+
+    /// Shows the layers if the selected PR still belongs to this stack.
+    fn apply_stack(&mut self, stack: &PullRequestStack, cx: &mut Context<Self>) {
+        if !self.belongs_to_stack(stack) || self.stack.loaded.as_ref() == Some(stack) {
             return;
         }
-        self.stack.loaded = Some(stack);
+        self.stack.loaded = Some(stack.clone());
         self.retarget(cx);
         // The layers below tell the Checks tab where a conflict may hold its workflows up.
         self.follow_checks(cx);

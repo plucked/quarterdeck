@@ -12,6 +12,7 @@ const CHIP_AVATAR_SIZE: f32 = 14.;
 const LABEL_DOT_SIZE: f32 = 8.;
 
 /// What a chip shows before its name: an author's avatar, a label's color.
+#[derive(PartialEq, Eq)]
 pub struct ChipMarks {
     /// Avatar URL by login.
     avatars: HashMap<String, String>,

@@ -21,6 +21,7 @@ use super::context_loads::ContextLoads;
 use super::detail_event::DetailEvent;
 use super::detail_row_list::DetailRowList;
 use super::diff_selection::DiffSelection;
+use super::fetch_changed_files::fetch_changed_files;
 use super::file_review_state::FileReviewState;
 use super::file_tree_state::FileTreeState;
 use super::load_progress::LoadProgress;
@@ -122,6 +123,8 @@ pub struct PullRequestDetail {
     /// The merge or close panel in the Actions tab, while open.
     action_panel: Option<ActionPanel>,
     deferred_reload: Option<PullRequest>,
+    layer_refresh: Option<LayerRefresh>,
+    pub(super) layer_refresh_error: Option<SharedString>,
     background_panels: HashMap<u64, ActionPanel>,
     /// The selected detail mode, AI-written briefs and the run in flight.
     pub(super) brief: BriefPane,
@@ -135,6 +138,12 @@ pub struct PullRequestDetail {
     /// Keep the observers of [`AppSettings`] and the avatars (header and
     /// comment authors) registered for the view's lifetime.
     _subscriptions: [Subscription; 2],
+}
+
+/// The queue version being checked against the open layer. Dropping it cancels delivery.
+struct LayerRefresh {
+    pull_request: PullRequest,
+    _task: Task<()>,
 }
 
 impl EventEmitter<DetailEvent> for PullRequestDetail {}
@@ -205,6 +214,8 @@ impl PullRequestDetail {
             row_tops_width: None,
             action_panel: None,
             deferred_reload: None,
+            layer_refresh: None,
+            layer_refresh_error: None,
             background_panels: HashMap::new(),
             brief: BriefPane::new(detail_brief_handlers(cx)),
             shown_head_sha: None,
@@ -472,22 +483,30 @@ impl PullRequestDetail {
         }
     }
 
-    /// Shows `pull_request`, or nothing. The same version shown again changes
-    /// nothing; a new version of the same pull request reloads its files and
-    /// keeps the scroll position; another pull request starts at the top, or
-    /// at `restore` (a position saved before a relaunch) once its files load.
+    /// Shows the selected PR. A refresh keeps the open diff until its commits or target
+    /// change. Navigation starts at the top or restores the position saved at relaunch.
     pub fn show(
         &mut self,
         pull_request: Option<PullRequest>,
         restore: Option<DetailScrollPosition>,
         cx: &mut Context<Self>,
     ) {
+        // Both stages of a queue refresh can deliver the same version.
+        if self
+            .layer_refresh
+            .as_ref()
+            .is_some_and(|pending| Some(&pending.pull_request) == pull_request.as_ref())
+        {
+            return;
+        }
+        self.layer_refresh = None;
         self.deferred_reload = None;
         let Some(pull_request) = pull_request else {
             self.focus_drawer.reset_contents();
             self.viewed_undo.clear();
             self.switch_action_panel(None);
             self.pull_request = None;
+            self.layer_refresh_error = None;
             self.description = None;
             self.changed_files = None;
             self.viewed_scope = None;
@@ -503,9 +522,6 @@ impl PullRequestDetail {
             cx.notify();
             return;
         };
-        // The header shows the author's avatar.
-        AvatarImages::load(cx, [pull_request.author.avatar_url.clone()]);
-
         // Decide by what was shown before, then carry it out.
         let change = ShowChange::decide(
             self.pull_request.as_ref(),
@@ -514,12 +530,18 @@ impl PullRequestDetail {
         );
         match change {
             ShowChange::SameVersion { loads_stack } => {
-                // The stack membership can arrive later than the pull request.
-                self.pull_request = Some(pull_request);
-                if matches!(self.changed_files, Some(ChangedFiles::Failed(_))) {
+                let retry_files = matches!(self.changed_files, Some(ChangedFiles::Failed(_)));
+                if self.pull_request.as_ref() == Some(&pull_request)
+                    && !retry_files
+                    && (!loads_stack || self.stack.is_loading)
+                {
+                    return;
+                }
+                self.update_metadata(pull_request, cx);
+                if retry_files {
                     self.load_changed_files(cx);
                 }
-                if loads_stack {
+                if loads_stack && !self.stack.is_loading {
                     self.load_stack(cx);
                 }
                 self.follow_checks(cx);
@@ -530,7 +552,25 @@ impl PullRequestDetail {
                     self.deferred_reload = Some(pull_request);
                     return;
                 }
-                // A reload keeps the reader's place.
+                if !is_other_stack {
+                    match (&self.target, &self.changed_files) {
+                        (ReviewTarget::Layer, Some(ChangedFiles::Loaded(_))) => {
+                            self.check_layer_refresh(pull_request, cx);
+                            return;
+                        }
+                        (
+                            ReviewTarget::Combined(_),
+                            Some(ChangedFiles::Loaded(_) | ChangedFiles::Loading(_)),
+                        ) => {
+                            // The queue checks the stack separately. Its range identifies the files.
+                            self.update_metadata(pull_request, cx);
+                            self.follow_checks(cx);
+                            cx.notify();
+                            return;
+                        }
+                        _ => {}
+                    }
+                }
                 self.pending_scroll = restore.or_else(|| Some(self.scroll_position()));
                 if is_other_stack {
                     self.stack.drop_layers();
@@ -550,26 +590,71 @@ impl PullRequestDetail {
         }
     }
 
+    /// Verifies the refreshed layer in the background while the reader keeps using its diff.
+    fn check_layer_refresh(&mut self, pull_request: PullRequest, cx: &mut Context<Self>) {
+        let client = self.services.github.clone();
+        let cache = self.services.cache.clone();
+        let next = pull_request.clone();
+        let task = cx.spawn(async move |detail, cx| {
+            let revision = cx
+                .background_executor()
+                .spawn(async move {
+                    fetch_changed_files(client, &cache, &next, &mut |_| {})
+                        .map(|snapshot| snapshot.revision)
+                })
+                .await;
+            detail
+                .update(cx, |detail, cx| {
+                    let Some(pending) = detail.layer_refresh.take() else {
+                        return;
+                    };
+                    let next = pending.pull_request;
+                    // A new range owns its comparison, and an open editor defers the refresh.
+                    if detail.target != ReviewTarget::Layer || detail.review.editor.is_some() {
+                        detail.show(Some(next), None, cx);
+                        return;
+                    }
+                    let revision = match revision {
+                        Ok(revision) => revision,
+                        Err(error) => {
+                            // Keep the last confirmed version. The next refresh will retry it.
+                            detail.layer_refresh_error = Some(format!("{error:#}").into());
+                            cx.notify();
+                            return;
+                        }
+                    };
+                    if detail.shown_head_sha.as_ref() == Some(&revision.head_sha)
+                        && detail.shown_base_sha.as_ref() == Some(&revision.base_sha)
+                    {
+                        detail.update_metadata(next, cx);
+                        detail.follow_checks(cx);
+                        detail.load_github_review(cx);
+                        cx.notify();
+                    } else {
+                        detail.pending_scroll = Some(detail.scroll_position());
+                        detail.show_new_version(next, cx);
+                    }
+                })
+                .ok();
+        });
+        self.layer_refresh = Some(LayerRefresh {
+            pull_request,
+            _task: task,
+        });
+    }
+
     pub(super) fn resume_deferred_reload(&mut self, cx: &mut Context<Self>) {
         if let Some(pr) = self.deferred_reload.take() {
             self.show(Some(pr), None, cx);
-        } else {
-            self.retarget(cx);
         }
+        // A stack update can also have arrived while the editor held its range.
+        self.retarget(cx);
     }
 
     /// Shows a version of `pull_request` not shown before: the header and
     /// description now, then its files and stack.
     fn show_new_version(&mut self, pull_request: PullRequest, cx: &mut Context<Self>) {
-        // Show the header and description now; the files follow.
-        let is_described = self
-            .description
-            .as_ref()
-            .is_some_and(|description| description.is_of(&pull_request));
-        if !is_described {
-            self.description = Some(ParsedDescription::parse(&pull_request));
-        }
-        self.pull_request = Some(pull_request);
+        self.update_metadata(pull_request, cx);
         self.horizontal_offsets.clear();
 
         // New commits can move the layers' heads, so the stack is checked again (free when unchanged).
@@ -578,6 +663,20 @@ impl PullRequestDetail {
         self.load_changed_files(cx);
         self.load_stack(cx);
         self.follow_checks(cx);
+    }
+
+    /// Updates the header and keeps the summary's text selection while its source is identical.
+    fn update_metadata(&mut self, pull_request: PullRequest, cx: &mut Context<Self>) {
+        AvatarImages::load(cx, [pull_request.author.avatar_url.clone()]);
+        self.layer_refresh_error = None;
+        if self
+            .pull_request
+            .as_ref()
+            .is_none_or(|shown| shown.id != pull_request.id || shown.body != pull_request.body)
+        {
+            self.description = Some(ParsedDescription::parse(&pull_request));
+        }
+        self.pull_request = Some(pull_request);
     }
 
     /// The side panel's Checks tab.
@@ -768,17 +867,18 @@ mod refresh_tests {
         check_viewed_reload(cx, true);
     }
 
-    #[gpui::test]
-    fn automatic_refresh_keeps_the_composer_and_navigation_keeps_the_operation(
+    /// Opens a detail pane backed by an isolated cache, with no network client.
+    fn cached_detail(
         cx: &mut gpui::TestAppContext,
-    ) {
-        let directory = tempfile::tempdir().unwrap();
-        let database = directory.path().join("cache");
+        directory: &std::path::Path,
+    ) -> (Entity<PullRequestDetail>, SharedCache) {
+        let database = directory.join("cache");
         let recorder = UiStateRecorder::open(&database).unwrap();
+        let cache = SharedCache::new(qd_cache::GitHubCache::open(&database).unwrap());
         let services = AppServices {
             github: Err("offline".into()),
             token_source: None,
-            cache: SharedCache::new(qd_cache::GitHubCache::open(&database).unwrap()),
+            cache: cache.clone(),
             database,
         };
         cx.update(|app| {
@@ -786,7 +886,189 @@ mod refresh_tests {
             app.set_global(recorder);
             AvatarImages::install(app);
         });
-        let detail = cx.new(|cx| PullRequestDetail::new(services, cx));
+        (cx.new(|cx| PullRequestDetail::new(services, cx)), cache)
+    }
+
+    /// A later timestamp keeps the reader's diff and search until a commit actually changes.
+    #[gpui::test]
+    fn metadata_refresh_keeps_the_open_diff(cx: &mut gpui::TestAppContext) {
+        use qd_cache::{FileSetRevision, PullRequestListKey};
+        use qd_github::{PullRequestFile, PullRequestRevision};
+
+        // Open an ordinary cached review, then collapse a file and search for it.
+        let directory = tempfile::tempdir().unwrap();
+        let (detail, cache) = cached_detail(cx, directory.path());
+        let mut pull_request = pr(1, "t1");
+        pull_request.body = Some("Original summary".into());
+        let files = [PullRequestFile {
+            filename: "needle.rs".into(),
+            previous_filename: None,
+            status: "added".into(),
+            additions: 1,
+            deletions: 0,
+            patch: Some("@@ -0,0 +1 @@\n+hello".into()),
+            sha: None,
+        }];
+        let mut revision = FileSetRevision {
+            commits: PullRequestRevision {
+                head_sha: "head".into(),
+                base_sha: "base".into(),
+            },
+            etag: None,
+        };
+        cache
+            .lock()
+            .replace_list(
+                PullRequestListKey::AUTHORED,
+                std::slice::from_ref(&pull_request),
+            )
+            .unwrap();
+        cache
+            .lock()
+            .put_files(&pull_request, &files, &revision)
+            .unwrap();
+        detail.update(cx, |detail, cx| {
+            detail.show(Some(pull_request.clone()), None, cx);
+        });
+        cx.run_until_parked();
+        let (diff, summary) = detail.update(cx, |detail, cx| {
+            detail.toggle_file_collapsed(0, cx);
+            detail
+                .focus_drawer
+                .input
+                .update(cx, |input, cx| input.set_text("needle", cx));
+            (
+                detail.loaded_files()[0].diff.clone(),
+                detail.description().unwrap().clone(),
+            )
+        });
+
+        // A failed check keeps the diff available. Confirming it on retry preserves the same objects.
+        pull_request.updated_at = "t2".into();
+        pull_request.title = "Updated title".into();
+        detail.update(cx, |detail, cx| {
+            detail.show(Some(pull_request.clone()), None, cx);
+        });
+        cx.run_until_parked();
+        detail.update(cx, |detail, _| {
+            assert!(detail.layer_refresh_error.is_some());
+            assert_eq!(detail.file_tree.search.query, "needle");
+        });
+        cache
+            .lock()
+            .confirm_files(&pull_request, &revision)
+            .unwrap();
+        detail.update(cx, |detail, cx| {
+            detail.show(Some(pull_request.clone()), None, cx);
+            detail.show(Some(pull_request.clone()), None, cx);
+            assert_eq!(detail.file_tree.search.query, "needle");
+        });
+        cx.run_until_parked();
+        detail.update(cx, |detail, _| {
+            assert!(detail.layer_refresh_error.is_none());
+            assert_eq!(detail.pull_request.as_ref(), Some(&pull_request));
+            assert_eq!(detail.file_tree.search.query, "needle");
+            let file = &detail.loaded_files()[0];
+            assert!(Arc::ptr_eq(&file.diff, &diff));
+            assert!(detail.file_review.state_of(file).is_collapsed);
+            assert!(Arc::ptr_eq(detail.description().unwrap(), &summary));
+        });
+
+        // A base-only change still replaces the displayed revision.
+        pull_request.updated_at = "t3".into();
+        revision.commits.base_sha = "new-base".into();
+        cache
+            .lock()
+            .put_files(&pull_request, &files, &revision)
+            .unwrap();
+        detail.update(cx, |detail, cx| {
+            detail.show(Some(pull_request.clone()), None, cx);
+        });
+        cx.run_until_parked();
+        detail.update(cx, |detail, _| {
+            assert_eq!(detail.shown_base_sha.as_deref(), Some("new-base"));
+            assert!(!Arc::ptr_eq(&detail.loaded_files()[0].diff, &diff));
+        });
+    }
+
+    /// A combined review keeps its range on metadata updates and follows a changed lower base.
+    #[gpui::test]
+    fn stack_refresh_follows_the_combined_range(cx: &mut gpui::TestAppContext) {
+        use qd_github::{StackLayer, StackMembership};
+
+        let directory = tempfile::tempdir().unwrap();
+        let (detail, cache) = cached_detail(cx, directory.path());
+        let mut top = pr(2, "t1");
+        top.stack = Some(StackMembership {
+            number: 9,
+            position: 2,
+            size: 2,
+            base_ref: "main".into(),
+        });
+        let layer = |number: u64| StackLayer {
+            number,
+            pull_request_id: number,
+            title: String::new(),
+            is_open: true,
+            is_draft: false,
+            is_merged: false,
+            html_url: String::new(),
+            head_ref: format!("layer-{number}"),
+            head_sha: format!("head-{number}"),
+            base_ref: "main".into(),
+            base_sha: "base".into(),
+            author_login: String::new(),
+        };
+        let mut stack = PullRequestStack {
+            repo: top.repo.clone(),
+            number: 9,
+            base_ref: "main".into(),
+            is_open: true,
+            layers: vec![layer(1), layer(2)],
+        };
+
+        // Open the actual combined comparison and give the reader a search to preserve.
+        cache.lock().put_stack(&stack, None).unwrap();
+        for base in ["base", "new-base"] {
+            cache
+                .lock()
+                .put_compare_files(&top.repo, base, "head-2", &[])
+                .unwrap();
+        }
+        detail.update(cx, |detail, cx| {
+            detail.prepare_combined_stack_review(cx);
+            detail.show(Some(top.clone()), None, cx);
+        });
+        cx.run_until_parked();
+        detail.update(cx, |detail, cx| {
+            assert_eq!(detail.shown_base_sha.as_deref(), Some("base"));
+            detail.file_tree.search.query = "needle".into();
+
+            // The same range is confirmed, even with a newer title on its lower layer.
+            top.updated_at = "t2".into();
+            detail.show(Some(top.clone()), None, cx);
+            detail.show_refreshed_stack(&stack, cx);
+            stack.layers[0].title = "New title".into();
+            detail.show_refreshed_stack(&stack, cx);
+            assert_eq!(detail.file_tree.search.query, "needle");
+
+            // The selected PR stays at t2 while the stack's comparison base changes.
+            stack.layers[0].base_sha = "new-base".into();
+            detail.show_refreshed_stack(&stack, cx);
+        });
+        cx.run_until_parked();
+        detail.update(cx, |detail, _| {
+            assert_eq!(detail.shown_base_sha.as_deref(), Some("new-base"));
+            assert_eq!(detail.shown_head_sha.as_deref(), Some("head-2"));
+        });
+    }
+
+    #[gpui::test]
+    fn automatic_refresh_keeps_the_composer_and_navigation_keeps_the_operation(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let directory = tempfile::tempdir().unwrap();
+        let (detail, _) = cached_detail(cx, directory.path());
         detail.update(cx, |detail, cx| {
             detail.pull_request = Some(pr(1, "old"));
             let text = cx.new(|cx| {

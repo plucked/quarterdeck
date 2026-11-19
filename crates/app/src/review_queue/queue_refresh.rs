@@ -240,12 +240,18 @@ impl ReviewQueue {
             self.selection_origin,
             refreshed.as_ref(),
         );
+        let lists_changed = self.lists != lists;
         self.lists = lists;
-        self.update_others_shown();
-        self.request_author_avatars(cx);
-        self.rebuild_rows();
+        // Relative date filters can change the sidebar even when GitHub returns identical lists.
+        let others_changed = self.update_others_shown();
+        if lists_changed {
+            self.request_author_avatars(cx);
+        }
+        if lists_changed || others_changed {
+            self.rebuild_rows();
+        }
 
-        // The detail pane reloads an updated pull request and keeps its scroll.
+        // The detail pane checks whether the selected review needs new files.
         match selection {
             SelectionAfterRefresh::Cleared => {
                 if self.selected.is_some() {

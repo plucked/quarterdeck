@@ -4,6 +4,7 @@ use super::chip_marks::ChipMarks;
 
 /// The chip rows of the Others filter open under a repository's header,
 /// worked out when the list or a filter changes, so drawing only reads them.
+#[derive(PartialEq, Eq)]
 pub struct OpenFilterChips {
     /// The label chips with their counts, most matching first.
     pub labels: Vec<FacetCount<String>>,

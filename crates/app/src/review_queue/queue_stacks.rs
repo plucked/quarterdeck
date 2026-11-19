@@ -15,7 +15,8 @@ impl ReviewQueue {
     /// Checks the layers of every listed stack with GitHub (each request
     /// free when unchanged), then shows the stacks whole.
     pub(super) fn refresh_stacks(&mut self, cx: &mut Context<Self>) {
-        let keys = listed_stack_keys(&self.lists);
+        let mut keys = listed_stack_keys(&self.lists);
+        keys.extend(self.selected.as_ref().and_then(StackKey::of));
         let Ok(client) = self.services.github.clone() else {
             return;
         };
@@ -45,10 +46,31 @@ impl ReviewQueue {
                 .update(cx, |queue, cx| {
                     // Keep the last known layers of a stack whose check failed.
                     let listed = listed_stack_keys(&queue.lists);
+                    if let Some(stack) = queue
+                        .selected
+                        .as_ref()
+                        .and_then(StackKey::of)
+                        .and_then(|key| refreshed.get(&key))
+                    {
+                        queue
+                            .detail()
+                            .update(cx, |detail, cx| detail.show_refreshed_stack(stack, cx));
+                    }
+
+                    // A conditional response confirming the same layers keeps the sidebar in place.
+                    let previous_count = queue.stacks.len();
                     queue.stacks.retain(|key, _| listed.contains(key));
-                    queue.stacks.extend(refreshed);
-                    queue.rebuild_rows();
-                    cx.notify();
+                    let mut changed = previous_count != queue.stacks.len();
+                    for (key, stack) in refreshed {
+                        if listed.contains(&key) && queue.stacks.get(&key) != Some(&stack) {
+                            queue.stacks.insert(key, stack);
+                            changed = true;
+                        }
+                    }
+                    if changed {
+                        queue.rebuild_rows();
+                        cx.notify();
+                    }
                 })
                 .ok();
         }));

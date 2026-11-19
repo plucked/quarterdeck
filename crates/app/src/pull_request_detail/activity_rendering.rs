@@ -7,7 +7,7 @@ use gpui::{
 
 use super::batch_progress::BatchProgress;
 use super::pull_request_detail::PullRequestDetail;
-use crate::controls::{NumberFlow, Pill, PillStyle, dot_pulse};
+use crate::controls::{NumberFlow, Pill, PillStyle, TextTooltip, dot_pulse};
 use crate::count_as_f32::count_as_f32;
 use crate::theme;
 
@@ -58,6 +58,20 @@ impl PullRequestDetail {
 
     /// The header's activity pill: a pulsing dot and what is happening.
     pub(super) fn render_activity_pill(&self) -> Option<AnyElement> {
+        if let Some(error) = &self.layer_refresh_error {
+            return Some(
+                div()
+                    .id("file-refresh-error")
+                    .tooltip(TextTooltip::builder(format!(
+                        "Showing the last loaded diff. {error}"
+                    )))
+                    .child(Pill::new(
+                        "Refresh failed",
+                        PillStyle::Tinted(theme::danger()),
+                    ))
+                    .into_any_element(),
+            );
+        }
         let activity = self.activity()?;
         let color = if activity.is_network {
             theme::accent()

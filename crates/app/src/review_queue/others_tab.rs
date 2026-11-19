@@ -137,7 +137,9 @@ impl OthersTab {
 
     /// Works out which of `lists.others` pass their repository's filter
     /// (only watched repositories count), and the chips of the open filter.
-    pub fn update_shown(&mut self, lists: &QueueLists, now: i64) {
+    pub fn update_shown(&mut self, lists: &QueueLists, now: i64) -> bool {
+        let previous_shown = std::mem::take(&mut self.shown);
+        let previous_chips = self.open_filter_chips.take();
         self.review_requested = review_requested_ids(lists);
         let context = FilterContext {
             review_requested: &self.review_requested,
@@ -170,6 +172,7 @@ impl OthersTab {
                 marks: ChipMarks::of(&pull_requests),
             }
         });
+        self.shown != previous_shown || self.open_filter_chips != previous_chips
     }
 
     /// The repositories in the order they show: those with open pull

@@ -5,7 +5,7 @@ use qd_github::{PullRequest, RepoRef};
 /// viewer off the requested reviewers once a review is in), and others' in
 /// the watched repositories (before their filters). A pull request can be
 /// in more than one.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct QueueLists {
     pub authored: Vec<PullRequest>,
     pub review_requested: Vec<PullRequest>,

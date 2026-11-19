@@ -350,8 +350,8 @@ impl ReviewQueue {
     }
 
     /// Works out which of others' pull requests the Others tab shows.
-    pub(super) fn update_others_shown(&mut self) {
-        self.others_tab.update_shown(&self.lists, unix_now());
+    pub(super) fn update_others_shown(&mut self) -> bool {
+        self.others_tab.update_shown(&self.lists, unix_now())
     }
 
     /// Rebuilds the sidebar rows of the shown tab, keeping the list's
