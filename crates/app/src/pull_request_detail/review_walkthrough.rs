@@ -431,18 +431,39 @@ mod tests {
         );
 
         review.set_viewed(&files[0], true);
-        review.set_viewed(&files[1], true);
         let mut walkthrough = ReviewWalkthrough::default();
         walkthrough.refresh(Some(&plan), &files, &[false, false, true, false], &review);
         let group = WalkthroughItemId { bucket: 0, item: 1 };
         assert_eq!(walkthrough.next(0), Some(group));
         assert_eq!(walkthrough.item(group).unwrap().files, vec![1, 2]);
-        assert_eq!(walkthrough.buckets[0].remaining, 1);
         assert_eq!(walkthrough.buckets[1].order, 0);
         assert_eq!(walkthrough.buckets[1].files, vec![3]);
+        assert_eq!(
+            walkthrough.buckets[0].progress_label(),
+            "1 of 2 items left · 1/3 files viewed"
+        );
+
+        // A partial group changes file progress while the item remains open.
+        review.set_viewed(&files[1], true);
+        walkthrough.refresh(Some(&plan), &files, &[false, false, true, false], &review);
+        assert_eq!(
+            walkthrough.buckets[0].progress_label(),
+            "1 of 2 items left · 2/3 files viewed"
+        );
         review.set_viewed(&files[2], true);
         walkthrough.refresh(Some(&plan), &files, &[false, false, true, false], &review);
         assert_eq!(walkthrough.next(0), None);
-        assert_eq!(walkthrough.buckets[0].remaining, 0);
+        assert_eq!(
+            walkthrough.buckets[0].progress_label(),
+            "0 of 2 items left · 3/3 files viewed"
+        );
+
+        // Clearing a viewed mark reopens the group and updates both counts.
+        review.set_viewed(&files[2], false);
+        walkthrough.refresh(Some(&plan), &files, &[false, false, true, false], &review);
+        assert_eq!(
+            walkthrough.buckets[0].progress_label(),
+            "1 of 2 items left · 2/3 files viewed"
+        );
     }
 }

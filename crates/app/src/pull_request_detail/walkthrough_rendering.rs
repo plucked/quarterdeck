@@ -239,14 +239,12 @@ impl PullRequestDetail {
                                 format!("{}. {}", bucket.order, bucket.label)
                             }),
                     )
-                    .child(div().text_size(px(10.)).text_color(theme::subtle()).child(
-                        NumberFlow::label(format!(
-                            "{} of {} items left · {} files",
-                            bucket.remaining,
-                            bucket.items.len(),
-                            bucket.files.len()
-                        )),
-                    )),
+                    .child(
+                        div()
+                            .text_size(px(10.))
+                            .text_color(theme::subtle())
+                            .child(NumberFlow::label(bucket.progress_label())),
+                    ),
             )
             .into_any_element()
     }

@@ -10,3 +10,16 @@ pub(super) struct WalkthroughBucket {
     pub remaining: usize,
     pub viewed: usize,
 }
+
+impl WalkthroughBucket {
+    /// Shows unfinished items and viewed files across the full bucket.
+    pub fn progress_label(&self) -> String {
+        format!(
+            "{} of {} items left · {}/{} files viewed",
+            self.remaining,
+            self.items.len(),
+            self.viewed,
+            self.files.len()
+        )
+    }
+}
