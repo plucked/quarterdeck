@@ -12,8 +12,29 @@ use super::file_icon_svgs::{file_icon_paths, file_icon_svg};
 /// the text color by `svg().path(GITHUB_MARK)`.
 pub const GITHUB_MARK: &str = "icons/github-mark.svg";
 
+/// One bundled Markdown toolbar icon, addressed by the same name as its asset.
+macro_rules! format_icon {
+    ($name:literal) => {
+        (
+            concat!("icons/format-", $name, ".svg"),
+            include_bytes!(concat!("../../assets/icons/format-", $name, ".svg")),
+        )
+    };
+}
+
 /// Every bundled icon: its asset path and its SVG.
-const ICONS: [(&str, &[u8]); 4] = [
+const ICONS: &[(&str, &[u8])] = &[
+    format_icon!("bold"),
+    format_icon!("italic"),
+    format_icon!("code"),
+    format_icon!("link"),
+    format_icon!("heading"),
+    format_icon!("strike"),
+    format_icon!("block"),
+    format_icon!("quote"),
+    format_icon!("bullets"),
+    format_icon!("numbered"),
+    format_icon!("checklist"),
     (
         "icons/file-group.svg",
         include_bytes!("../../assets/icons/file-group.svg"),

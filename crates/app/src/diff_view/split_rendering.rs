@@ -1,5 +1,5 @@
-use gpui::{Div, IntoElement, div, prelude::*, px};
-use qd_diff::{DiffHunk, SplitRow};
+use gpui::{AnyElement, Div, IntoElement, div, prelude::*, px};
+use qd_diff::{DiffHunk, DiffLine, SplitRow};
 use qd_syntax::DiffSyntax;
 
 use super::diff_cell_rendering::{render_code, render_gutter, render_marker, render_row};
@@ -18,9 +18,14 @@ pub fn render_split_row(
     syntax: Option<&DiffSyntax>,
     style: DiffRowStyle,
     cells: &CodeCells,
+    decorate: impl Fn(DiffSide, &DiffLine, Div) -> AnyElement,
 ) -> Div {
     let half = |line_index: Option<usize>, side: DiffSide| {
-        render_half(hunk, hunk_index, line_index, side, syntax, style, cells)
+        let half = render_half(hunk, hunk_index, line_index, side, syntax, style, cells);
+        match line_index.and_then(|line| hunk.lines.get(line)) {
+            Some(line) => decorate(side, line, half),
+            None => half.into_any_element(),
+        }
     };
     frame_file_row(
         div()

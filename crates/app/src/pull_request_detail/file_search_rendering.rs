@@ -297,6 +297,7 @@ impl PullRequestDetail {
                         if detail.loaded_files().get(file).is_some_and(|loaded| {
                             std::sync::Arc::ptr_eq(&loaded.file, &changed_file)
                         }) {
+                            detail.diff_find = None;
                             detail.focus_drawer.preview = Some(excerpt);
                             detail.set_detail_mode(mode, cx);
                             cx.notify();

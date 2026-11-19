@@ -1,18 +1,22 @@
 use std::ops::Range;
 
 use gpui::{
-    App, Bounds, ClipboardItem, Context, CursorStyle, EventEmitter, FocusHandle, Focusable,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Window,
-    div, prelude::*,
+    App, Bounds, Context, CursorStyle, EventEmitter, FocusHandle, Focusable, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Window, div,
+    prelude::*,
 };
 
+use super::comment_history::{CommentHistory, EditSelection, EditSource};
 use super::line_mode::LineMode;
+use super::markdown_editor::MarkdownEditorState;
 use super::text_area_actions::{
     Backspace, Cancel, Cut, Delete, DeleteToLineStart, DeleteWordLeft, Down, Left, LineEnd,
     LineStart, Newline, Paste, Right, SelectAll, SelectDown, SelectLeft, SelectRight,
     SelectToLineEnd, SelectToLineStart, SelectUp, SelectWordLeft, SelectWordRight,
-    ShowCharacterPalette, Submit, TEXT_AREA_CONTEXT, TextEnd, TextStart, Up, WordLeft, WordRight,
+    ShowCharacterPalette, SoftBreak, Submit, TEXT_AREA_CONTEXT, TextEnd, TextStart, Up, WordLeft,
+    WordRight,
 };
+use super::text_area_actions::{RedoCommentEdit, UndoCommentEdit};
 use super::text_area_element::TextAreaElement;
 use super::text_area_event::TextAreaEvent;
 use super::text_area_layout::TextAreaLayout;
@@ -25,6 +29,8 @@ use crate::theme;
 
 /// Clicks that select a word.
 const DOUBLE_CLICK: usize = 2;
+/// Enough room to start a multi-line review without resizing on every keystroke.
+const COMMENT_BODY_MIN_HEIGHT: f32 = 80.;
 
 /// A plain-text editor, multiline or a field of one line. The owner creates
 /// it with `cx.new(|cx| TextArea::new(placeholder, cx))` (or
@@ -40,6 +46,7 @@ pub struct TextArea {
     /// Whether Return inserts a newline or submits, and whether the text
     /// may hold newlines at all.
     line_mode: LineMode,
+    comment_history: Option<CommentHistory>,
     /// The selection; empty for a caret.
     pub(super) selected_range: Range<usize>,
     /// Whether the caret is at the selection's start rather than its end.
@@ -52,6 +59,7 @@ pub struct TextArea {
     pub(super) last_bounds: Option<Bounds<Pixels>>,
     is_selecting: bool,
     pub(super) secret: bool,
+    pub(super) markdown: MarkdownEditorState,
 }
 
 impl EventEmitter<TextAreaEvent> for TextArea {}
@@ -74,6 +82,14 @@ impl TextArea {
         Self::with_line_mode(placeholder, LineMode::Multiline, cx)
     }
 
+    /// A multiline writing surface inside the comment editor's own frame.
+    pub fn comment(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+        Self {
+            comment_history: Some(CommentHistory::default()),
+            ..Self::new(placeholder, cx)
+        }
+    }
+
     /// An empty field of one line showing `placeholder` until something is
     /// typed: Return (or Enter on the keypad) submits like cmd-enter, and
     /// newlines in pasted or input-method text are dropped, so the text is
@@ -93,7 +109,7 @@ impl TextArea {
         if self.secret {
             "*".repeat(self.text.len())
         } else {
-            self.text.clone()
+            self.editing_text().to_owned()
         }
     }
 
@@ -108,6 +124,7 @@ impl TextArea {
             text: String::new(),
             placeholder: placeholder.into(),
             line_mode,
+            comment_history: None,
             selected_range: 0..0,
             selection_reversed: false,
             marked_range: None,
@@ -115,6 +132,7 @@ impl TextArea {
             last_bounds: None,
             is_selecting: false,
             secret: false,
+            markdown: MarkdownEditorState::default(),
         }
     }
 
@@ -129,8 +147,16 @@ impl TextArea {
     /// Replaces the whole text, with the caret at its end (in a
     /// single-line area, without its newlines).
     pub fn set_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
+        if let Some(history) = &mut self.comment_history {
+            *history = CommentHistory::default();
+        }
         let text = text.into();
         self.text = self.line_mode.inserted_text(&text).into_owned();
+        self.markdown.preview = None;
+        self.markdown.suggestion_in_history = false;
+        self.markdown.link = None;
+        self.markdown.pending.clear();
+        self.refresh_rich();
         self.selected_range = self.text.len()..self.text.len();
         self.selection_reversed = false;
         self.marked_range = None;
@@ -145,6 +171,10 @@ impl TextArea {
 
     pub(super) fn is_focused(&self, window: &Window) -> bool {
         self.focus.is_focused(window)
+    }
+
+    pub(super) fn is_comment(&self) -> bool {
+        self.comment_history.is_some()
     }
 
     /// Where the caret is: the selection's end, or its start when reversed.
@@ -165,8 +195,34 @@ impl TextArea {
         new_text: &str,
         cx: &mut Context<Self>,
     ) -> Range<usize> {
+        self.replace_from(range, new_text, EditSource::Command, cx)
+    }
+
+    /// Routes all text changes through the comment history before applying the replacement.
+    pub(super) fn replace_from(
+        &mut self,
+        range: Range<usize>,
+        new_text: &str,
+        source: EditSource,
+        cx: &mut Context<Self>,
+    ) -> Range<usize> {
         let new_text = self.line_mode.inserted_text(new_text);
+        if let Some(history) = &mut self.comment_history {
+            history.record(
+                range.start,
+                &self.text[range.clone()],
+                &new_text,
+                EditSelection {
+                    range: self.selected_range.clone(),
+                    reversed: self.selection_reversed,
+                },
+                source,
+            );
+        }
         self.text.replace_range(range.clone(), &new_text);
+        self.markdown.preview = None;
+        self.markdown.link = None;
+        self.refresh_rich();
         let caret = range.start + new_text.len();
         self.selected_range = caret..caret;
         self.selection_reversed = false;
@@ -176,13 +232,67 @@ impl TextArea {
         range.start..caret
     }
 
+    /// Records the final selection after a toolbar or input-method edit placed its own caret.
+    pub(super) fn finish_edit_selection(&mut self) {
+        if let Some(history) = &mut self.comment_history {
+            history.finish_selection(EditSelection {
+                range: self.selected_range.clone(),
+                reversed: self.selection_reversed,
+            });
+        }
+    }
+
+    /// Restores the caret and tells the owner about an undo or redo just as for typing.
+    fn restore_edit_selection(&mut self, selection: EditSelection, cx: &mut Context<Self>) {
+        self.markdown.preview = None;
+        self.markdown.link = None;
+        self.refresh_rich();
+        self.markdown.pending.clear();
+        self.selected_range = selection.range;
+        self.selection_reversed = selection.reversed;
+        self.normalize_rich_selection();
+        self.marked_range = None;
+        cx.emit(TextAreaEvent::Changed);
+        cx.notify();
+    }
+
+    fn on_undo_comment_edit(
+        &mut self,
+        _: &UndoCommentEdit,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(selection) = self
+            .comment_history
+            .as_mut()
+            .and_then(|history| history.undo(&mut self.text))
+        {
+            self.restore_edit_selection(selection, cx);
+        }
+    }
+
+    fn on_redo_comment_edit(
+        &mut self,
+        _: &RedoCommentEdit,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(selection) = self
+            .comment_history
+            .as_mut()
+            .and_then(|history| history.redo(&mut self.text))
+        {
+            self.restore_edit_selection(selection, cx);
+        }
+    }
+
     /// Replaces the selection (or the composing text) with `new_text`.
     fn replace_selection(&mut self, new_text: &str, cx: &mut Context<Self>) {
         let range = self
             .marked_range
             .clone()
             .unwrap_or_else(|| self.selected_range.clone());
-        self.replace(range, new_text, cx);
+        self.edit_input(range, new_text, EditSource::Command, cx);
     }
 
     /// Where Up moves the caret: one visual row up, or in a single-line
@@ -207,6 +317,7 @@ impl TextArea {
     fn move_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         self.selected_range = offset..offset;
         self.selection_reversed = false;
+        self.sync_rich_selection(cx);
         cx.notify();
     }
 
@@ -217,6 +328,7 @@ impl TextArea {
         } else {
             self.selected_range.end = offset;
         }
+        self.sync_rich_selection(cx);
         if self.selected_range.end < self.selected_range.start {
             self.selection_reversed = !self.selection_reversed;
             self.selected_range = self.selected_range.end..self.selected_range.start;
@@ -229,7 +341,7 @@ impl TextArea {
         let Some(layout) = &self.last_layout else {
             return self.cursor_offset();
         };
-        let caret = layout.position_for_offset(self.cursor_offset());
+        let caret = layout.position_for_offset(self.to_visible(self.cursor_offset()));
         let target_y = caret.y + layout.line_height * (rows + 0.5);
         if target_y < Pixels::ZERO {
             return 0;
@@ -238,9 +350,12 @@ impl TextArea {
             return self.text.len();
         }
         // The layout may be the placeholder's or predate an edit.
-        offset_within(
-            &self.text,
-            layout.offset_for_position(gpui::point(caret.x, target_y)),
+        self.to_source(
+            offset_within(
+                self.editing_text(),
+                layout.offset_for_position(gpui::point(caret.x, target_y)),
+            ),
+            true,
         )
     }
 
@@ -253,16 +368,19 @@ impl TextArea {
         let (Some(layout), Some(bounds)) = (&self.last_layout, self.last_bounds) else {
             return self.text.len();
         };
-        offset_within(
-            &self.text,
-            layout.offset_for_position(position - bounds.origin),
+        self.to_source(
+            offset_within(
+                self.editing_text(),
+                layout.offset_for_position(position - bounds.origin),
+            ),
+            true,
         )
     }
 
     fn on_backspace(&mut self, _: &Backspace, _: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
-            let start = previous_boundary(&self.text, self.cursor_offset());
-            self.replace(start..self.cursor_offset(), "", cx);
+            let start = self.cursor_boundary(previous_boundary);
+            self.edit_input(start..self.cursor_offset(), "", EditSource::Command, cx);
         } else {
             self.replace_selection("", cx);
         }
@@ -270,8 +388,8 @@ impl TextArea {
 
     fn on_delete(&mut self, _: &Delete, _: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() {
-            let end = next_boundary(&self.text, self.cursor_offset());
-            self.replace(self.cursor_offset()..end, "", cx);
+            let end = self.cursor_boundary(next_boundary);
+            self.edit_input(self.cursor_offset()..end, "", EditSource::Command, cx);
         } else {
             self.replace_selection("", cx);
         }
@@ -279,7 +397,12 @@ impl TextArea {
 
     fn on_delete_word_left(&mut self, _: &DeleteWordLeft, _: &mut Window, cx: &mut Context<Self>) {
         let end = self.cursor_offset();
-        self.replace(previous_word_start(&self.text, end)..end, "", cx);
+        self.edit_input(
+            self.cursor_boundary(previous_word_start)..end,
+            "",
+            EditSource::Command,
+            cx,
+        );
     }
 
     fn on_delete_to_line_start(
@@ -289,12 +412,17 @@ impl TextArea {
         cx: &mut Context<Self>,
     ) {
         let end = self.cursor_offset();
-        self.replace(line_start(&self.text, end)..end, "", cx);
+        self.edit_input(
+            self.cursor_boundary(line_start)..end,
+            "",
+            EditSource::Command,
+            cx,
+        );
     }
 
     fn on_left(&mut self, _: &Left, _: &mut Window, cx: &mut Context<Self>) {
         let target = if self.selected_range.is_empty() {
-            previous_boundary(&self.text, self.cursor_offset())
+            self.cursor_boundary(previous_boundary)
         } else {
             self.selected_range.start
         };
@@ -303,7 +431,7 @@ impl TextArea {
 
     fn on_right(&mut self, _: &Right, _: &mut Window, cx: &mut Context<Self>) {
         let target = if self.selected_range.is_empty() {
-            next_boundary(&self.text, self.cursor_offset())
+            self.cursor_boundary(next_boundary)
         } else {
             self.selected_range.end
         };
@@ -319,19 +447,19 @@ impl TextArea {
     }
 
     fn on_word_left(&mut self, _: &WordLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.move_to(previous_word_start(&self.text, self.cursor_offset()), cx);
+        self.move_to(self.cursor_boundary(previous_word_start), cx);
     }
 
     fn on_word_right(&mut self, _: &WordRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.move_to(next_word_end(&self.text, self.cursor_offset()), cx);
+        self.move_to(self.cursor_boundary(next_word_end), cx);
     }
 
     fn on_line_start(&mut self, _: &LineStart, _: &mut Window, cx: &mut Context<Self>) {
-        self.move_to(line_start(&self.text, self.cursor_offset()), cx);
+        self.move_to(self.cursor_boundary(line_start), cx);
     }
 
     fn on_line_end(&mut self, _: &LineEnd, _: &mut Window, cx: &mut Context<Self>) {
-        self.move_to(line_end(&self.text, self.cursor_offset()), cx);
+        self.move_to(self.cursor_boundary(line_end), cx);
     }
 
     fn on_text_start(&mut self, _: &TextStart, _: &mut Window, cx: &mut Context<Self>) {
@@ -343,11 +471,11 @@ impl TextArea {
     }
 
     fn on_select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_to(previous_boundary(&self.text, self.cursor_offset()), cx);
+        self.select_to(self.cursor_boundary(previous_boundary), cx);
     }
 
     fn on_select_right(&mut self, _: &SelectRight, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_to(next_boundary(&self.text, self.cursor_offset()), cx);
+        self.select_to(self.cursor_boundary(next_boundary), cx);
     }
 
     fn on_select_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
@@ -359,7 +487,7 @@ impl TextArea {
     }
 
     fn on_select_word_left(&mut self, _: &SelectWordLeft, _: &mut Window, cx: &mut Context<Self>) {
-        self.select_to(previous_word_start(&self.text, self.cursor_offset()), cx);
+        self.select_to(self.cursor_boundary(previous_word_start), cx);
     }
 
     fn on_select_word_right(
@@ -368,7 +496,7 @@ impl TextArea {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.select_to(next_word_end(&self.text, self.cursor_offset()), cx);
+        self.select_to(self.cursor_boundary(next_word_end), cx);
     }
 
     fn on_select_to_line_start(
@@ -377,7 +505,7 @@ impl TextArea {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.select_to(line_start(&self.text, self.cursor_offset()), cx);
+        self.select_to(self.cursor_boundary(line_start), cx);
     }
 
     fn on_select_to_line_end(
@@ -386,18 +514,24 @@ impl TextArea {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.select_to(line_end(&self.text, self.cursor_offset()), cx);
+        self.select_to(self.cursor_boundary(line_end), cx);
     }
 
     fn on_select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
         self.selected_range = 0..self.text.len();
         self.selection_reversed = false;
+        self.sync_rich_selection(cx);
         cx.notify();
     }
 
-    /// Return: a newline in a multiline area; in a single-line one, the
-    /// owner takes the text, as with cmd-enter.
+    /// Return continues a rich list, inserts a newline, or submits a single-line field.
     fn on_newline(&mut self, _: &Newline, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.continue_rich_list(cx) {
+            self.insert_line_break(cx);
+        }
+    }
+
+    fn insert_line_break(&mut self, cx: &mut Context<Self>) {
         match self.line_mode {
             LineMode::Multiline => self.replace_selection("\n", cx),
             LineMode::SingleLine => cx.emit(TextAreaEvent::Submit),
@@ -405,8 +539,14 @@ impl TextArea {
     }
 
     fn on_paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-            self.replace_selection(&text.replace("\r\n", "\n"), cx);
+        if let Some(item) = cx.read_from_clipboard() {
+            let markdown = item
+                .metadata()
+                .and_then(|metadata| metadata.strip_prefix(super::rich_editing::RICH_CLIPBOARD))
+                .filter(|_| self.accepts_rich_paste());
+            if let Some(text) = markdown.map(str::to_owned).or_else(|| item.text()) {
+                self.replace_selection(&text.replace("\r\n", "\n"), cx);
+            }
         }
     }
 
@@ -415,8 +555,7 @@ impl TextArea {
             return;
         }
         if !self.selected_range.is_empty() {
-            let selected = self.text[self.selected_range.clone()].to_owned();
-            cx.write_to_clipboard(ClipboardItem::new_string(selected));
+            cx.write_to_clipboard(self.selection_clipboard());
         }
     }
 
@@ -425,8 +564,7 @@ impl TextArea {
             return;
         }
         if !self.selected_range.is_empty() {
-            let selected = self.text[self.selected_range.clone()].to_owned();
-            cx.write_to_clipboard(ClipboardItem::new_string(selected));
+            cx.write_to_clipboard(self.selection_clipboard());
             self.replace_selection("", cx);
         }
     }
@@ -442,7 +580,9 @@ impl TextArea {
         let offset = self.offset_for_window_position(event.position);
         match (event.click_count >= DOUBLE_CLICK, event.modifiers.shift) {
             (true, _) => {
-                self.selected_range = word_range_at(&self.text, offset);
+                self.selected_range =
+                    self.source_range(word_range_at(self.editing_text(), self.to_visible(offset)));
+                self.sync_rich_selection(cx);
                 self.selection_reversed = false;
                 cx.notify();
             }
@@ -468,9 +608,25 @@ impl TextArea {
 impl Render for TextArea {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .key_context(TEXT_AREA_CONTEXT)
+            .key_context(if self.comment_history.is_some() {
+                "CommentInput TextArea"
+            } else {
+                TEXT_AREA_CONTEXT
+            })
             .track_focus(&self.focus)
             .cursor(CursorStyle::IBeam)
+            .when(
+                self.comment_history
+                    .as_ref()
+                    .is_some_and(CommentHistory::can_undo),
+                |field| field.on_action(cx.listener(Self::on_undo_comment_edit)),
+            )
+            .when(
+                self.comment_history
+                    .as_ref()
+                    .is_some_and(CommentHistory::can_redo),
+                |field| field.on_action(cx.listener(Self::on_redo_comment_edit)),
+            )
             .on_action(cx.listener(Self::on_backspace))
             .on_action(cx.listener(Self::on_delete))
             .on_action(cx.listener(Self::on_delete_word_left))
@@ -495,6 +651,7 @@ impl Render for TextArea {
             .on_action(cx.listener(Self::on_select_to_line_end))
             .on_action(cx.listener(Self::on_select_all))
             .on_action(cx.listener(Self::on_newline))
+            .on_action(cx.listener(|area, _: &SoftBreak, _, cx| area.insert_line_break(cx)))
             .on_action(cx.listener(Self::on_paste))
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_cut))
@@ -506,12 +663,19 @@ impl Render for TextArea {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .w_full()
-            .px_2()
-            .py_1p5()
-            .rounded_md()
-            .border_1()
-            .border_color(theme::border())
-            .bg(theme::background())
+            .min_w_0()
+            .map(|body| {
+                if self.comment_history.is_some() {
+                    body.px_3().py_2().min_h(gpui::px(COMMENT_BODY_MIN_HEIGHT))
+                } else {
+                    body.px_2()
+                        .py_1p5()
+                        .rounded_md()
+                        .border_1()
+                        .border_color(theme::border())
+                        .bg(theme::background())
+                }
+            })
             .text_sm()
             .child(TextAreaElement::new(cx.entity()))
     }

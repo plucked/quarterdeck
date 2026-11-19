@@ -16,6 +16,7 @@ impl PullRequestDetail {
         CodeCells {
             row,
             segments: self.code_segments.clone(),
+            matches: self.diff_matches_for_row(row),
             selection: self.diff_selection.and_then(|selection| {
                 Some(SideSelection {
                     side: selection.side,
@@ -36,6 +37,7 @@ impl PullRequestDetail {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.selected_comment_range = None;
         let Some((side, position)) = self.code_segments.hit(point) else {
             if self.diff_selection.take().is_some() {
                 cx.notify();
@@ -43,6 +45,9 @@ impl PullRequestDetail {
             return;
         };
         window.focus(&self.focus);
+        if let Some(file) = self.rows().file_at_row(position.row) {
+            self.select_diff_file(file);
+        }
 
         // One click starts a drag; more select a word or the line at once.
         let granularity = SelectionGranularity::of(click_count);
@@ -103,6 +108,13 @@ impl PullRequestDetail {
             return;
         }
         self.is_selecting = false;
+        self.selected_comment_range = self.diff_selection.and_then(|selection| {
+            super::selected_comment_range::selected_comment_range(
+                selection,
+                self.rows(),
+                self.loaded_files(),
+            )
+        });
         if self
             .diff_selection
             .is_some_and(|selection| selection.is_empty())
@@ -127,5 +139,6 @@ impl PullRequestDetail {
     /// Drops the diff selection (a double click opening a comment selected a word).
     pub(super) fn clear_diff_selection(&mut self) {
         self.diff_selection = None;
+        self.selected_comment_range = None;
     }
 }

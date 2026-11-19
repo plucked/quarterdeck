@@ -1,4 +1,4 @@
-use gpui::{CursorStyle, Div, Rgba, StyledText, canvas, div, prelude::*, px};
+use gpui::{Bounds, CursorStyle, Div, Rgba, StyledText, canvas, div, point, prelude::*, px, size};
 use qd_cache::LineWrapping;
 use qd_diff::{DiffLine, DiffLineKind};
 use qd_syntax::SyntaxSpan;
@@ -18,6 +18,8 @@ pub const DIFF_CHARACTER_WIDTH: f32 = 7.2;
 const DIGIT_WIDTH: f32 = 7.5;
 /// Space around the digits of a gutter.
 const GUTTER_PADDING: f32 = 16.;
+/// Clearance for the larger of the ordinary and guided sticky file headers.
+const FIND_HEADER_CLEARANCE: f32 = 48.;
 /// Width of the `+`/`-` marker column.
 const MARKER_WIDTH: f32 = 14.;
 
@@ -68,12 +70,14 @@ pub fn render_code(
     side: DiffSide,
 ) -> Div {
     let selected = cells.selected_range(side);
+    let matches = &cells.matches[usize::from(side == DiffSide::New)];
     let highlights = code_highlights(
         line.text.len(),
         syntax,
         &line.changed_ranges,
         emphasis_background(line.kind),
         selected.as_ref(),
+        matches,
     );
     let text = StyledText::new(line.text.clone()).with_highlights(highlights);
 
@@ -85,9 +89,42 @@ pub fn render_code(
         text_length: line.text.len(),
     };
     let segments = cells.segments.clone();
-    let registration = canvas(|_, _, _| {}, move |_, (), _, _| segments.register(segment))
-        .absolute()
-        .size_full();
+    // The text child prepaints before this canvas. Its shaped position handles wrapping,
+    // even when the occurrence is thousands of characters into a single virtualized row.
+    let reveal = matches.current.as_ref().and_then(|range| {
+        Some((
+            range.clone(),
+            matches.reveal.clone()?,
+            segment.layout.clone(),
+        ))
+    });
+    let registration = canvas(
+        move |bounds, window, cx| {
+            if let Some((range, reveal, layout)) = &reveal
+                && reveal.take()
+                && let Some(position) = layout.position_for_index(range.start)
+            {
+                if style.wrapping == LineWrapping::Scroll
+                    && let Some(end) = layout.position_for_index(range.end)
+                {
+                    reveal.reveal_columns(
+                        f32::from(position.x - bounds.left()),
+                        f32::from(end.x - bounds.left()),
+                        f32::from(bounds.size.width),
+                        style.horizontal_offset,
+                        cx,
+                    );
+                }
+                window.request_autoscroll(Bounds::new(
+                    position - point(px(0.), px(FIND_HEADER_CLEARANCE)),
+                    size(px(1.), px(FIND_HEADER_CLEARANCE + DIFF_ROW_HEIGHT)),
+                ));
+            }
+        },
+        move |_, (), _, _| segments.register(segment),
+    )
+    .absolute()
+    .size_full();
 
     let cell = match style.wrapping {
         LineWrapping::Wrap => div().flex_1().min_w_0().pr_2().child(text),

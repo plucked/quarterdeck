@@ -3,7 +3,7 @@ use gpui::{App, KeyBinding, Menu, MenuItem, SystemMenuType, actions};
 use crate::app_update::AppUpdater;
 use crate::brief_gallery::open_brief_gallery;
 use crate::settings_window::{SettingsCategory, open_settings_window, open_settings_window_at};
-use crate::text_area::bind_text_area_keys;
+use crate::text_area::{RedoCommentEdit, UndoCommentEdit, bind_text_area_keys};
 
 /// The key context of the review queue; single-letter keys only act inside it.
 pub const REVIEW_QUEUE_CONTEXT: &str = "ReviewQueue";
@@ -21,6 +21,8 @@ actions!(
         CloseWindow,
         Refresh,
         Copy,
+        FindInDiff,
+        PreviousDiffMatch,
         NextFile,
         PreviousFile,
         MarkViewedAndNext,
@@ -52,6 +54,7 @@ pub fn install_app_commands(cx: &mut App) {
         KeyBinding::new("cmd-w", CloseWindow, None),
         KeyBinding::new("cmd-r", Refresh, None),
         KeyBinding::new("cmd-c", Copy, None),
+        KeyBinding::new("cmd-f", FindInDiff, Some(REVIEW_QUEUE_CONTEXT)),
         KeyBinding::new("cmd-b", ToggleFileTree, None),
         KeyBinding::new("ctrl-cmd-s", ToggleSidebar, None),
         KeyBinding::new("]", NextFile, Some(SINGLE_KEY_CONTEXT)),
@@ -67,6 +70,12 @@ pub fn install_app_commands(cx: &mut App) {
 
     // Text areas have their own editing keys, and the queue's single keys stay out of them.
     bind_text_area_keys(cx);
+    // In the find field, Shift-Return goes to the previous occurrence.
+    cx.bind_keys([KeyBinding::new(
+        "shift-enter",
+        PreviousDiffMatch,
+        Some("DiffFind > TextArea"),
+    )]);
 
     // The menu bar exposes the same actions as the key bindings.
     cx.set_menus(vec![
@@ -83,7 +92,13 @@ pub fn install_app_commands(cx: &mut App) {
         },
         Menu {
             name: "Edit".into(),
-            items: vec![MenuItem::action("Copy", Copy)],
+            items: vec![
+                MenuItem::action("Undo", UndoCommentEdit),
+                MenuItem::action("Redo", RedoCommentEdit),
+                MenuItem::separator(),
+                MenuItem::action("Copy", Copy),
+                MenuItem::action("Find in File Diff…", FindInDiff),
+            ],
         },
         Menu {
             name: "View".into(),

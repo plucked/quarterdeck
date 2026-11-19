@@ -4,8 +4,9 @@ use qd_cache::QueueTab;
 use super::ReviewQueue;
 use super::selection_origin::SelectionOrigin;
 use crate::app_commands::{
-    MarkViewedAndNext, NextFile, NextLayer, PreviousFile, PreviousLayer, Refresh, ShowAuthored,
-    ShowOthers, ShowReviewRequested, ToggleFileTree, ToggleSidebar, ToggleStackReview,
+    FindInDiff, MarkViewedAndNext, NextFile, NextLayer, PreviousFile, PreviousLayer, Refresh,
+    ShowAuthored, ShowOthers, ShowReviewRequested, ToggleFileTree, ToggleSidebar,
+    ToggleStackReview,
 };
 use crate::pull_request_detail::{DetailEvent, PullRequestDetail};
 
@@ -62,6 +63,17 @@ impl ReviewQueue {
         cx: &mut Context<Self>,
     ) {
         self.show_tab(QueueTab::Others, cx);
+    }
+
+    /// Opens Find in the current file from anywhere in the main window.
+    pub(super) fn on_find_in_diff(
+        &mut self,
+        _: &FindInDiff,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.detail()
+            .update(cx, |detail, cx| detail.open_diff_find(window, cx));
     }
 
     /// Handles the `NextFile` action (`]`): scrolls the detail to the next shown file.

@@ -24,7 +24,7 @@ impl PullRequestDetail {
         let previous = self.diff_settings;
         self.diff_settings = settings;
         if previous.diff_options() == settings.diff_options() {
-            if previous != settings {
+            if previous.layout != settings.layout || previous.wrapping != settings.wrapping {
                 self.rebuild_rows(self.anchor_at_top());
             }
             cx.notify();

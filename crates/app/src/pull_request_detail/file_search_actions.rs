@@ -17,6 +17,7 @@ impl PullRequestDetail {
     /// Handles typing without scanning file contents on the window thread.
     pub(super) fn on_file_search(&mut self, event: TextAreaEvent, cx: &mut Context<Self>) {
         match event {
+            TextAreaEvent::LayoutChanged | TextAreaEvent::FormattingChanged => return,
             TextAreaEvent::Changed => {
                 self.file_tree.search.query = self.focus_drawer.input.read(cx).text().to_owned();
                 self.schedule_file_search(cx);

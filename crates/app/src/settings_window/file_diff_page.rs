@@ -6,8 +6,7 @@ use super::setting_row::SettingRow;
 use crate::app_settings::AppSettings;
 use crate::controls::SegmentedControl;
 
-/// The File Diff page: layout, change highlighting, whitespace and long
-/// lines, each applied to every open diff as soon as it is chosen.
+/// File Diff preferences apply to every open diff as soon as they are chosen.
 pub fn render_file_diff_page(settings: DiffViewSettings) -> impl IntoElement {
     div()
         .flex()
@@ -74,6 +73,20 @@ pub fn render_file_diff_page(settings: DiffViewSettings) -> impl IntoElement {
                 ],
                 |settings, wrapping| DiffViewSettings {
                     wrapping,
+                    ..settings
+                },
+            ),
+        ))
+        .child(SettingRow::new(
+            "Double-click to comment",
+            "Open a comment by double-clicking a diff line. When off, double-click selects a word.",
+            diff_choice(
+                "double-click-to-comment",
+                settings,
+                settings.double_click_to_comment,
+                &[("Off", false), ("On", true)],
+                |settings, double_click_to_comment| DiffViewSettings {
+                    double_click_to_comment,
                     ..settings
                 },
             ),

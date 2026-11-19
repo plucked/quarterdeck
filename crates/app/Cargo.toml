@@ -22,6 +22,7 @@ qd-studio.workspace = true
 qd-syntax.workspace = true
 qd-update.workspace = true
 qd-video.workspace = true
+regex.workspace = true
 serde_json.workspace = true
 image = { workspace = true, features = ["png", "jpeg"] }
 

@@ -2,6 +2,7 @@ use gpui::{AppContext as _, Context};
 use qd_cache::{NoteDestination, ReviewScope};
 use qd_github::ReviewEvent;
 
+use super::comment_editor::EditorTarget;
 use super::pull_request_detail::PullRequestDetail;
 use super::side_panel_tab::SidePanelTab;
 use crate::text_area::{TextArea, TextAreaEvent};
@@ -19,8 +20,9 @@ impl PullRequestDetail {
         if tab == SidePanelTab::Review && self.review().summary_editor.is_none() {
             let summary = self.review().comments.summary.body.clone();
             let area = cx.new(|cx| {
-                let mut area = TextArea::new("Summary of your review (optional)", cx);
+                let mut area = TextArea::comment("Write a review summary…", cx);
                 area.set_text(summary, cx);
+                area.set_github_markdown(true, cx);
                 area
             });
             let subscription = cx.subscribe(&area, |detail, area, event: &TextAreaEvent, cx| {
@@ -28,6 +30,14 @@ impl PullRequestDetail {
                     let body = area.read(cx).text().to_owned();
                     detail.review_mut().comments.summary.body = body;
                     detail.record_summary(cx);
+                }
+                if matches!(
+                    event,
+                    TextAreaEvent::Changed
+                        | TextAreaEvent::LayoutChanged
+                        | TextAreaEvent::FormattingChanged
+                ) {
+                    cx.notify();
                 }
             });
             self.review_mut().summary_editor = Some(area);
@@ -66,6 +76,15 @@ impl PullRequestDetail {
             return;
         }
         self.review_mut().destination = destination;
+        if let Some(editor) = &self.review().editor
+            && matches!(editor.target, EditorTarget::NewComment { .. })
+        {
+            let github = self.editor_destination(&editor.target) == NoteDestination::GitHub;
+            editor
+                .text
+                .update(cx, |area, cx| area.set_github_markdown(github, cx));
+        }
+        self.remeasure_editor_row();
         UiStateRecorder::record_review_layout(cx, self.review_layout());
         cx.notify();
     }

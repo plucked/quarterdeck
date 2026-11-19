@@ -7,6 +7,7 @@ use super::lines_label::note_lines_label;
 use super::pull_request_detail::PullRequestDetail;
 use crate::controls::NumberFlow;
 use crate::controls::{Button, SectionLabel, SegmentedControl, view_option};
+use crate::text_area::MarkdownEditor;
 use crate::theme;
 
 impl PullRequestDetail {
@@ -111,7 +112,7 @@ impl PullRequestDetail {
             })
             .child(SectionLabel::new("Verdict").compact())
             .child(verdict)
-            .children(self.review().summary_editor.clone())
+            .children(self.review().summary_editor.clone().map(MarkdownEditor::new))
             .child(
                 div().flex().justify_end().child(
                     Button::new("submit-review", submit_label)

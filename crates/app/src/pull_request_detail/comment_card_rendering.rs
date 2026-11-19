@@ -9,10 +9,11 @@ use super::pull_request_detail::PullRequestDetail;
 use super::review_comments::note_key;
 use super::thread_resolution::ThreadResolution;
 use crate::avatar_images::Avatar;
-use crate::controls::{Button, NumberFlow, Pill, PillStyle};
+use crate::controls::{Button, NumberFlow, Pill, PillStyle, TextTooltip};
 use crate::diff_view::frame_file_row;
 use crate::display_text::short_date;
 use crate::markdown_view::MarkdownView;
+use crate::text_area::MarkdownEditor;
 use crate::theme;
 
 /// A comment author's avatar in the comment's header line.
@@ -64,31 +65,69 @@ impl PullRequestDetail {
             return div().into_any_element();
         };
         let lines = lines_label(*side, *line, *start_line);
-        let destination = self.render_composer_destination(cx);
-        let card = card_frame()
+        let range_hint = if editor.text.read(cx).suggestion_anchors_range() {
+            "This suggestion is anchored here. Start a new comment to suggest a different range."
+        } else {
+            "Drag across code lines or Shift-click another line’s + to select a range."
+        };
+        let save_label = match self.active_destination() {
+            NoteDestination::GitHub => "Add to review",
+            NoteDestination::Local => "Save note",
+        };
+        let header = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .justify_between()
+            .gap_2()
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .gap_2()
-                    .text_xs()
                     .child(
                         div()
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(NumberFlow::label(format!("New comment · {lines}"))),
+                            .id("composer-line")
+                            .text_sm()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(format!("Comment on {}", lines.to_lowercase()))
+                            .tooltip(TextTooltip::builder(range_hint)),
                     )
-                    .child(destination)
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_color(theme::subtle())
-                            .text_right()
-                            .child("⇧-click another line's + to span lines"),
-                    ),
+                    .children(self.render_suggestion_button(editor)),
             )
-            .child(editor.text.clone())
-            .child(Self::render_editor_buttons("composer", "Add comment", cx));
-        frame_file_row(div().px_4().py_1p5().child(card)).into_any_element()
+            .child(self.render_composer_destination(cx));
+        let composer = div()
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .gap_2()
+            .bg(theme::panel())
+            .px_4()
+            .py_3()
+            .child(header)
+            .child(self.render_editor_text(editor))
+            .child(self.render_editor_buttons("composer", save_label, cx));
+        frame_file_row(composer).into_any_element()
+    }
+
+    /// Offers the anchored head-side code as an editable replacement in a GitHub draft.
+    fn render_suggestion_button(&self, editor: &CommentEditor) -> Option<Button> {
+        if self.active_destination() != NoteDestination::GitHub {
+            return None;
+        }
+        let source = editor.suggestion_source.clone()?;
+        let area = editor.text.clone();
+        Some(
+            Button::new("composer-suggest-change", "Suggest change")
+                .ghost()
+                .on_click(move |_, window, cx| {
+                    area.update(cx, |area, cx| {
+                        area.insert_suggestion(&source, cx);
+                        area.focus(window);
+                    });
+                }),
+        )
     }
 
     /// Where the new comment goes: a GitHub / Local switch on a single pull
@@ -101,6 +140,7 @@ impl PullRequestDetail {
                 .into_any_element();
         }
         self.render_destination_control("composer-destination", "GitHub draft", "Local note", cx)
+            .quiet()
             .into_any_element()
     }
 
@@ -115,8 +155,10 @@ impl PullRequestDetail {
         let thread_id = thread.id.clone();
         let mut header = div()
             .flex()
+            .flex_wrap()
             .items_center()
-            .gap_2()
+            .gap_x_2()
+            .gap_y_1()
             .text_xs()
             .text_color(theme::muted())
             .child(div().font_weight(FontWeight::MEDIUM).child("Conversation"));
@@ -159,8 +201,8 @@ impl PullRequestDetail {
         );
         if is_replying && let Some(editor) = &self.review().editor {
             card = card
-                .child(editor.text.clone())
-                .child(Self::render_editor_buttons(
+                .child(self.render_editor_text(editor))
+                .child(self.render_editor_buttons(
                     element_id("reply", &thread_id),
                     "Add reply",
                     cx,
@@ -204,8 +246,10 @@ impl PullRequestDetail {
         let is_editing = editing.is_some();
         let mut header = div()
             .flex()
+            .flex_wrap()
             .items_center()
-            .gap_2()
+            .gap_x_2()
+            .gap_y_1()
             .text_xs()
             .when(!comment.author_avatar_url.is_empty(), |header| {
                 header.child(Avatar::new(
@@ -226,10 +270,10 @@ impl PullRequestDetail {
         if comment.is_pending {
             header = header.child(render_badge("Pending on GitHub", theme::accent()));
         }
-        header = header.child(div().flex_1());
+        let mut actions = div().flex().flex_none().ml_auto().gap_1();
         if comment.can_update && !is_editing {
             let (id, body) = (comment.id.clone(), comment.body.clone());
-            header = header.child(
+            actions = actions.child(
                 Button::new(element_id("edit-comment", &comment.id), "Edit")
                     .ghost()
                     .on_click(cx.listener(move |detail, _, window, cx| {
@@ -246,7 +290,7 @@ impl PullRequestDetail {
         }
         if comment.can_delete {
             let id = comment.id.clone();
-            header = header.child(
+            actions = actions.child(
                 Button::new(element_id("delete-comment", &comment.id), "Delete")
                     .ghost()
                     .on_click(cx.listener(move |detail, _, _, cx| {
@@ -254,6 +298,7 @@ impl PullRequestDetail {
                     })),
             );
         }
+        header = header.child(actions);
         let body = self.render_comment_body(
             editing,
             element_id("edit", &comment.id),
@@ -315,19 +360,21 @@ impl PullRequestDetail {
         let key = SharedString::from(note_key(id));
         let mut header = div()
             .flex()
+            .flex_wrap()
             .items_center()
-            .gap_2()
+            .gap_x_2()
+            .gap_y_1()
             .text_xs()
             .child(render_badge(label, color))
             .child(
                 div()
                     .text_color(theme::subtle())
                     .child(NumberFlow::label(lines)),
-            )
-            .child(div().flex_1());
+            );
+        let mut actions = div().flex().flex_none().ml_auto().gap_1();
         if !is_editing {
             let body = note.body.clone();
-            header = header.child(
+            actions = actions.child(
                 Button::new(element_id("edit-note", &key), "Edit")
                     .ghost()
                     .on_click(cx.listener(move |detail, _, window, cx| {
@@ -335,11 +382,12 @@ impl PullRequestDetail {
                     })),
             );
         }
-        header = header.child(
+        actions = actions.child(
             Button::new(element_id("delete-note", &key), "Delete")
                 .ghost()
                 .on_click(cx.listener(move |detail, _, _, cx| detail.delete_note(id, cx))),
         );
+        header = header.child(actions);
         let body = self.render_comment_body(
             editing,
             element_id("edit-note-save", &key),
@@ -372,10 +420,26 @@ impl PullRequestDetail {
                 .flex()
                 .flex_col()
                 .gap_1()
-                .child(editor.text.clone())
-                .child(Self::render_editor_buttons(editor_id, save_label, cx))
+                .child(self.render_editor_text(editor))
+                .child(self.render_editor_buttons(editor_id, save_label, cx))
                 .into_any_element(),
             None => self.render_markdown(key),
+        }
+    }
+
+    /// Shows formatting for the destination of this editor, including GitHub
+    /// replies and edits opened while Local is selected in the review panel.
+    fn render_editor_text(&self, editor: &CommentEditor) -> AnyElement {
+        match self.editor_destination(&editor.target) {
+            NoteDestination::GitHub => MarkdownEditor::new(editor.text.clone()).into_any_element(),
+            NoteDestination::Local => div()
+                .min_w_0()
+                .rounded_md()
+                .border_1()
+                .border_color(theme::border_strong())
+                .bg(theme::background())
+                .child(editor.text.clone())
+                .into_any_element(),
         }
     }
 
@@ -395,15 +459,35 @@ impl PullRequestDetail {
 
     /// Cancel and save under an open editor.
     fn render_editor_buttons(
+        &self,
         id: impl Into<gpui::ElementId>,
         save_label: &'static str,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let id: gpui::ElementId = id.into();
+        let editor = self.review().editor.as_ref();
+        let is_empty = editor.is_none_or(|editor| editor.text.read(cx).text().trim().is_empty());
+        let is_review_draft = editor.is_some_and(|editor| match editor.target {
+            EditorTarget::NewComment { .. } => self.active_destination() == NoteDestination::GitHub,
+            EditorTarget::Reply { .. } => true,
+            _ => false,
+        });
         div()
             .flex()
+            .flex_wrap()
+            .items_center()
             .justify_end()
             .gap_2()
+            .when(is_review_draft, |row| {
+                row.child(
+                    div()
+                        .flex_1()
+                        .min_w(gpui::px(96.))
+                        .text_xs()
+                        .text_color(theme::muted())
+                        .child("Posts when you submit your review."),
+                )
+            })
             .child(
                 Button::new(
                     gpui::ElementId::NamedChild(Box::new(id.clone()), "cancel".into()),
@@ -418,6 +502,7 @@ impl PullRequestDetail {
                     format!("{save_label}  ⌘↩"),
                 )
                 .primary()
+                .disabled(is_empty)
                 .on_click(cx.listener(|detail, _, window, cx| detail.save_editor(window, cx))),
             )
     }

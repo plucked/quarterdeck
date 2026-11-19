@@ -1,6 +1,8 @@
 //! Building file diffs from GitHub-style patches, through the public API.
 
-use qd_diff::{ChangeHighlight, DiffLineKind, DiffOptions, FileDiff, SplitRow, WhitespaceMode};
+use qd_diff::{
+    ChangeHighlight, DiffLineKind, DiffOptions, FileDiff, LineOrigin, SplitRow, WhitespaceMode,
+};
 
 const PATCH: &str = "@@ -1,4 +1,4 @@ fn main() {\n let a = 1;\n-let b = 2;\n-let c = 3;\n+let b = 20;\n+let c = 3;\n+let d = 4;\n }\n";
 
@@ -96,6 +98,8 @@ fn folds_whitespace_only_changes() {
         (Some(3), Some(3))
     );
     assert_eq!(lines[0].text, "    if x {");
+    assert_eq!(lines[0].origin, LineOrigin::FoldedReplacement);
+    assert_eq!(lines[1].origin, LineOrigin::Patch);
 }
 
 /// A hunk of only whitespace changes disappears when whitespace is ignored.

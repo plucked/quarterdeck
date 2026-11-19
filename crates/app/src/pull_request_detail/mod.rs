@@ -9,6 +9,7 @@
 //! and the side panel's Files, Review, Actions (merge, close) and Checks tabs.
 //!
 //! Files:
+//! - `tests/`: interaction scenarios for diff Find and split comment anchors.
 //! - `review_publication_gate.rs`: nonblocking arbitration of cancellation and durable publication.
 //! - `review_run_id.rs`: unique identities for concurrent review agent generations.
 //! - `review_agent_task.rs`: generation identity, snapshot and cancellation owned by a live task.
@@ -50,6 +51,8 @@
 //! - `file_navigation.rs`: the current file, moving between files, collapsing and marking them viewed, sideways scrolling.
 //! - `file_direction.rs`: `FileDirection`, next or previous (file or stack layer).
 //! - `file_tree_actions.rs`: the side panel and its file tree: showing it, the filter, folders, showing a file in it.
+//! - `diff_find.rs`, `diff_find_matches.rs`: the file-scoped Find field and occurrences in displayed row order.
+//! - `diff_find_actions.rs`, `diff_find_rendering.rs`: finding, highlighting and navigating matches.
 //! - `diff_selection_actions.rs`: selecting code in the diff with the mouse and copying it.
 //! - `row_rendering.rs`: renders the pane's layout and each diff row.
 //! - `row_height_estimate.rs`: where each row starts, estimated without layout, for the scrollbar.
@@ -66,6 +69,7 @@
 //! - `detail_event.rs`: `DetailEvent`, what the view tells its owner.
 //! - `layer_request.rs`: `LayerRequest`, a stack layer to show, with its place in the stack.
 //! - `diff_selection.rs`: `DiffSelection`, a text selection in one code column of the diff.
+//! - `selected_comment_range.rs`: a drag selection mapped to commentable patch lines.
 //! - `selected_diff_text.rs`: the code a selection covers, as copied.
 //! - `selection_granularity.rs`: `SelectionGranularity`, what a press selects by its click count.
 //! - `parsed_description.rs`: `ParsedDescription`, the description of one version, parsed once.
@@ -170,6 +174,10 @@ mod detail_mode_actions;
 mod detail_mode_switch;
 mod detail_row;
 mod detail_row_list;
+mod diff_find;
+mod diff_find_actions;
+mod diff_find_matches;
+mod diff_find_rendering;
 mod diff_line_ref;
 mod diff_selection;
 mod diff_selection_actions;
@@ -221,6 +229,7 @@ mod row_rebuilding;
 mod row_rendering;
 mod run_cancel;
 mod scroll_anchor;
+mod selected_comment_range;
 mod selected_diff_text;
 mod selection_granularity;
 mod show_change;
@@ -239,6 +248,9 @@ mod summary_rendering;
 mod syntax_highlighting;
 mod thread_resolution;
 mod viewed_toggle;
+
+#[cfg(test)]
+mod tests;
 
 pub use detail_event::DetailEvent;
 pub use detail_mode_switch::DetailModeSwitch;

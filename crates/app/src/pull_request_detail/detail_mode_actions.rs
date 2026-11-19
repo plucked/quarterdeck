@@ -32,9 +32,10 @@ impl PullRequestDetail {
     /// Changes the active surface without discarding either review's disclosure or scroll state.
     pub(super) fn set_detail_mode(&mut self, mode: DetailMode, cx: &mut Context<Self>) {
         if self.brief().mode != mode {
+            self.diff_find = None;
             self.clear_diff_selection();
             self.row_tops_width = None;
-            self.jumped_to_file = None;
+            self.selected_diff_file = None;
         }
         self.brief_mut().mode = mode;
         let files_mode = match mode {

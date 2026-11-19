@@ -28,14 +28,22 @@ pub fn selected_diff_text(
 
 /// The code of `row` in column `side`; `None` for rows without code there.
 pub fn row_code_text(row: DetailRow, side: DiffSide, files: &[LoadedFile]) -> Option<&str> {
+    row_code_line(row, side, files).map(|line| line.text.as_str())
+}
+
+/// The displayed line, including its source coordinates, in one code column.
+pub(super) fn row_code_line(
+    row: DetailRow,
+    side: DiffSide,
+    files: &[LoadedFile],
+) -> Option<&qd_diff::DiffLine> {
     let (file, hunk, line) = match (row, side) {
         (DetailRow::UnifiedLine { file, hunk, line }, DiffSide::Unified) => (file, hunk, line),
         (DetailRow::SplitLine { file, hunk, row }, DiffSide::Old) => (file, hunk, row.old?),
         (DetailRow::SplitLine { file, hunk, row }, DiffSide::New) => (file, hunk, row.new?),
         _ => return None,
     };
-    let diff_line = files.get(file)?.diff.hunks().get(hunk)?.lines.get(line)?;
-    Some(diff_line.text.as_str())
+    files.get(file)?.diff.hunks().get(hunk)?.lines.get(line)
 }
 
 #[cfg(test)]

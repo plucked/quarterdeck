@@ -9,6 +9,8 @@ actions!(
         Backspace,
         Delete,
         DeleteWordLeft,
+        UndoCommentEdit,
+        RedoCommentEdit,
         DeleteToLineStart,
         Left,
         Right,
@@ -30,6 +32,7 @@ actions!(
         SelectToLineEnd,
         SelectAll,
         Newline,
+        SoftBreak,
         Paste,
         Cut,
         Submit,
@@ -38,10 +41,20 @@ actions!(
     ]
 );
 
+actions!(markdown_editor, [Bold, Italic, InsertLink]);
+
 /// Binds the editing keys inside a text area (macOS conventions).
 pub fn bind_text_area_keys(cx: &mut App) {
     let context = Some(TEXT_AREA_CONTEXT);
+    let markdown = Some("MarkdownWrite > TextArea");
     cx.bind_keys([
+        KeyBinding::new("cmd-b", Bold, markdown),
+        KeyBinding::new("cmd-i", Italic, markdown),
+        KeyBinding::new("cmd-k", InsertLink, markdown),
+    ]);
+    cx.bind_keys([
+        KeyBinding::new("cmd-z", UndoCommentEdit, Some("CommentInput")),
+        KeyBinding::new("cmd-shift-z", RedoCommentEdit, Some("CommentInput")),
         KeyBinding::new("backspace", Backspace, context),
         KeyBinding::new("shift-backspace", Backspace, context),
         KeyBinding::new("delete", Delete, context),
@@ -69,7 +82,7 @@ pub fn bind_text_area_keys(cx: &mut App) {
         KeyBinding::new("cmd-shift-right", SelectToLineEnd, context),
         KeyBinding::new("cmd-a", SelectAll, context),
         KeyBinding::new("enter", Newline, context),
-        KeyBinding::new("shift-enter", Newline, context),
+        KeyBinding::new("shift-enter", SoftBreak, context),
         KeyBinding::new("cmd-v", Paste, context),
         KeyBinding::new("cmd-x", Cut, context),
         KeyBinding::new("cmd-enter", Submit, context),

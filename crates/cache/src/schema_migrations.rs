@@ -822,6 +822,9 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
      DELETE FROM compare_file_sets;",
     // Older search results mixed team and personal requests. Refresh their membership from GitHub.
     "DELETE FROM pr_lists WHERE list_key = 'review_requested';",
+    // Preserve existing diff preferences and start double-click commenting off.
+    "ALTER TABLE diff_view_settings ADD COLUMN double_click_to_comment INTEGER NOT NULL
+        DEFAULT 0 CHECK (double_click_to_comment IN (0, 1));",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

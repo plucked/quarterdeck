@@ -9,6 +9,8 @@ pub struct DiffViewSettings {
     pub highlight: ChangeHighlight,
     pub whitespace: WhitespaceMode,
     pub wrapping: LineWrapping,
+    /// Open a comment on a double-click in a patch line. Off by default.
+    pub double_click_to_comment: bool,
 }
 
 impl DiffViewSettings {

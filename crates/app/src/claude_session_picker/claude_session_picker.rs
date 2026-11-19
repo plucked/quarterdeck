@@ -48,6 +48,7 @@ impl ClaudeSessionPicker {
                     }
                     TextAreaEvent::Submit => picker.send_review(cx),
                     TextAreaEvent::Cancel => picker.clear_search(cx),
+                    TextAreaEvent::LayoutChanged | TextAreaEvent::FormattingChanged => {}
                 },
             );
         let mut picker = Self {

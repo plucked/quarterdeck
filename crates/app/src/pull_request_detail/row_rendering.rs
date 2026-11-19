@@ -6,9 +6,10 @@ use gpui::{
     list, prelude::*, px,
 };
 use qd_cache::{DiffLayout, LineWrapping};
-use qd_diff::{GapPlace, LineOrigin};
+use qd_diff::{DiffLine, GapPlace};
 use qd_github::LineSide;
 
+use super::comment_range::CommentRange;
 use super::composer_opening::ComposerOpening;
 use super::detail_mode::DetailMode;
 use super::detail_row::DetailRow;
@@ -17,7 +18,7 @@ use super::loaded_file::LoadedFile;
 use super::pull_request_detail::PullRequestDetail;
 use super::selection_granularity::DOUBLE_CLICK;
 use crate::app_commands::Copy;
-use crate::controls::NumberFlow;
+use crate::controls::{Button, NumberFlow, TextTooltip};
 use crate::diff_view::{
     DiffRowStyle, DiffSide, DiffSummary, DiffSummaryBar, FileClickHandler, GapClickHandler,
     GapPart, render_file_end, render_file_header, render_file_note, render_gap_bar,
@@ -27,7 +28,7 @@ use crate::scrollbar::{ScrollbarTarget, VerticalScrollbar};
 use crate::theme;
 
 /// Size of the `+` that comments on a line.
-const COMMENT_BUTTON_WIDTH: f32 = 14.;
+pub(super) const COMMENT_BUTTON_WIDTH: f32 = 14.;
 
 impl Render for PullRequestDetail {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -140,9 +141,38 @@ impl PullRequestDetail {
                 drag_listener(cx.entity().downgrade())
                     .absolute()
                     .size_full(),
-            );
+            )
+            .when_some(self.selected_comment_range, |area, range| {
+                area.child(
+                    div()
+                        .absolute()
+                        .bottom_2()
+                        .right_4()
+                        .debug_selector(|| "selected-lines-comment".into())
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .child(
+                            Button::new(
+                                "comment-on-selected-lines",
+                                format!("Comment on lines {}–{}", range.first, range.last),
+                            )
+                            .on_click(cx.listener(
+                                move |detail, _, window, cx| {
+                                    detail.open_range_composer(range, window, cx);
+                                },
+                            )),
+                        ),
+                )
+            });
 
-        diff_area.into_any_element()
+        div()
+            .flex_1()
+            .min_w_0()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .children(self.render_diff_find(cx))
+            .child(diff_area.min_h_0())
+            .into_any_element()
     }
 
     /// Row `index` of the list, padded like the pane. Called only for rows
@@ -175,42 +205,21 @@ impl PullRequestDetail {
             DetailRow::EndGap { file } => self.render_end_gap_row(index, file, cx),
             DetailRow::UnifiedLine { file, hunk, line } => {
                 let cells = self.code_cells(index);
-                let numbers = self
-                    .loaded_files()
-                    .get(file)
-                    .and_then(|loaded| loaded.diff.hunks().get(hunk)?.lines.get(line))
-                    // GitHub takes comments only on lines of the patch.
-                    .filter(|diff_line| diff_line.origin == LineOrigin::Patch)
-                    .map_or_else(RowLines::default, |diff_line| RowLines {
-                        old: diff_line.old_number,
-                        new: diff_line.new_number,
-                    });
-                let content = self.with_horizontal_scroll(file, cx, |loaded, style| {
+                self.with_horizontal_scroll(file, cx, |loaded, style| {
                     let diff_line = &loaded.diff.hunks()[hunk].lines[line];
                     let spans = loaded
                         .syntax
                         .as_deref()
                         .map_or(&[][..], |syntax| syntax.spans(hunk, line));
-                    render_unified_line(diff_line, spans, style, &cells)
-                });
-                self.with_comment_button(index, file, numbers, content, cx)
+                    let content = render_unified_line(diff_line, spans, style, &cells);
+                    self.with_comment_button(index, file, DiffSide::Unified, diff_line, content, cx)
+                })
             }
             DetailRow::SplitLine { file, hunk, row } => {
                 let cells = self.code_cells(index);
-                let numbers = self
-                    .loaded_files()
-                    .get(file)
-                    .and_then(|loaded| loaded.diff.hunks().get(hunk))
-                    // GitHub takes comments only on lines of the patch.
-                    .filter(|hunk| {
-                        let line = row.new.or(row.old).and_then(|index| hunk.lines.get(index));
-                        line.is_some_and(|line| line.origin == LineOrigin::Patch)
-                    })
-                    .map_or_else(RowLines::default, |hunk| RowLines {
-                        old: row.old.and_then(|index| hunk.lines.get(index)?.old_number),
-                        new: row.new.and_then(|index| hunk.lines.get(index)?.new_number),
-                    });
-                let content = self.with_horizontal_scroll(file, cx, |loaded, style| {
+                self.with_horizontal_scroll(file, cx, |loaded, mut style| {
+                    // Each split column reserves its own slot before its line numbers.
+                    style.gutter_width += COMMENT_BUTTON_WIDTH;
                     render_split_row(
                         &loaded.diff.hunks()[hunk],
                         hunk,
@@ -218,9 +227,12 @@ impl PullRequestDetail {
                         loaded.syntax.as_deref(),
                         style,
                         &cells,
+                        |side, line, half| {
+                            self.with_comment_button(index, file, side, line, half, cx)
+                        },
                     )
-                });
-                self.with_comment_button(index, file, numbers, content, cx)
+                    .into_any_element()
+                })
             }
             DetailRow::FileEnd { .. } => render_file_end().into_any_element(),
             DetailRow::CommentCard { card, .. } => self.render_comment_card_row(card, cx),
@@ -341,7 +353,7 @@ impl PullRequestDetail {
         }
         let indent = match self.diff_settings().layout {
             DiffLayout::Unified => 2. * loaded.gutter_width,
-            DiffLayout::Split => loaded.gutter_width,
+            DiffLayout::Split => loaded.gutter_width + COMMENT_BUTTON_WIDTH,
         };
         render_hunk_header(header, indent).into_any_element()
     }
@@ -372,8 +384,8 @@ impl PullRequestDetail {
     fn with_horizontal_scroll(
         &self,
         file: usize,
-        cx: &mut Context<Self>,
-        render: impl FnOnce(&LoadedFile, DiffRowStyle) -> Div,
+        cx: &Context<Self>,
+        render: impl FnOnce(&LoadedFile, DiffRowStyle) -> AnyElement,
     ) -> AnyElement {
         let Some(loaded) = self.loaded_files().get(file) else {
             return div().into_any_element();
@@ -386,8 +398,9 @@ impl PullRequestDetail {
         };
         let row = render(loaded, style);
         match wrapping {
-            LineWrapping::Wrap => row.into_any_element(),
-            LineWrapping::Scroll => row
+            LineWrapping::Wrap => row,
+            LineWrapping::Scroll => div()
+                .child(row)
                 .id(("diff-row", file))
                 .on_scroll_wheel(cx.listener(move |detail, event, window, cx| {
                     detail.scroll_file_horizontally(file, event, window, cx);
@@ -402,57 +415,89 @@ impl PullRequestDetail {
         }))
     }
 
-    /// A diff line with the `+` that comments on it, shown left of the line
-    /// while the line or the `+` is hovered (shift-clicking it stretches the
-    /// open comment); a double click on the line opens a comment too. The
-    /// lines of the comment being written are tinted.
+    /// The selected lines this gutter action can comment on, respecting the selected split column.
+    fn selected_range_at(
+        &self,
+        index: usize,
+        file: usize,
+        column: DiffSide,
+        line: &DiffLine,
+    ) -> Option<CommentRange> {
+        self.selected_comment_range.filter(|range| {
+            self.diff_selection.is_some_and(|selection| {
+                selection.side == column && selection.range_in_row(index).is_some()
+            }) && crate::diff_line_sides::line_number_on(line, range.side).is_some_and(|number| {
+                range.contains(DiffLineRef {
+                    file,
+                    side: range.side,
+                    line: number,
+                })
+            })
+        })
+    }
+
+    /// Adds the line's own gutter action and optional double click. Split columns receive
+    /// independent handlers so blank space and line numbers always target the side under the pointer.
     fn with_comment_button(
         &self,
         index: usize,
         file: usize,
-        numbers: RowLines,
-        content: AnyElement,
-        cx: &mut Context<Self>,
+        column: DiffSide,
+        line: &DiffLine,
+        content: Div,
+        cx: &Context<Self>,
     ) -> AnyElement {
-        let Some(primary) = numbers.primary(file) else {
-            return content;
+        let Some(at) = DiffLineRef::on_patch(file, column, line) else {
+            return content.into_any_element();
         };
+        let (group, button_id, tooltip) = match column {
+            DiffSide::Unified => ("diff-line", "comment-line", "Comment on this line"),
+            DiffSide::Old => (
+                "old-diff-line",
+                "comment-old-line",
+                "Comment on the left line",
+            ),
+            DiffSide::New => (
+                "new-diff-line",
+                "comment-new-line",
+                "Comment on the right line",
+            ),
+        };
+        let selected = self.selected_range_at(index, file, column, line);
         let is_in_comment = self.comment_range().is_some_and(|range| {
-            range.file == file
-                && numbers
-                    .on(range.side)
+            let on_side = matches!(
+                (column, range.side),
+                (DiffSide::Unified, _)
+                    | (DiffSide::Old, LineSide::Old)
+                    | (DiffSide::New, LineSide::New)
+            );
+            on_side
+                && range.file == file
+                && crate::diff_line_sides::line_number_on(line, range.side)
                     .is_some_and(|number| (range.first..=range.last).contains(&number))
         });
-
-        // The hover area reaches into the pane's padding where the `+` sits,
-        // so moving the pointer onto the `+` keeps it shown.
-        div()
-            .id(("diff-line", index))
+        let content = div()
+            .when(column != DiffSide::Unified, |outer| {
+                outer.flex().flex_1().min_w_0()
+            })
+            .when(column == DiffSide::Unified, |outer| {
+                outer
+                    .ml(px(-COMMENT_BUTTON_WIDTH))
+                    .pl(px(COMMENT_BUTTON_WIDTH))
+            })
+            .id((group, index))
             .relative()
-            .group("diff-line")
-            .ml(px(-COMMENT_BUTTON_WIDTH))
-            .pl(px(COMMENT_BUTTON_WIDTH))
+            .group(group)
             .on_click(cx.listener(move |detail, event: &ClickEvent, window, cx| {
-                if event.click_count() != DOUBLE_CLICK {
-                    return;
+                if event.click_count() == DOUBLE_CLICK
+                    && detail.diff_settings().double_click_to_comment
+                {
+                    detail.clear_diff_selection();
+                    detail.open_composer(at, ComposerOpening::New, window, cx);
                 }
-                // The side clicked in a split row, else the line's main side.
-                let clicked_side = detail
-                    .code_segments()
-                    .hit(event.position())
-                    .map(|(side, _)| side);
-                let at = match (clicked_side, numbers.old) {
-                    (Some(DiffSide::Old), Some(old)) => DiffLineRef {
-                        file,
-                        side: LineSide::Old,
-                        line: old,
-                    },
-                    (Some(DiffSide::Old | DiffSide::New | DiffSide::Unified) | None, _) => primary,
-                };
-                detail.clear_diff_selection();
-                detail.open_composer(at, ComposerOpening::New, window, cx);
             }))
-            .child(content)
+            .child(content);
+        content
             .when(is_in_comment, |row| {
                 row.child(
                     div()
@@ -468,7 +513,8 @@ impl PullRequestDetail {
             })
             .child(
                 div()
-                    .id(("comment-line", index))
+                    .id((button_id, index))
+                    .debug_selector(move || format!("{button_id}-{index}"))
                     .absolute()
                     .top_0()
                     .left_0()
@@ -483,46 +529,22 @@ impl PullRequestDetail {
                     .bg(theme::accent())
                     .cursor_pointer()
                     .opacity(0.)
-                    .group_hover("diff-line", |style| style.opacity(1.))
+                    .group_hover(group, |style| style.opacity(1.))
+                    .tooltip(TextTooltip::builder(tooltip))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(move |detail, event: &ClickEvent, window, cx| {
                         cx.stop_propagation();
-                        let opening = if event.modifiers().shift {
-                            ComposerOpening::ExtendOpen
+                        if event.modifiers().shift {
+                            detail.open_composer(at, ComposerOpening::ExtendOpen, window, cx);
+                        } else if let Some(range) = selected {
+                            detail.open_range_composer(range, window, cx);
                         } else {
-                            ComposerOpening::New
-                        };
-                        detail.open_composer(primary, opening, window, cx);
+                            detail.open_composer(at, ComposerOpening::New, window, cx);
+                        }
                     }))
                     .child("+"),
             )
             .into_any_element()
-    }
-}
-
-/// The line numbers a diff row shows on each side.
-#[derive(Clone, Copy, Default)]
-struct RowLines {
-    old: Option<u32>,
-    new: Option<u32>,
-}
-
-impl RowLines {
-    /// The line of file `file` a comment on the row goes to: the new
-    /// side's, else the old side's.
-    fn primary(self, file: usize) -> Option<DiffLineRef> {
-        let on = |side, line| DiffLineRef { file, side, line };
-        self.new
-            .map(|line| on(LineSide::New, line))
-            .or(self.old.map(|line| on(LineSide::Old, line)))
-    }
-
-    /// The row's line on `side`.
-    fn on(self, side: LineSide) -> Option<u32> {
-        match side {
-            LineSide::Old => self.old,
-            LineSide::New => self.new,
-        }
     }
 }
 
