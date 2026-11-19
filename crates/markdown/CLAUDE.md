@@ -5,6 +5,13 @@
 | `markdown_document` | `MarkdownDocument::parse`, the entry point |
 | `document_builder` | pulldown-cmark events → blocks (container stack + one open inline text) |
 | `markdown_block` | `MarkdownBlock` enum |
+| `rich_document` | styled draft projection and source offsets for editing |
+| `rich_blocks` | parsed block delimiters and list item spans |
+| `container_continuation` | quote markers and indentation for subsequent lines in a nested block |
+| `block_format` | editable block prefix kinds |
+| `inline_mark` | original inline delimiters and link destinations |
+| `fence_delimiters` | matching delimiters around edited literal code |
+| `markdown_fence` | source ranges of fenced code and top-level suggestions |
 | `inline_text` / `inline_style` / `styled_run` / `link_range` | flattened inline text: one string, sorted non-overlapping styled runs, link ranges |
 | `heading_level`, `markdown_list`, `list_item`, `task_state`, `markdown_table`, `column_alignment` | block payload types |
 | `html_text` | raw HTML → readable text (`strip_html`, `<br>` detection) |

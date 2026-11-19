@@ -4,9 +4,11 @@ use gpui::{
     Style, TextAlign, TextRun, TextStyle, Window, fill, point, prelude::*, px, relative, size,
 };
 
+use super::rich_line_runs::rich_line_runs;
 use super::text_area::TextArea;
 use super::text_area_layout::TextAreaLayout;
 use crate::theme;
+use qd_markdown::RichDocument;
 
 /// Width of the caret.
 const CARET_WIDTH: f32 = 1.5;
@@ -64,6 +66,7 @@ impl Element for TextAreaElement {
         // As wide as the parent, as tall as the text wrapped to that width.
         let (text, color) = shown_text(self.area.read(cx), window);
         let text_style = window.text_style();
+        let rich = self.area.read(cx).markdown.rich.clone();
         let single_line = self.area.read(cx).is_single_line();
         let mut style = Style::default();
         style.size.width = relative(1.).into();
@@ -74,7 +77,14 @@ impl Element for TextAreaElement {
                     AvailableSpace::MinContent | AvailableSpace::MaxContent => px(FALLBACK_WIDTH),
                 });
                 let wrap_width = (!single_line).then_some(width);
-                let layout = shape(&text, color, &text_style, wrap_width, window);
+                let layout = shape(
+                    &text,
+                    color,
+                    &text_style,
+                    rich.as_deref(),
+                    wrap_width,
+                    window,
+                );
                 Size {
                     width,
                     height: layout.height,
@@ -99,15 +109,16 @@ impl Element for TextAreaElement {
             &text,
             color,
             &window.text_style(),
+            area.markdown.rich.as_deref(),
             (!area.is_single_line()).then_some(bounds.size.width),
             window,
         );
         let is_empty = area.text().is_empty();
         // Single-line fields keep the caret visible without changing their measured height.
-        let caret_offset = if is_empty { 0 } else { area.cursor_offset() };
+        let caret_offset = area.to_visible(area.cursor_offset());
         let caret_position = layout.position_for_offset(caret_offset);
         let origin = visible_origin(area, bounds, caret_position);
-        let selected = area.selected_range.clone();
+        let selected = area.visible_range(&area.selected_range);
         let selection = if selected.is_empty() || is_empty {
             Vec::new()
         } else {
@@ -214,6 +225,7 @@ fn shape(
     text: &str,
     color: Hsla,
     style: &TextStyle,
+    rich: Option<&RichDocument>,
     width: Option<Pixels>,
     window: &mut Window,
 ) -> TextAreaLayout {
@@ -238,12 +250,16 @@ fn shape(
             underline: None,
             strikethrough: None,
         };
+        let runs = rich.map_or_else(
+            || vec![run.clone()],
+            |rich| rich_line_runs(rich, start..start + line_text.len(), &run),
+        );
         let shaped = window
             .text_system()
             .shape_text(
                 SharedString::from(line_text.to_owned()),
                 font_size,
-                &[run],
+                &runs,
                 width,
                 None,
             )

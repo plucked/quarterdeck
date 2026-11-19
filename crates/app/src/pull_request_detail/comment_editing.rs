@@ -12,9 +12,6 @@ use crate::display_text::unix_now;
 use crate::text_area::{TextArea, TextAreaEvent};
 use crate::ui_state::{ReviewChange, UiStateRecorder};
 
-/// The placeholder of a new comment's editor.
-const COMMENT_PLACEHOLDER: &str = "Write a comment… (⌘↩ to save, esc to cancel)";
-
 impl PullRequestDetail {
     /// Opens the editor of a new comment under `at`; opened to extend
     /// (shift-click) with an editor open on the same file and side, stretches
@@ -26,43 +23,66 @@ impl PullRequestDetail {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let DiffLineRef { file, side, line } = at;
-        let Some(path) = self
-            .loaded_files()
-            .get(file)
-            .map(|loaded| loaded.filename().to_owned())
+        if opening == ComposerOpening::ExtendOpen && self.review.editor.is_some() {
+            self.extend_open_comment(at, cx);
+            return;
+        }
+        self.open_range_composer(
+            CommentRange::ending_at(at.file, at.side, at.line, None),
+            window,
+            cx,
+        );
+    }
+
+    /// An invalid Shift-click leaves the draft in place so it can still be saved.
+    fn extend_open_comment(&mut self, at: DiffLineRef, cx: &mut Context<Self>) {
+        let Some(editor) = self.review.editor.as_ref() else {
+            return;
+        };
+        if !matches!(editor.target, EditorTarget::NewComment { .. })
+            || editor.text.read(cx).suggestion_anchors_range()
+        {
+            return;
+        }
+        let Some(extended) = self
+            .comment_range()
+            .and_then(|range| range.extended_to(at, self.loaded_files().get(at.file)?))
         else {
             return;
         };
-
-        // A shift-click on the same file and side makes the open comment span the lines.
-        if opening == ComposerOpening::ExtendOpen
-            && let Some(editor) = &mut self.review_mut().editor
-            && let EditorTarget::NewComment {
-                file: open_file,
-                side: open_side,
-                line: open_line,
-                start_line,
-                ..
-            } = &mut editor.target
-            && *open_file == file
-            && *open_side == side
+        if let Some(EditorTarget::NewComment {
+            side,
+            line,
+            start_line,
+            ..
+        }) = self.review.editor.as_mut().map(|editor| &mut editor.target)
         {
-            let first = start_line.unwrap_or(*open_line).min(line);
-            let last = (*open_line).max(line);
-            *start_line = (first != last).then_some(first);
-            *open_line = last;
-            self.refresh_comment_files(&[Some(file)]);
-            cx.notify();
-            return;
+            *side = extended.side;
+            *line = extended.last;
+            *start_line = (extended.first < extended.last).then_some(extended.first);
         }
+        self.refresh_suggestion_source();
+        self.refresh_comment_files(&[Some(at.file)]);
+        cx.notify();
+    }
+
+    /// Opens a comment on the supplied single-line or multiline anchor.
+    pub(super) fn open_range_composer(
+        &mut self,
+        range: CommentRange,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(file) = self.loaded_files().get(range.file) else {
+            return;
+        };
         self.open_editor(
             EditorTarget::NewComment {
-                file,
-                path,
-                side,
-                line,
-                start_line: None,
+                file: range.file,
+                path: file.filename().to_owned(),
+                side: range.side,
+                line: range.last,
+                start_line: (range.first < range.last).then_some(range.first),
             },
             "",
             window,
@@ -78,9 +98,15 @@ impl PullRequestDetail {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let placeholder = match &target {
+            EditorTarget::Reply { .. } => "Write a reply…",
+            _ => "Write a comment…",
+        };
+        let github = self.editor_destination(&target) == NoteDestination::GitHub;
         let area = cx.new(|cx| {
-            let mut area = TextArea::new(COMMENT_PLACEHOLDER, cx);
+            let mut area = TextArea::comment(placeholder, cx);
             area.set_text(text, cx);
+            area.set_github_markdown(github, cx);
             area
         });
         let subscription = cx.subscribe_in(
@@ -89,7 +115,11 @@ impl PullRequestDetail {
             |detail, _, event: &TextAreaEvent, window, cx| match event {
                 TextAreaEvent::Submit => detail.save_editor(window, cx),
                 TextAreaEvent::Cancel => detail.close_editor(window, cx),
-                TextAreaEvent::Changed => detail.remeasure_editor_row(),
+                TextAreaEvent::FormattingChanged => cx.notify(),
+                TextAreaEvent::Changed | TextAreaEvent::LayoutChanged => {
+                    detail.remeasure_editor_row();
+                    cx.notify();
+                }
             },
         );
         area.read(cx).focus(window);
@@ -101,13 +131,37 @@ impl PullRequestDetail {
             .as_ref()
             .and_then(|editor| self.editor_file(&editor.target));
         let opened_file = self.editor_file(&target);
+        let suggestion_source = target.suggestion_source(self.loaded_files());
         self.review_mut().editor = Some(CommentEditor {
             target,
             text: area,
+            suggestion_source,
             _subscription: subscription,
         });
         self.refresh_comment_files(&[closed_file, opened_file]);
+        if let Some(file) = opened_file {
+            self.select_diff_file(file);
+        }
+        // The virtual list knows the editor's height once the inserted row has been laid out.
+        cx.on_next_frame(window, |detail, _, cx| {
+            if let Some(row) = detail.editor_row() {
+                detail.list().scroll_to_reveal_item(row);
+                cx.notify();
+            }
+        });
         cx.notify();
+    }
+
+    /// Updates the code offered by Suggest change after the composer range is extended.
+    pub(super) fn refresh_suggestion_source(&mut self) {
+        let source = self
+            .review()
+            .editor
+            .as_ref()
+            .and_then(|editor| editor.target.suggestion_source(self.loaded_files()));
+        if let Some(editor) = &mut self.review_mut().editor {
+            editor.suggestion_source = source;
+        }
     }
 
     /// The loaded file at `path`.
@@ -191,34 +245,25 @@ impl PullRequestDetail {
         }
     }
 
-    /// Lets the list measure the editor's row again as its text grows.
-    fn remeasure_editor_row(&mut self) {
-        let Some(target) = self
-            .review()
-            .editor
-            .as_ref()
-            .map(|editor| editor.target.clone())
-        else {
-            return;
-        };
-        let Some(rows) = self
-            .editor_file(&target)
-            .and_then(|file| self.rows().file_range(file))
-        else {
-            return;
-        };
-        let row = rows
-            .into_iter()
-            .find(|row| match (self.rows().get(*row), &target) {
-                (Some(DetailRow::Composer { .. }), EditorTarget::NewComment { .. }) => true,
-                (Some(DetailRow::CommentCard { card, .. }), _) => {
-                    self.card_holds_editor(card, &target)
-                }
-                _ => false,
-            });
-        if let Some(row) = row {
+    /// Lets the list measure the editor again after its text or toolbar changes.
+    pub(super) fn remeasure_editor_row(&mut self) {
+        if let Some(row) = self.editor_row() {
             self.remeasure_row(row);
         }
+    }
+
+    /// Finds the open editor in the active file's virtualized rows.
+    fn editor_row(&self) -> Option<usize> {
+        let target = &self.review().editor.as_ref()?.target;
+        let rows = self.rows().file_range(self.editor_file(target)?)?;
+        rows.into_iter()
+            .find(|row| match (self.rows().get(*row), target) {
+                (Some(DetailRow::Composer { .. }), EditorTarget::NewComment { .. }) => true,
+                (Some(DetailRow::CommentCard { card, .. }), _) => {
+                    self.card_holds_editor(card, target)
+                }
+                _ => false,
+            })
     }
 
     /// Whether card `card` shows the editor for `target` (a reply or an edit in it).
@@ -266,18 +311,16 @@ impl PullRequestDetail {
     /// Saves what the editor holds: a new note or draft, an edited one, or
     /// an edit of a GitHub comment (sent at once). An empty text saves nothing.
     pub(super) fn save_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        window.focus(self.focus());
-        let Some(editor) = self.review_mut().editor.take() else {
+        let Some(editor) = self
+            .review_mut()
+            .editor
+            .take_if(|editor| !editor.text.read(cx).text().trim().is_empty())
+        else {
             return;
         };
-        let file = self.editor_file(&editor.target);
+        window.focus(self.focus());
         let body = editor.text.read(cx).text().trim().to_owned();
-        if body.is_empty() {
-            self.refresh_comment_files(&[file]);
-            self.resume_deferred_reload(cx);
-            cx.notify();
-            return;
-        }
+        let file = self.editor_file(&editor.target);
         let now = unix_now();
         match editor.target {
             EditorTarget::NewComment {

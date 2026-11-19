@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 
 use qd_cache::{NoteAnchor, ReviewNote};
-use qd_diff::DiffLineKind;
+use qd_diff::{DiffLineKind, LineOrigin, RawPatchLine};
 use qd_github::{LineSide, PullRequest};
 
 use super::lines_label::note_lines_label;
@@ -147,17 +147,29 @@ pub(super) fn code_excerpt(
     last: u32,
 ) -> Option<String> {
     for hunk in loaded.diff.hunks() {
-        let number_of = |index: usize| line_number_on(&hunk.lines[index], side);
-        let in_range: Vec<usize> = (0..hunk.lines.len())
-            .filter(|index| {
-                number_of(*index).is_some_and(|number| (first..=last).contains(&number))
-            })
-            .collect();
-        let (Some(start), Some(end)) = (in_range.first(), in_range.last()) else {
+        let mut in_range = hunk.lines.iter().enumerate().filter_map(|(index, line)| {
+            (first..=last)
+                .contains(&line_number_on(line, side)?)
+                .then_some(index)
+        });
+        let Some(start) = in_range.next() else {
             continue;
         };
+        let end = in_range.next_back().unwrap_or(start);
+        // A folded row has two original spellings. Advance through the patch only as needed
+        // for these rows, leaving the surrounding displayed and expanded context in place.
+        let mut original = RawPatchLine::in_patch(loaded.file.patch.as_deref().unwrap_or_default());
         let mut excerpt = String::new();
-        for line in &hunk.lines[start.saturating_sub(CONTEXT_LINES)..=*end] {
+        for line in &hunk.lines[start.saturating_sub(CONTEXT_LINES)..=end] {
+            if line.origin == LineOrigin::FoldedReplacement {
+                let number = line_number_on(line, side)?;
+                let raw = original.find(|raw| match side {
+                    LineSide::Old => raw.old_number == Some(number),
+                    LineSide::New => raw.new_number == Some(number),
+                })?;
+                let _ = writeln!(excerpt, "{}", raw.source);
+                continue;
+            }
             let marker = match line.kind {
                 DiffLineKind::Added => '+',
                 DiffLineKind::Removed => '-',

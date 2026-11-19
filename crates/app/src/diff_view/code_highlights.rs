@@ -3,6 +3,7 @@ use std::ops::Range;
 use gpui::{HighlightStyle, Rgba};
 use qd_syntax::SyntaxSpan;
 
+use super::code_cells::CellMatches;
 use crate::markdown_view::{covers, edge_pieces};
 use crate::theme;
 
@@ -17,6 +18,7 @@ pub fn code_highlights(
     changed: &[Range<usize>],
     emphasis: Rgba,
     selected: Option<&Range<usize>>,
+    matches: &CellMatches,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
     // Cut where the color, the change mark or the selection may switch,
     // then style each piece; plain, unchanged pieces need no highlight.
@@ -24,14 +26,22 @@ pub fn code_highlights(
         .iter()
         .map(|span| &span.range)
         .chain(changed)
-        .chain(selected);
+        .chain(selected)
+        .chain(&matches.ranges);
     edge_pieces(length, edges)
         .into_iter()
         .filter_map(|piece| {
             let span = syntax.iter().find(|span| covers(&span.range, &piece));
             let is_changed = changed.iter().any(|range| covers(range, &piece));
             let is_selected = selected.is_some_and(|range| covers(range, &piece));
-            if span.is_none() && !is_changed && !is_selected {
+            let next = matches
+                .ranges
+                .partition_point(|range| range.end <= piece.start);
+            let is_match = matches
+                .ranges
+                .get(next)
+                .is_some_and(|range| covers(range, &piece));
+            if span.is_none() && !is_changed && !is_selected && !is_match {
                 return None;
             }
             let mut highlight = HighlightStyle::default();
@@ -40,6 +50,18 @@ pub fn code_highlights(
             }
             if is_changed {
                 highlight.background_color = Some(emphasis.into());
+            }
+            if is_match && !is_selected {
+                if matches
+                    .current
+                    .as_ref()
+                    .is_some_and(|current| covers(current, &piece))
+                {
+                    highlight.background_color = Some(theme::accent().into());
+                    highlight.color = Some(theme::on_accent().into());
+                } else {
+                    highlight.background_color = Some(theme::text_selection().into());
+                }
             }
             if is_selected {
                 highlight.background_color = Some(theme::text_selection().into());
@@ -68,7 +90,14 @@ mod tests {
     fn change_splits_syntax_span() {
         let emphasis = rgb(0x00_33_00);
         let changed: [Range<usize>; 1] = [Range { start: 4, end: 8 }];
-        let highlights = code_highlights(10, &[span(0..6)], &changed, emphasis, None);
+        let highlights = code_highlights(
+            10,
+            &[span(0..6)],
+            &changed,
+            emphasis,
+            None,
+            &CellMatches::default(),
+        );
         let pieces: Vec<_> = highlights
             .iter()
             .map(|(range, style)| {
@@ -90,7 +119,14 @@ mod tests {
     fn selection_covers_change_mark() {
         let changed: [Range<usize>; 1] = [Range { start: 2, end: 6 }];
         let selected = Range { start: 4, end: 8 };
-        let highlights = code_highlights(10, &[], &changed, rgb(0x00_33_00), Some(&selected));
+        let highlights = code_highlights(
+            10,
+            &[],
+            &changed,
+            rgb(0x00_33_00),
+            Some(&selected),
+            &CellMatches::default(),
+        );
         let selection: gpui::Hsla = theme::text_selection().into();
         let pieces: Vec<_> = highlights
             .iter()
@@ -102,6 +138,9 @@ mod tests {
     /// Without colors or changes there is nothing to highlight.
     #[test]
     fn plain_line_has_no_highlights() {
-        assert_eq!(code_highlights(5, &[], &[], rgb(0), None).len(), 0);
+        assert_eq!(
+            code_highlights(5, &[], &[], rgb(0), None, &CellMatches::default()).len(),
+            0
+        );
     }
 }

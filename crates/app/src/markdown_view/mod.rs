@@ -30,6 +30,7 @@ mod text_pieces;
 mod text_segment;
 mod text_selection;
 
+pub(crate) use inline_highlight::inline_highlight;
 pub use markdown_view::MarkdownView;
 pub use open_web_link::is_openable;
 pub use text_pieces::{covers, edge_pieces};

@@ -67,11 +67,9 @@ pub struct PullRequestDetail {
     pub(super) file_review: FileReviewState,
     pub(super) rows: DetailRowList,
     pub(super) list: ListState,
-    /// The file the reader last jumped to (a click in the tree, `]` / `[`).
-    /// It is the current file while its header is in view, so a jump the
-    /// diff cannot scroll for (a file in the last screenful) still shows in
-    /// the tree and moves `]` on; scrolling by hand or a rebuild drops it.
-    pub(super) jumped_to_file: Option<usize>,
+    /// The file the reader last chose using the tree, keyboard, diff header or code.
+    /// While its header is visible this disambiguates short files sharing the viewport.
+    pub(super) selected_diff_file: Option<usize>,
     /// How far each file's lines are scrolled sideways when lines do not wrap.
     pub(super) horizontal_offsets: HashMap<usize, f32>,
     /// A scroll position to apply once the files are loaded (a restore after
@@ -90,6 +88,9 @@ pub struct PullRequestDetail {
     /// The code texts painted this frame, for mouse hit testing.
     pub(super) code_segments: CodeSegments,
     pub(super) diff_selection: Option<DiffSelection>,
+    /// Commentable patch range of the last completed drag.
+    pub(super) selected_comment_range: Option<super::comment_range::CommentRange>,
+    pub(super) diff_find: Option<super::diff_find::DiffFind>,
     /// Whether a press in the code is being dragged.
     pub(super) is_selecting: bool,
     /// The file tree panel: the files as a tree, the filter, folders, visibility.
@@ -165,7 +166,7 @@ impl PullRequestDetail {
             detail
                 .update(cx, |detail, cx| {
                     // Scrolling by hand: the file at the top is current again.
-                    detail.jumped_to_file = None;
+                    detail.selected_diff_file = None;
                     cx.emit(DetailEvent::Scrolled);
                 })
                 .ok();
@@ -186,7 +187,7 @@ impl PullRequestDetail {
             file_review: FileReviewState::default(),
             rows: DetailRowList::default(),
             list,
-            jumped_to_file: None,
+            selected_diff_file: None,
             horizontal_offsets: HashMap::new(),
             pending_scroll: None,
             files_task: None,
@@ -196,6 +197,8 @@ impl PullRequestDetail {
             focus: cx.focus_handle(),
             code_segments: CodeSegments::default(),
             diff_selection: None,
+            selected_comment_range: None,
+            diff_find: None,
             is_selecting: false,
             file_tree: FileTreeState::new(layout.clone()),
             focus_drawer: super::focus_drawer::FocusDrawer::new(
@@ -721,33 +724,9 @@ mod refresh_tests {
     use super::super::comment_editor::{CommentEditor, EditorTarget};
     use super::super::operation_status::OperationStatus;
     use super::*;
+    use crate::pull_request_detail::tests::cached_review::{cached_services, pull_request};
     use crate::shared_cache::SharedCache;
     use crate::text_area::{TextArea, TextAreaEvent};
-
-    fn pr(id: u64, version: &str) -> PullRequest {
-        PullRequest {
-            id,
-            number: id,
-            repo: qd_github::RepoRef {
-                owner: "owner".into(),
-                name: "repo".into(),
-            },
-            title: "title".into(),
-            body: None,
-            author: qd_github::User {
-                login: "user".into(),
-                avatar_url: String::new(),
-            },
-            html_url: String::new(),
-            draft: false,
-            created_at: "start".into(),
-            updated_at: version.into(),
-            labels: vec![],
-            stack: None,
-            branches: None,
-            viewer_review: None,
-        }
-    }
 
     /// Reopens a cached diff before the viewed-mark writer runs, then lets the writer finish.
     fn check_viewed_reload(cx: &mut gpui::TestAppContext, initially_viewed: bool) {
@@ -760,8 +739,8 @@ mod refresh_tests {
         let recorder = UiStateRecorder::open(&database).unwrap();
         let store = recorder.shared_store();
         let mut cache = qd_cache::GitHubCache::open(&database).unwrap();
-        let first = pr(1, "current");
-        let second = pr(2, "current");
+        let first = pull_request(1, "current");
+        let second = pull_request(2, "current");
         let scope = ReviewScope::PullRequest(first.id);
         let file = PullRequestFile {
             filename: "a.rs".into(),
@@ -872,20 +851,8 @@ mod refresh_tests {
         cx: &mut gpui::TestAppContext,
         directory: &std::path::Path,
     ) -> (Entity<PullRequestDetail>, SharedCache) {
-        let database = directory.join("cache");
-        let recorder = UiStateRecorder::open(&database).unwrap();
-        let cache = SharedCache::new(qd_cache::GitHubCache::open(&database).unwrap());
-        let services = AppServices {
-            github: Err("offline".into()),
-            token_source: None,
-            cache: cache.clone(),
-            database,
-        };
-        cx.update(|app| {
-            app.set_global(AppSettings::load(&recorder));
-            app.set_global(recorder);
-            AvatarImages::install(app);
-        });
+        let services = cached_services(cx, directory);
+        let cache = services.cache.clone();
         (cx.new(|cx| PullRequestDetail::new(services, cx)), cache)
     }
 
@@ -898,7 +865,7 @@ mod refresh_tests {
         // Open an ordinary cached review, then collapse a file and search for it.
         let directory = tempfile::tempdir().unwrap();
         let (detail, cache) = cached_detail(cx, directory.path());
-        let mut pull_request = pr(1, "t1");
+        let mut pull_request = pull_request(1, "t1");
         pull_request.body = Some("Original summary".into());
         let files = [PullRequestFile {
             filename: "needle.rs".into(),
@@ -998,7 +965,7 @@ mod refresh_tests {
 
         let directory = tempfile::tempdir().unwrap();
         let (detail, cache) = cached_detail(cx, directory.path());
-        let mut top = pr(2, "t1");
+        let mut top = pull_request(2, "t1");
         top.stack = Some(StackMembership {
             number: 9,
             position: 2,
@@ -1070,7 +1037,7 @@ mod refresh_tests {
         let directory = tempfile::tempdir().unwrap();
         let (detail, _) = cached_detail(cx, directory.path());
         detail.update(cx, |detail, cx| {
-            detail.pull_request = Some(pr(1, "old"));
+            detail.pull_request = Some(pull_request(1, "old"));
             let text = cx.new(|cx| {
                 let mut area = TextArea::new("", cx);
                 area.set_text("unsaved comment", cx);
@@ -1082,9 +1049,10 @@ mod refresh_tests {
                     thread_id: "thread".into(),
                 },
                 _subscription: cx.subscribe(&text, |_, _, _: &TextAreaEvent, _| {}),
+                suggestion_source: None,
                 text: text.clone(),
             });
-            detail.show(Some(pr(1, "new")), None, cx);
+            detail.show(Some(pull_request(1, "new")), None, cx);
             assert_eq!(
                 detail.review.editor.as_ref().unwrap().text.read(cx).text(),
                 "unsaved comment"
@@ -1098,11 +1066,11 @@ mod refresh_tests {
             panel.progress = OperationStatus::Working("still closing".into());
             panel.task = Some(cx.spawn(async |_, _| futures::future::pending::<()>().await));
             detail.set_action_panel(Some(panel));
-            detail.show(Some(pr(2, "new")), None, cx);
+            detail.show(Some(pull_request(2, "new")), None, cx);
             assert!(detail.action_panel().is_none());
             let background = detail.panel_for_operation(1).unwrap();
             assert!(background.task.is_some());
-            detail.show(Some(pr(1, "new")), None, cx);
+            detail.show(Some(pull_request(1, "new")), None, cx);
             assert!(detail.action_panel().is_some_and(ActionPanel::is_working));
         });
     }

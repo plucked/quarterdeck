@@ -20,6 +20,7 @@
 //! - `file_diff_state.rs`: `FileDiffState`, whether a file is collapsed, viewed or large.
 //! - `diff_row_style.rs`: `DiffRowStyle`, what a file's rows share.
 //! - `diff_side.rs`: `DiffSide`, the code column of a row (unified, old, new).
+//! - `diff_match_reveal.rs`: one-shot scrolling to a Find occurrence after text layout.
 //! - `diff_position.rs`: `DiffPosition`, a row and byte in the diff text.
 //! - `code_segments.rs`: `CodeSegments`, the code texts painted this frame, for hit testing.
 //! - `code_cells.rs`: `CodeCells` and `SideSelection`, what a row's code cells need for selection.
@@ -34,6 +35,7 @@ mod code_highlights;
 mod code_segments;
 mod context_gap_rendering;
 mod diff_cell_rendering;
+mod diff_match_reveal;
 mod diff_position;
 mod diff_row_style;
 mod diff_side;
@@ -51,12 +53,13 @@ mod split_rendering;
 mod tree_locate_button;
 mod unified_rendering;
 
-pub use code_cells::{CodeCells, SideSelection};
+pub use code_cells::{CellMatches, CodeCells, SideSelection};
 pub use code_segments::{CodeSegment, CodeSegments};
 pub use context_gap_rendering::{GapClickHandler, render_gap_bar};
 pub use diff_cell_rendering::{
     DIFF_CHARACTER_WIDTH, DIFF_ROW_HEIGHT, gutter_width, render_hunk_header,
 };
+pub use diff_match_reveal::DiffMatchReveal;
 pub use diff_position::DiffPosition;
 pub use diff_row_style::DiffRowStyle;
 pub use diff_side::DiffSide;

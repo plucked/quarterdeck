@@ -52,7 +52,7 @@ fn fold_whitespace_changes(lines: &[DiffLine]) -> Vec<DiffLine> {
                         new_number: added.new_number,
                         text: added.text.clone(),
                         changed_ranges: Vec::new(),
-                        origin: LineOrigin::Patch,
+                        origin: LineOrigin::FoldedReplacement,
                     });
                 }
                 (removed, added) => {

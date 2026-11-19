@@ -41,7 +41,7 @@ impl PullRequestDetail {
     /// to `anchor`.
     pub(super) fn rebuild_rows(&mut self, anchor: ScrollAnchor) {
         // Row numbers change, so a selection would point at other text.
-        self.diff_selection = None;
+        self.clear_diff_selection();
         self.refresh_comment_layout();
         let shown_files = self
             .file_tree
@@ -55,7 +55,10 @@ impl PullRequestDetail {
             comments: &self.review.placement,
         });
         self.list.reset(self.rows.len());
-        self.jumped_to_file = None;
+        if !self.guided_diff_active() {
+            self.invalidate_diff_find();
+        }
+        self.selected_diff_file = None;
         self.row_tops_width = None;
         self.refresh_tree_rows();
         self.walkthrough.group_diff.reset_measurements();
@@ -125,7 +128,7 @@ impl PullRequestDetail {
             .unwrap_or_default();
         let change = ChangedRows::between(&old_rows, &rows);
         let top = self.list.logical_scroll_top();
-        self.diff_selection = None;
+        self.clear_diff_selection();
         let new_rows = rows.clone();
         self.row_tops_width = None;
         if let Some(old_range) = self.rows.replace_file(file, rows) {
@@ -158,6 +161,14 @@ impl PullRequestDetail {
                     self.list.scroll_to(kept_top);
                 }
             }
+        }
+        if !self.guided_diff_active()
+            && self
+                .diff_find
+                .as_ref()
+                .is_some_and(|find| find.file == file)
+        {
+            self.invalidate_diff_find();
         }
         self.refresh_tree_rows();
     }

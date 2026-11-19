@@ -19,6 +19,21 @@ impl PullRequestDetail {
         }
     }
 
+    /// The editor follows its target's destination, including replies opened from the Local panel.
+    pub(super) fn editor_destination(&self, target: &EditorTarget) -> NoteDestination {
+        match target {
+            EditorTarget::NewComment { .. } => self.active_destination(),
+            EditorTarget::Reply { .. } | EditorTarget::EditGitHubComment { .. } => {
+                NoteDestination::GitHub
+            }
+            EditorTarget::EditNote(id) => self
+                .review()
+                .comments
+                .note(*id)
+                .map_or(NoteDestination::Local, |note| note.destination),
+        }
+    }
+
     /// Which comments the diff shows for the shown target.
     fn comment_scope(&self) -> CommentScope {
         match self.target() {

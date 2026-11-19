@@ -1,7 +1,6 @@
 /// The click count of a single press.
 const SINGLE_CLICK: usize = 1;
-/// The click count of a double click: it selects a word, and on a diff
-/// line opens a comment.
+/// The click count for word selection or the optional diff-line comment gesture.
 pub const DOUBLE_CLICK: usize = 2;
 
 /// What a press in the code selects, by its click count.

@@ -85,6 +85,7 @@ impl PullRequestDetail {
         self.file_review = FileReviewState::default();
         self.viewed_undo.clear();
         self.walkthrough = super::review_walkthrough::ReviewWalkthrough::default();
+        self.diff_find = None;
         self.focus_drawer.reset_contents();
         self.file_tree.search = super::file_search::FileSearch::default();
         self.focus_drawer

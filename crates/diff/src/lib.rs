@@ -14,6 +14,8 @@
 //! - `whitespace_mode.rs`: `WhitespaceMode`, show or ignore whitespace changes.
 //! - `change_highlight.rs`: `ChangeHighlight`, lines, words or characters.
 //! - `parse_patch.rs`: parses the patch text into hunks.
+//! - `patch_head_lines.rs`: reads original head-side text from one patch hunk.
+//! - `raw_patch_line.rs`: original patch rows with their base and head coordinates.
 //! - `refine_changes.rs`: folds whitespace changes and marks inline changes.
 //! - `change_block.rs`: `ChangeBlock`, a run of removed lines and the added lines replacing them.
 //! - `inline_changes.rs`: `InlineChanges`, the differing parts of a removed/added pair.
@@ -35,6 +37,8 @@ mod hunk_context;
 mod inline_changes;
 mod line_origin;
 mod parse_patch;
+mod patch_head_lines;
+mod raw_patch_line;
 mod refine_changes;
 mod revealed_lines;
 mod source_lines;
@@ -49,6 +53,8 @@ pub use diff_line_kind::DiffLineKind;
 pub use diff_options::DiffOptions;
 pub use file_diff::FileDiff;
 pub use line_origin::LineOrigin;
+pub use patch_head_lines::patch_head_lines;
+pub use raw_patch_line::RawPatchLine;
 pub use revealed_lines::RevealedLines;
 pub use source_lines::SourceLines;
 pub use split_row::SplitRow;

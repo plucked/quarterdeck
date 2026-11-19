@@ -5,6 +5,9 @@ pub enum LineOrigin {
     /// A line of GitHub's patch: changed, or context the patch carries.
     #[default]
     Patch,
+    /// A removed/added pair displayed as context when whitespace is ignored.
+    /// Each number still identifies a separate side of the original patch.
+    FoldedReplacement,
     /// An unchanged line revealed from the file's text, outside the patch:
     /// GitHub takes no review comment on it.
     FileText,

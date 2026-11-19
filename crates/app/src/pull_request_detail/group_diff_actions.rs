@@ -21,6 +21,7 @@ impl PullRequestDetail {
             self.walkthrough.group_diff.expanded.insert(file);
         }
         self.refresh_group_diff();
+        self.select_diff_file(file);
         cx.notify();
     }
 
@@ -53,5 +54,8 @@ impl PullRequestDetail {
         self.clear_diff_selection();
         self.row_tops_width = None;
         self.walkthrough.group_diff.replace_rows(rows);
+        if self.guided_diff_active() {
+            self.invalidate_diff_find();
+        }
     }
 }

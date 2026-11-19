@@ -60,7 +60,7 @@ pub(crate) fn parse_patch(patch: &str) -> Vec<DiffHunk> {
 }
 
 /// The old and new start lines of a `@@ -a,b +c,d @@` header.
-fn hunk_starts(header: &str) -> Option<(u32, u32)> {
+pub(super) fn hunk_starts(header: &str) -> Option<(u32, u32)> {
     let mut ranges = header.trim_start_matches('@').split_whitespace();
     let old = ranges.next()?.strip_prefix('-')?;
     let new = ranges.next()?.strip_prefix('+')?;

@@ -4,6 +4,7 @@ use qd_diff::DiffHunk;
 use super::detail_row::DetailRow;
 use super::detail_row_list::DetailRowList;
 use super::loaded_file::LoadedFile;
+use super::row_rendering::COMMENT_BUTTON_WIDTH;
 use crate::diff_view::{DIFF_CHARACTER_WIDTH, DIFF_ROW_HEIGHT};
 use crate::scrollbar::ListRowTops;
 
@@ -92,7 +93,8 @@ fn estimated_height(
             let Some((loaded, hunk)) = file_hunk(files, file, hunk) else {
                 return DIFF_ROW_HEIGHT;
             };
-            let code_width = pane_width / 2. - CODE_INSET / 2. - loaded.gutter_width;
+            let code_width =
+                pane_width / 2. - CODE_INSET / 2. - loaded.gutter_width - COMMENT_BUTTON_WIDTH;
             line_height(hunk, row.old, code_width, settings)
                 .max(line_height(hunk, row.new, code_width, settings))
         }

@@ -40,6 +40,7 @@ objc2-core-media = { version = "0.3", default-features = false, features = ["std
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVReturn"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSString", "NSURL", "NSValue", "objc2-core-foundation"] }
 pulldown-cmark = { version = "0.13", default-features = false }
+regex = "1"
 rusqlite = { version = "0.41", features = ["bundled"] }
 rmcp = { version = "=3.10.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
 security-framework = "3"

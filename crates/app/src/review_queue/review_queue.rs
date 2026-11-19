@@ -430,6 +430,7 @@ impl Render for ReviewQueue {
             .on_action(cx.listener(Self::on_show_authored))
             .on_action(cx.listener(Self::on_show_review_requested))
             .on_action(cx.listener(Self::on_show_others))
+            .on_action(cx.listener(Self::on_find_in_diff))
             .on_action(cx.listener(Self::on_next_file))
             .on_action(cx.listener(Self::on_previous_file))
             .on_action(cx.listener(Self::on_mark_viewed_and_next))

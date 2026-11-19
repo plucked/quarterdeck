@@ -13,17 +13,27 @@ use qd_studio::{CodeAnchor, CodeSide};
 const MIN_VISIBLE_CODE_WIDTH: f32 = 240.;
 
 impl PullRequestDetail {
-    /// The file the reader is on, highlighted in the tree: the one last
-    /// jumped to while its header is in view, else the one whose rows are at
-    /// the top of the diff.
+    /// The last file the reader chose while its header is visible, then the file at the top.
     pub(super) fn current_file(&self) -> Option<usize> {
-        let jumped = self
-            .jumped_to_file
+        let selected = self
+            .selected_diff_file
             .filter(|file| self.is_file_header_in_view(*file));
-        jumped.or_else(|| {
+        selected.or_else(|| {
             self.rows()
                 .file_at_row(self.list().logical_scroll_top().item_ix)
         })
+    }
+
+    /// Targets the file the reader clicked or navigated to, even if several files fit on screen.
+    pub(super) fn select_diff_file(&mut self, file: usize) {
+        if self
+            .diff_find
+            .as_ref()
+            .is_some_and(|find| find.file != file)
+        {
+            self.diff_find = None;
+        }
+        self.selected_diff_file = Some(file);
     }
 
     /// Whether file `file`'s header row lay wholly inside the diff's
@@ -42,11 +52,11 @@ impl PullRequestDetail {
     /// and makes it the current file; nothing while it is hidden.
     pub(super) fn reveal_file(&mut self, file: usize, cx: &mut Context<Self>) {
         if let Some(row) = self.rows().file_start(file) {
+            self.select_diff_file(file);
             self.list().scroll_to(ListOffset {
                 item_ix: row,
                 offset_in_item: px(0.),
             });
-            self.jumped_to_file = Some(file);
             cx.notify();
         }
     }
@@ -133,6 +143,7 @@ impl PullRequestDetail {
         };
         self.file_review.toggle_collapsed(&filename);
         self.rebuild_file_rows(file);
+        self.select_diff_file(file);
         cx.notify();
     }
 

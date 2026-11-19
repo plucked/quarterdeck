@@ -1,8 +1,8 @@
-use gpui::Context;
+use gpui::{App, Context, Window};
 use qd_cache::NoteDestination;
 
 use super::pull_request_detail::PullRequestDetail;
-use crate::controls::{SegmentedControl, view_option};
+use crate::controls::SegmentedControl;
 
 impl PullRequestDetail {
     /// The GitHub / Local switch of where new comments go on a single pull
@@ -17,12 +17,20 @@ impl PullRequestDetail {
     ) -> SegmentedControl {
         let destination = self.review().destination;
         let detail = cx.entity().downgrade();
-        let pick = |destination| {
-            view_option(
-                &detail,
-                destination,
-                PullRequestDetail::set_comment_destination,
-            )
+        let pick = |chosen| {
+            let detail = detail.clone();
+            move |window: &mut Window, cx: &mut App| {
+                detail
+                    .update(cx, |detail, cx| {
+                        detail.set_comment_destination(chosen, cx);
+                        if let Some(editor) = &detail.review().editor {
+                            editor
+                                .text
+                                .update(cx, |text, cx| text.resume_writing(window, cx));
+                        }
+                    })
+                    .ok();
+            }
         };
         SegmentedControl::new(id)
             .option(
