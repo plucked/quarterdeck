@@ -31,7 +31,7 @@ use crate::theme;
 pub(super) const COMMENT_BUTTON_WIDTH: f32 = 14.;
 
 impl Render for PullRequestDetail {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // This frame's code texts register again as they paint.
         self.code_segments().clear();
 
@@ -42,14 +42,18 @@ impl Render for PullRequestDetail {
         // stays while another pull request's files load, so it does not flicker.
         let shows_side_panel = self.is_side_panel_shown() && self.pull_request().is_some();
         let main_column = div()
+            .debug_selector(|| "review-main-column".into())
             .flex()
             .flex_col()
             .flex_1()
             .min_w_0()
             .h_full()
-            .children(self.render_sticky_header(cx))
+            .when(!self.is_focus_mode(), |column| {
+                column.children(self.render_sticky_header(window, cx))
+            })
             .child(
                 div()
+                    .debug_selector(|| "review-content".into())
                     .flex()
                     .flex_1()
                     .min_h_0()
@@ -192,7 +196,7 @@ impl PullRequestDetail {
             DetailRow::FilesFailed => self.render_failure(),
             DetailRow::AllFilesHidden => self.render_all_files_hidden(),
             DetailRow::SummaryBar => div()
-                .pb_3()
+                .py_1()
                 .child(self.render_summary_bar(cx))
                 .into_any_element(),
             DetailRow::FileHeader { file } => self.render_file_header_row(file, cx),
@@ -241,7 +245,10 @@ impl PullRequestDetail {
         div()
             .id(row_id)
             .when(!self.guided_diff_active(), Styled::px_4)
-            .when(index == 0 && !self.guided_diff_active(), Styled::pt_4)
+            .when(
+                index == 0 && !self.guided_diff_active() && !matches!(row, DetailRow::SummaryBar),
+                Styled::pt_4,
+            )
             .when(is_last, Styled::pb_4)
             .child(content)
             .into_any_element()

@@ -6,8 +6,8 @@ use gpui::{App, ClickEvent, ElementId, IntoElement, RenderOnce, Window, div, pre
 
 use crate::theme;
 
-/// Size of the clickable square.
-const BUTTON_SIZE: f32 = 26.;
+/// The toolbar limits the height. Keep the click target wide.
+const BUTTON_WIDTH: f32 = 26.;
 /// Width and height of the drawn window outline.
 const ICON_WIDTH: f32 = 16.;
 const ICON_HEIGHT: f32 = 13.;
@@ -88,11 +88,12 @@ impl RenderOnce for PanelToggle {
             .overflow_hidden()
             .child(strip);
 
-        // The clickable square around the icon.
+        // The click target spans the height of the bar.
         let button = div()
             .id(self.id)
             .flex_none()
-            .size(px(BUTTON_SIZE))
+            .w(px(BUTTON_WIDTH))
+            .h_full()
             .flex()
             .items_center()
             .justify_center()

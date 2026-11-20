@@ -6,4 +6,4 @@ Numbers in buttons, segments, pills, section labels and status lines automatical
 
 The viewed-files bar uses `ProgressBar` with the same 450 ms easing and live Reduce Motion preference as the numbers. Its fill changes only during paint, continues smoothly when interrupted, and requests no frames once settled.
 
-`AnimatedReveal` expands a known-height row with clipping and opacity (240 ms opening, 160 ms closing). Its element-local transition resumes from the visible height when interrupted, snaps to the target under Reduce Motion, and requests frames only while moving. Callers keep it mounted through closing and guard actions while their row is being hidden.
+`AnimatedReveal` expands a known-height row with clipping and opacity (240 ms opening, 160 ms closing). Its element-local transition resumes from the visible height when interrupted, snaps to the target under Reduce Motion, and requests frames only while moving. Callers keep it mounted through closing and guard actions while their row is being hidden. `HoverExpand` uses the same motion to reveal text inline and trailing content from an ellipsized preview.

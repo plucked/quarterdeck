@@ -6,6 +6,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 **Starting up**
 - A short intro movie plays while Quarterdeck loads your queue and syncs with GitHub, then fades into the app. Click it to skip, or launch with `--no-splash` to open immediately without the movie or fade. Its bottom right corner shows the version.
+- A small dot beside the app name shows when Quarterdeck is loading a pull request or coloring syntax. Hover over it to see the current step.
 - Your previous selection is restored when available. Otherwise, startup opens **Mine** and selects its first stack, or its first standalone pull request when there are no stacks.
 
 **Your review queue**
@@ -21,11 +22,12 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 **Stacked pull requests**
 - Review a stack layer by layer, or combined: every change from the bottom of the stack up to the layer you are on, as one diff.
-- In **Diff**, the view-tab bubble expands to show **Layer / Combined** on a second row. Summary and Brief tuck those options away. Choose individual layers in the sidebar.
+- In **Diff** and **Guided review**, the selected tab extends to show **Layer / Combined**. Summary and Brief tuck those options away. Choose individual layers in the sidebar.
 - Step through layers with `{` and `}`, switch between layer and combined with `c`, and ⇧-click a layer in the sidebar to start the combined range there.
 
 **Reading diffs**
-- The middle pane has **Summary**, **Diff** and **Brief** tabs. Summary shows the pull request's description, while Diff remains the default. The header keeps the repository on the left, view tabs centered, author and branch details on the right, and the PR title on its own row.
+- The middle pane has **Summary**, **Diff**, **Guided review** and **Brief** tabs in the pull request header. Click the PR title to open it on GitHub. Hover over the title to see it in full with the author's avatar and username. The title and head branch use the space beside the tabs and end in an ellipsis when they run out of room. Hovering either one fades the tabs out while the text expands. The branch preview also reveals the base branch. Summary shows the pull request's description, while Diff remains the default.
+- **Focus Mode** (⇧⌘F or the framing icon on the right of the top bar) gives the current view the full width of the window. The PR header and side panels return when you leave Focus Mode.
 - The side pane uses the same rounded tabs for **Files**, **Review**, **Actions** and **Checks**. Its bubble expands to show **GitHub / Local** in Review or **Merge / Close** in Actions, with motion that respects Reduce Motion.
 - Eight color themes made for reading code, four light and four dark (Settings → Appearance, with a live preview; Graphite by default): every color readable against its background, and diffs in blue (added) and orange (removed), which stay distinct with red-green colour blindness. Interface in Schibsted Grotesk, code in JetBrains Mono (both built in).
 - Show the unchanged code above, below and between the changes: 20 lines at a time or all of it, from the bar over each gap. The file is fetched once, on the first click, and kept.
@@ -150,6 +152,7 @@ bacon
 | c | Layer ↔ combined stack review |
 | ⌘B | Show or hide the side panel |
 | ⌃⌘S | Show or hide the sidebar |
+| ⇧⌘F | Toggle Focus Mode |
 | ⌘, | Settings |
 
 ## Data

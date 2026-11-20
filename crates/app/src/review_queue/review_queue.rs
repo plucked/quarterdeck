@@ -24,7 +24,7 @@ use super::refresh_status::RefreshStatus;
 use super::restore_phase::RestorePhase;
 use super::selection_origin::SelectionOrigin;
 use super::stack_key::StackKey;
-use crate::app_commands::REVIEW_QUEUE_CONTEXT;
+use crate::app_commands::{REVIEW_QUEUE_CONTEXT, ToggleFocusMode};
 use crate::app_services::AppServices;
 use crate::app_settings::AppSettings;
 use crate::app_update::AppUpdater;
@@ -36,6 +36,8 @@ use crate::ui_state::{UiStateRecorder, read_brief_index};
 
 /// How far past the sidebar's edges rows are laid out, so scrolling shows no gaps.
 const QUEUE_LIST_OVERDRAW: f32 = 300.;
+/// Clears the native window buttons when the app toolbar is hidden.
+const FOCUS_WINDOW_INSET: f32 = 32.;
 
 /// What the queue restores from the UI state saved before the relaunch.
 /// Nothing saved, or a row that no longer reads, restores nothing (the
@@ -274,9 +276,21 @@ impl ReviewQueue {
 
     /// Shows or hides the sidebar, and saves it.
     pub(super) fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        if self.detail.read(cx).is_focus_mode() {
+            return;
+        }
         self.sidebar_visibility = self.sidebar_visibility.toggled();
         self.record_view_state(cx);
         cx.notify();
+    }
+
+    /// Gives the current review view the window or restores the surrounding chrome.
+    pub(super) fn toggle_focus_mode(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.detail.update(cx, PullRequestDetail::toggle_focus_mode) {
+            // The keyboard shortcut must still work if focus was in a now-hidden panel.
+            self.focus.focus(window);
+            cx.notify();
+        }
     }
 
     /// The lists the tabs show (without what the hidden branch rules hide).
@@ -422,7 +436,9 @@ impl ReviewQueue {
 }
 
 impl Render for ReviewQueue {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let focus_mode = self.detail.read(cx).is_focus_mode();
+        let is_fullscreen = window.is_fullscreen();
         div()
             .key_context(REVIEW_QUEUE_CONTEXT)
             .track_focus(&self.focus)
@@ -436,27 +452,47 @@ impl Render for ReviewQueue {
             .on_action(cx.listener(Self::on_mark_viewed_and_next))
             .on_action(cx.listener(Self::on_toggle_file_tree))
             .on_action(cx.listener(Self::on_toggle_sidebar))
+            .on_action(cx.listener(|queue, _: &ToggleFocusMode, window, cx| {
+                queue.toggle_focus_mode(window, cx);
+            }))
             .on_action(cx.listener(Self::on_next_layer))
             .on_action(cx.listener(Self::on_previous_layer))
             .on_action(cx.listener(Self::on_toggle_stack_review))
             .flex()
             .flex_col()
+            .relative()
             .size_full()
             .bg(theme::background())
             .text_color(theme::text())
             .text_sm()
-            .child(self.render_top_bar(cx))
+            .when(!focus_mode, |layout| layout.child(self.render_top_bar(cx)))
+            .when(focus_mode && !is_fullscreen, |layout| {
+                layout.pt(px(FOCUS_WINDOW_INSET))
+            })
             .child(
                 div()
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .when(self.sidebar_visibility == PanelVisibility::Shown, |panes| {
-                        panes
-                            .child(self.render_sidebar(cx))
-                            .child(self.render_sidebar_handle(cx))
-                    })
+                    .when(
+                        !focus_mode && self.sidebar_visibility == PanelVisibility::Shown,
+                        |panes| {
+                            panes
+                                .child(self.render_sidebar(cx))
+                                .child(self.render_sidebar_handle(cx))
+                        },
+                    )
                     .child(self.detail.clone()),
             )
+            .when(focus_mode, |layout| {
+                layout.child(
+                    div()
+                        .absolute()
+                        .right_2()
+                        .when(is_fullscreen, |position| position.bottom_2())
+                        .when(!is_fullscreen, |position| position.top_1())
+                        .child(Self::render_focus_mode_toggle(true, false, cx)),
+                )
+            })
     }
 }

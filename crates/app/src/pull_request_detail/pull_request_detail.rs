@@ -59,6 +59,7 @@ const LIST_OVERDRAW: f32 = 600.;
 pub struct PullRequestDetail {
     pub(super) services: AppServices,
     pub(super) pull_request: Option<PullRequest>,
+    focus_mode: bool,
     description: Option<ParsedDescription>,
     pub(super) changed_files: Option<ChangedFiles>,
     /// How diffs show, as last applied from [`AppSettings`].
@@ -181,6 +182,7 @@ impl PullRequestDetail {
         let mut detail = Self {
             services,
             pull_request: None,
+            focus_mode: false,
             description: None,
             changed_files: None,
             diff_settings,
@@ -692,9 +694,26 @@ impl PullRequestDetail {
         self.pull_request.is_some()
     }
 
-    /// Whether the side panel (files and review) is set to show.
+    /// Whether the current view fills the review window.
+    pub fn is_focus_mode(&self) -> bool {
+        self.focus_mode
+    }
+
+    /// Switches the presentation without changing the review or panel preferences.
+    /// Returns whether the presentation changed.
+    pub fn toggle_focus_mode(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.focus_mode && !self.has_pull_request() {
+            return false;
+        }
+        self.focus_mode = !self.focus_mode;
+        self.sync_checks_visibility(cx);
+        cx.notify();
+        true
+    }
+
+    /// Whether the side panel is visible in the current presentation.
     pub fn is_side_panel_shown(&self) -> bool {
-        self.file_tree.visibility() == PanelVisibility::Shown
+        !self.focus_mode && self.file_tree.visibility() == PanelVisibility::Shown
     }
 
     /// The scroll position to save: one still waiting to be applied, or the

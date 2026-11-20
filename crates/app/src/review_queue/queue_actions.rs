@@ -122,8 +122,10 @@ impl ReviewQueue {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.detail()
-            .update(cx, PullRequestDetail::toggle_file_tree);
+        if !self.detail().read(cx).is_focus_mode() {
+            self.detail()
+                .update(cx, PullRequestDetail::toggle_file_tree);
+        }
     }
 
     /// Handles the `NextLayer` action (`}`): shows the stack layer above.

@@ -2,8 +2,8 @@
 //! status (Draft, Review, Required, a repository's count, a settings tag).
 
 use gpui::{
-    AnyElement, App, FontWeight, IntoElement, RenderOnce, Rgba, SharedString, Styled, Window, div,
-    prelude::*, px,
+    App, FontWeight, IntoElement, RenderOnce, Rgba, SharedString, Styled, Window, div, prelude::*,
+    px,
 };
 
 use super::NumberFlow;
@@ -52,7 +52,6 @@ pub struct Pill {
     size: PillSize,
     weight: Option<FontWeight>,
     text_color: Option<Rgba>,
-    mark: Option<AnyElement>,
 }
 
 impl Pill {
@@ -65,12 +64,10 @@ impl Pill {
             size: PillSize::Small,
             weight: None,
             text_color: None,
-            mark: None,
         }
     }
 
-    /// The compact outlined pill marking a draft pull request, the same in
-    /// the sidebar and the detail's header.
+    /// The compact outlined pill marking a draft pull request in the sidebar.
     pub fn draft() -> Self {
         Self::new("Draft", PillStyle::Outlined).compact()
     }
@@ -102,13 +99,6 @@ impl Pill {
     #[must_use]
     pub fn text_color(mut self, color: Rgba) -> Self {
         self.text_color = Some(color);
-        self
-    }
-
-    /// Puts `mark` (a dot, a small icon) before the text.
-    #[must_use]
-    pub fn mark(mut self, mark: impl IntoElement) -> Self {
-        self.mark = Some(mark.into_any_element());
         self
     }
 }
@@ -152,16 +142,7 @@ impl RenderOnce for Pill {
             None => pill,
         };
         // Label color can carry meaning without making the capsule's outline stronger.
-        let pill = pill.when_some(self.text_color, Styled::text_color);
-        // A mark sits before the text, centered on it.
-        match self.mark {
-            Some(mark) => pill
-                .flex()
-                .items_center()
-                .gap_1p5()
-                .child(mark)
-                .child(self.text),
-            None => pill.child(self.text),
-        }
+        pill.when_some(self.text_color, Styled::text_color)
+            .child(self.text)
     }
 }

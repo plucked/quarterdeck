@@ -118,14 +118,15 @@ impl Element for AnimatedReveal {
     }
 }
 
-struct RevealMotion {
+/// The current fraction of an interruptible reveal.
+pub(crate) struct RevealMotion {
     from: f32,
     expanded: bool,
     started: Option<Instant>,
 }
 
 impl RevealMotion {
-    fn new(expanded: bool) -> Self {
+    pub(crate) fn new(expanded: bool) -> Self {
         Self {
             from: f32::from(expanded),
             expanded,
@@ -141,7 +142,12 @@ impl RevealMotion {
         }
     }
 
-    fn update(&mut self, expanded: bool, now: Instant, animated: bool) {
+    /// Changes the reveal target, respecting the system motion preference.
+    pub(crate) fn set_expanded(&mut self, expanded: bool, now: Instant) {
+        self.update(expanded, now, !reduce_motion());
+    }
+
+    pub(super) fn update(&mut self, expanded: bool, now: Instant, animated: bool) {
         if !animated {
             *self = Self::new(expanded);
         } else if expanded != self.expanded {
@@ -153,7 +159,7 @@ impl RevealMotion {
         }
     }
 
-    fn value(&self, now: Instant) -> f32 {
+    pub(crate) fn value(&self, now: Instant) -> f32 {
         let target = f32::from(self.expanded);
         self.started.map_or(target, |start| {
             let elapsed = (now.saturating_duration_since(start).as_secs_f32()
@@ -164,7 +170,7 @@ impl RevealMotion {
         })
     }
 
-    fn is_active(&self, now: Instant) -> bool {
+    pub(crate) fn is_active(&self, now: Instant) -> bool {
         self.started
             .is_some_and(|start| now.saturating_duration_since(start) < self.duration())
     }

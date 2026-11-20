@@ -8,10 +8,6 @@ use gpui::{AssetSource, SharedString};
 
 use super::file_icon_svgs::{file_icon_paths, file_icon_svg};
 
-/// The asset path of GitHub's mark (Octicons' `mark-github`, MIT), drawn in
-/// the text color by `svg().path(GITHUB_MARK)`.
-pub const GITHUB_MARK: &str = "icons/github-mark.svg";
-
 /// One bundled Markdown toolbar icon, addressed by the same name as its asset.
 macro_rules! format_icon {
     ($name:literal) => {
@@ -38,10 +34,6 @@ const ICONS: &[(&str, &[u8])] = &[
     (
         "icons/file-group.svg",
         include_bytes!("../../assets/icons/file-group.svg"),
-    ),
-    (
-        GITHUB_MARK,
-        include_bytes!("../../assets/icons/github-mark.svg"),
     ),
     (
         "icons/filter.svg",

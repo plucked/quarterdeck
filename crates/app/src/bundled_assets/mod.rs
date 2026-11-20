@@ -10,5 +10,5 @@ mod bundled_icons;
 mod file_icon_svgs;
 
 pub use bundled_fonts::load_bundled_fonts;
-pub use bundled_icons::{BundledIcons, GITHUB_MARK};
+pub use bundled_icons::BundledIcons;
 pub use file_icon_svgs::file_icon_path;

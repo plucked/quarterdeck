@@ -1,72 +1,134 @@
-use gpui::{AnyElement, Context, FontWeight, IntoElement, Styled, div, prelude::*, px};
-use qd_github::{PullRequest, PullRequestState};
+use std::time::Instant;
 
-use super::detail_mode::DetailMode;
-use super::github_link::GitHubLink;
+use gpui::{
+    AnyElement, App, AvailableSpace, Context, Div, Entity, FontWeight, IntoElement, Styled, Window,
+    div, prelude::*, px, size,
+};
+use qd_github::PullRequest;
+
 use super::pull_request_detail::PullRequestDetail;
 use crate::avatar_images::Avatar;
-use crate::controls::{
-    AnimatedReveal, NumberFlow, Pill, PillStyle, SegmentedControl, TextTooltip, view_option,
-};
-use crate::display_text::{short_date, time_ago, unix_now, unix_seconds};
+use crate::controls::{HoverExpand, RevealMotion};
+use crate::markdown_view::is_openable;
 use crate::theme;
 
-/// The author's avatar in the header's meta line.
-const HEADER_AVATAR_SIZE: f32 = 20.;
-/// The title leads the header without taking space away from the diff.
-const HEADER_TITLE_SIZE: f32 = 22.;
-/// The stack selector and its bottom inset inside the expanded view bubble.
-const STACK_MODE_HEIGHT: f32 = 32.;
+/// Room for the tabs and metadata in the same row.
+const HEADER_HEIGHT: f32 = 48.;
+/// The author's avatar in the header.
+const HEADER_AVATAR_SIZE: f32 = 16.;
+/// The title, a step above the interface's body text.
+const HEADER_TITLE_SIZE: f32 = 15.;
+/// Keep both hover targets usable when the header has to scroll.
+const HEADER_FIELD_MIN_WIDTH: f32 = 80.;
+
+/// The header fields that can expand into the tabs' space.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HeaderField {
+    Title,
+    Branch,
+}
+
+/// Keeps the center tabs in sync with the active hover target.
+struct HeaderHover {
+    field: HeaderField,
+    is_hovered: bool,
+    tabs: RevealMotion,
+}
+
+impl HeaderHover {
+    fn new() -> Self {
+        Self {
+            field: HeaderField::Title,
+            is_hovered: false,
+            tabs: RevealMotion::new(true),
+        }
+    }
+
+    /// Ignore a late leave event from the field the pointer just left.
+    fn on_hover(state: &Entity<Self>, field: HeaderField) -> impl Fn(bool, &mut App) + 'static {
+        let state = state.clone();
+        move |is_hovered, cx| {
+            state.update(cx, |state, cx| {
+                if is_hovered {
+                    state.field = field;
+                    state.is_hovered = true;
+                } else if state.field == field {
+                    state.is_hovered = false;
+                }
+                state.tabs.set_expanded(!state.is_hovered, Instant::now());
+                cx.notify();
+            });
+        }
+    }
+
+    /// Shares room evenly at rest and gives the last hovered field the released space.
+    fn weight(&self, field: HeaderField, tabs_visibility: f32) -> f32 {
+        if self.field == field {
+            2. - tabs_visibility
+        } else {
+            tabs_visibility
+        }
+    }
+
+    /// Lets the active field grow beyond the pane when its full text needs a scroll.
+    fn is_expanding(&self, field: HeaderField) -> bool {
+        self.is_hovered && self.field == field
+    }
+}
 
 impl PullRequestDetail {
-    /// Identity on the left, centered view tabs, metadata on the right;
-    /// the title on its own row. The view bubble expands for stack diff options.
-    /// `None` without a pull request.
-    pub(super) fn render_sticky_header(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// The pull request's identity, view tabs and metadata share one row
+    /// above the progress line. `None` without a pull request.
+    pub(super) fn render_sticky_header(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let pull_request = self.pull_request()?;
-        // Equal flexible sides keep the tabs centered even when one side
-        // has longer text. Metadata truncates within its own side.
-        let toolbar = div()
+        let hover = window.use_keyed_state(("header-hover", pull_request.id), cx, |_, _| {
+            HeaderHover::new()
+        });
+        let now = Instant::now();
+        let state = hover.read(cx);
+        let tabs_visibility = state.tabs.value(now);
+        if state.tabs.is_active(now) {
+            window.request_animation_frame();
+        }
+        let title_expands = state.is_expanding(HeaderField::Title);
+        let branch_expands = state.is_expanding(HeaderField::Branch);
+        let title = header_field_space(state.weight(HeaderField::Title, tabs_visibility))
+            .debug_selector(|| "review-header-title-space".into())
+            .when(!title_expands, |field| {
+                field.min_w(px(HEADER_FIELD_MIN_WIDTH))
+            })
+            .child(Self::render_title_link(pull_request, &hover, title_expands));
+        let branches = Self::render_branch_preview(pull_request, &hover, branch_expands);
+        let branch = header_field_space(state.weight(HeaderField::Branch, tabs_visibility))
+            .justify_end()
+            .when_some(branches, |field, preview| {
+                field
+                    .when(!branch_expands, |field| {
+                        field.min_w(px(HEADER_FIELD_MIN_WIDTH))
+                    })
+                    .child(preview)
+            });
+        // Keep the full controls reachable when both side panels leave a
+        // narrow detail pane, including when the title or branches expand.
+        let row = div()
+            .id("detail-header-row")
             .flex()
-            .items_start()
-            .gap_3()
-            .px_6()
-            .pt_3()
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .pt_1()
-                    .child(self.render_identity_line(pull_request)),
-            )
-            .child(self.render_mode_switch(cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .pt_1p5()
-                    .child(Self::render_meta_line(pull_request)),
-            );
-
-        let title_row = div()
-            .flex()
+            .w_full()
+            .min_w_0()
+            .overflow_x_scroll()
             .items_center()
-            .gap_3()
-            .px_6()
-            .pt_3()
-            .pb_4()
-            .child(
-                div()
-                    .id("pull-request-title")
-                    .flex_1()
-                    .min_w_0()
-                    .text_size(px(HEADER_TITLE_SIZE))
-                    .font_weight(FontWeight::MEDIUM)
-                    .line_clamp(2)
-                    .tooltip(TextTooltip::builder(pull_request.title.clone()))
-                    .child(pull_request.title.clone()),
-            )
-            .children(self.render_activity_pill());
+            .gap_2()
+            .h(px(HEADER_HEIGHT))
+            .px_4()
+            .text_xs()
+            .text_color(theme::muted())
+            .child(title)
+            .child(self.render_header_tabs(tabs_visibility, window, cx))
+            .child(branch);
 
         Some(
             div()
@@ -76,149 +138,124 @@ impl PullRequestDetail {
                 .bg(theme::background())
                 .border_b_1()
                 .border_color(theme::border())
-                .child(toolbar)
-                .child(title_row)
+                .child(row)
                 .children(self.render_progress_line())
                 .into_any_element(),
         )
     }
 
-    /// Separate ordinary browsing and the guided walkthrough in the main navigation.
-    fn render_mode_switch(&self, cx: &mut Context<Self>) -> AnyElement {
-        let mode = self.brief().mode;
-        let detail = cx.entity().downgrade();
-        let pick = |mode| view_option(&detail, mode, PullRequestDetail::select_detail_mode);
-        let tabs = SegmentedControl::new("detail-mode")
-            .large()
-            .quiet()
-            .option(
-                "Summary",
-                mode == DetailMode::Summary,
-                pick(DetailMode::Summary),
-            )
-            .option("Diff", mode == DetailMode::Diff, pick(DetailMode::Diff))
-            .option(
-                "Guided review",
-                mode == DetailMode::GuidedReview,
-                pick(DetailMode::GuidedReview),
-            )
-            .option("Brief", mode == DetailMode::Brief, pick(DetailMode::Brief));
-        let is_stacked = self.pull_request().is_some_and(|pr| pr.stack.is_some());
-        div()
-            .id("detail-mode-bubble")
-            .flex_none()
-            .flex()
-            .flex_col()
-            .rounded(px(18.))
-            .bg(theme::panel())
-            .overflow_hidden()
-            .child(tabs)
-            .when(is_stacked, |bubble| {
-                bubble.child(AnimatedReveal::new(
-                    "stack-mode-reveal",
-                    mode.shows_diff(),
-                    px(STACK_MODE_HEIGHT),
-                    self.render_stack_mode_switch(cx),
-                ))
-            })
+    /// Fades and clips the tabs while releasing their width to the hovered field.
+    fn render_header_tabs(
+        &self,
+        visibility: f32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let tabs = div()
+            .debug_selector(|| "review-header-tabs".into())
+            .flex_none();
+        if visibility >= 1. {
+            return tabs.child(self.render_mode_tabs(cx));
+        }
+        if visibility <= 0. {
+            return tabs.w_0();
+        }
+        let width = self
+            .render_mode_tabs(cx)
             .into_any_element()
+            .layout_as_root(
+                size(AvailableSpace::MaxContent, AvailableSpace::MaxContent),
+                window,
+                cx,
+            )
+            .width;
+        tabs.w(width * visibility)
+            .flex()
+            .overflow_hidden()
+            .opacity(visibility)
+            .child(self.render_mode_tabs(cx))
     }
 
-    /// Status and repository identify the PR without competing with its title.
-    fn render_identity_line(&self, pull_request: &PullRequest) -> impl IntoElement {
-        let state = self
-            .action_panel()
-            .and_then(|panel| panel.options.as_ref())
-            .map_or(PullRequestState::Open, |options| options.state);
-        let (label, color) = match state {
-            PullRequestState::Merged => ("Merged", theme::accent()),
-            PullRequestState::Closed => ("Closed", theme::danger()),
-            PullRequestState::Open if pull_request.draft => ("Draft", theme::muted()),
-            PullRequestState::Open => ("Open", theme::success()),
-        };
+    /// Opens the pull request on click and reveals its full title and byline on hover.
+    fn render_title_link(
+        pull_request: &PullRequest,
+        hover: &Entity<HeaderHover>,
+        expands: bool,
+    ) -> impl IntoElement {
+        let url = pull_request.html_url.clone();
+        let author = pull_request.author.clone();
         div()
+            .id(("pull-request-title-link", pull_request.id))
+            .debug_selector(|| "pull-request-title-link".into())
             .flex()
-            .items_center()
-            .gap_2()
-            .text_xs()
-            .text_color(theme::muted())
-            .child(
-                Pill::new(label, PillStyle::Filled)
-                    .roomy()
-                    .text_color(color)
-                    .mark(div().size_2().rounded_full().border_1().border_color(color)),
-            )
-            .child(
-                div()
-                    .id("header-repository")
-                    .min_w_0()
-                    .truncate()
-                    .tooltip(TextTooltip::builder(format!(
-                        "{} #{}",
-                        pull_request.repo.full_name(),
-                        pull_request.number,
-                    )))
-                    .child(NumberFlow::label(format!(
-                        "{} #{}",
-                        pull_request.repo.full_name(),
-                        pull_request.number,
-                    ))),
-            )
-            .child(GitHubLink::new(
-                "open-on-github",
-                pull_request.html_url.clone(),
-            ))
-    }
-
-    /// Compact, right-aligned author, branch direction and update time.
-    /// Full names remain available on hover as the pane narrows.
-    fn render_meta_line(pull_request: &PullRequest) -> impl IntoElement {
-        let updated = unix_seconds(&pull_request.updated_at).map_or_else(
-            || short_date(&pull_request.updated_at),
-            |then| time_ago(then, unix_now()),
-        );
-        div()
-            .flex()
-            .items_center()
-            .justify_end()
-            .gap_2()
-            .min_w_0()
-            .text_xs()
-            .text_color(theme::muted())
-            .child(Avatar::new(
-                pull_request.author.avatar_url.clone(),
-                px(HEADER_AVATAR_SIZE),
-            ))
-            .child(
-                div()
-                    .id("header-author")
-                    .min_w_0()
-                    .max_w(px(88.))
-                    .truncate()
-                    .text_color(theme::text())
-                    .tooltip(TextTooltip::builder(pull_request.author.login.clone()))
-                    .child(pull_request.author.login.clone()),
-            )
-            .when_some(pull_request.branches.as_ref(), |meta, branches| {
-                let direction = format!("{} → {}", branches.head_ref, branches.base_ref);
-                meta.child(
-                    div()
-                        .id("header-branches")
-                        .min_w_0()
-                        .truncate()
-                        .tooltip(TextTooltip::builder(direction.clone()))
-                        .child(direction),
-                )
+            .when(!expands, Styled::min_w_0)
+            .text_size(px(HEADER_TITLE_SIZE))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(theme::text())
+            .when(is_openable(&url), |link| {
+                link.cursor_pointer()
+                    .hover(|style| style.text_color(theme::accent()))
+                    .on_click(move |_, _, cx| cx.open_url(&url))
             })
             .child(
-                div()
-                    .id("pull-request-updated")
-                    .flex_none()
-                    .tooltip(TextTooltip::builder(format!(
-                        "Updated {}",
-                        pull_request.updated_at
-                    )))
-                    .child(NumberFlow::label(updated)),
+                HoverExpand::new(
+                    ("pull-request-title", pull_request.id),
+                    pull_request.title.clone().into(),
+                    move || {
+                        div()
+                            .flex()
+                            .flex_none()
+                            .items_center()
+                            .gap_1()
+                            .pl_2()
+                            .text_xs()
+                            .text_color(theme::muted())
+                            .whitespace_nowrap()
+                            .child("by")
+                            .child(Avatar::new(
+                                author.avatar_url.clone(),
+                                px(HEADER_AVATAR_SIZE),
+                            ))
+                            .child(author.login.clone())
+                    },
+                )
+                .on_hover(HeaderHover::on_hover(hover, HeaderField::Title)),
             )
     }
+
+    /// Shows the head branch preview and reveals both branches on hover.
+    fn render_branch_preview(
+        pull_request: &PullRequest,
+        hover: &Entity<HeaderHover>,
+        expands: bool,
+    ) -> Option<AnyElement> {
+        let branches = pull_request.branches.as_ref()?;
+        let base = format!("→ {}", branches.base_ref);
+        Some(
+            div()
+                .debug_selector(|| "pull-request-branch-preview".into())
+                .flex()
+                .when(!expands, Styled::min_w_0)
+                .px_2()
+                .py_1()
+                .rounded_md()
+                .hover(|style| style.bg(theme::hover()).text_color(theme::text()))
+                .child(
+                    HoverExpand::new(
+                        ("header-branches", pull_request.id),
+                        branches.head_ref.clone().into(),
+                        move || div().pl_1().whitespace_nowrap().child(base.clone()),
+                    )
+                    .on_hover(HeaderHover::on_hover(hover, HeaderField::Branch)),
+                )
+                .into_any_element(),
+        )
+    }
+}
+
+/// A flexible space beside the tabs, with the field kept at its natural width when it fits.
+fn header_field_space(weight: f32) -> Div {
+    let mut field = div().flex().flex_1().items_center();
+    field.style().flex_grow = Some(weight);
+    field
 }
