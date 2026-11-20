@@ -3,7 +3,7 @@
 
 use gpui::{
     App, ClickEvent, ElementId, FontWeight, IntoElement, RenderOnce, SharedString, Styled, Window,
-    div, prelude::*,
+    div, prelude::*, px,
 };
 
 use super::NumberFlow;
@@ -13,6 +13,9 @@ use crate::theme;
 const PRIMARY_HOVER_OPACITY: f32 = 0.88;
 /// Opacity of a disabled button (or one that does nothing).
 const DISABLED_OPACITY: f32 = 0.4;
+/// Typography for a button in a compact toolbar.
+const COMPACT_TEXT_SIZE: f32 = 11.;
+const COMPACT_LINE_HEIGHT: f32 = 12.;
 
 /// What a button does when clicked.
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -36,6 +39,7 @@ pub struct Button {
     id: ElementId,
     label: SharedString,
     kind: ButtonKind,
+    is_compact: bool,
     is_disabled: bool,
     is_selected: bool,
     on_click: Option<ClickHandler>,
@@ -47,6 +51,7 @@ impl Button {
             id: id.into(),
             label: label.into(),
             kind: ButtonKind::Plain,
+            is_compact: false,
             is_disabled: false,
             is_selected: false,
             on_click: None,
@@ -71,6 +76,13 @@ impl Button {
     #[must_use]
     pub fn ghost(mut self) -> Self {
         self.kind = ButtonKind::Ghost;
+        self
+    }
+
+    /// Fits the button in a compact toolbar while retaining its horizontal padding.
+    #[must_use]
+    pub fn compact(mut self) -> Self {
+        self.is_compact = true;
         self
     }
 
@@ -131,6 +143,12 @@ impl RenderOnce for Button {
             .border_1()
             .border_color(border)
             .text_xs()
+            .when(self.is_compact, |button| {
+                button
+                    .py_0()
+                    .text_size(px(COMPACT_TEXT_SIZE))
+                    .line_height(px(COMPACT_LINE_HEIGHT))
+            })
             .font_weight(FontWeight::MEDIUM)
             .text_color(text)
             .when_some(background, Styled::bg)

@@ -11,6 +11,7 @@
 //! - `segmented_control.rs`: `SegmentedControl`, a row of exclusive options.
 //! - `view_option.rs`: `view_option`, an option's select handler passing its value to the view.
 //! - `fold_chevron.rs`: `FoldChevron`, the button folding a group.
+//! - `hover_expand.rs`: `HoverExpand`, inline text that reveals its full width when hovered.
 //! - `resize_handle.rs`: `ResizeHandle`, a divider dragged to resize the panel beside it.
 //! - `text_tooltip.rs`: `TextTooltip`, a short text shown over an element on hover.
 //! - `section_label.rs`: `SectionLabel`, the small uppercase subtle label heading a section.
@@ -22,6 +23,7 @@ mod animated_reveal;
 mod button;
 mod checkbox;
 mod fold_chevron;
+mod hover_expand;
 mod number_flow;
 mod pill;
 mod progress_bar;
@@ -35,9 +37,11 @@ mod value_motion;
 mod view_option;
 
 pub use animated_reveal::AnimatedReveal;
+pub(crate) use animated_reveal::RevealMotion;
 pub use button::Button;
 pub use checkbox::{CheckState, Checkbox};
 pub use fold_chevron::{FOLD_CHEVRON_SIZE, FoldChevron, FoldState};
+pub use hover_expand::HoverExpand;
 pub use number_flow::NumberFlow;
 pub use pill::{Pill, PillStyle};
 pub use progress_bar::ProgressBar;

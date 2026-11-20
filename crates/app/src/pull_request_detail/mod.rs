@@ -56,10 +56,9 @@
 //! - `diff_selection_actions.rs`: selecting code in the diff with the mouse and copying it.
 //! - `row_rendering.rs`: renders the pane's layout and each diff row.
 //! - `row_height_estimate.rs`: where each row starts, estimated without layout, for the scrollbar.
-//! - `sticky_header_rendering.rs`: the one-row header: status, title and repository left; author, branches, update time and the activity pill right.
+//! - `sticky_header_rendering.rs`: the sticky row for pull request identity, view tabs and metadata, with the full title and branches on hover.
 //! - `summary_rendering.rs`: the PR's Markdown description in its own scrollable Summary tab.
 //! - `sticky_file_header.rs`: pins the top file's header while its diff scrolls underneath.
-//! - `github_link.rs`: `GitHubLink`, GitHub's mark as an icon button opening the pull request on GitHub.
 //! - `side_panel_rendering.rs`: the side panel: its divider, its tabs and the shown tab.
 //! - `file_tree_rendering.rs`: the side panel's Files tab: progress, folders and files.
 //! - `filter_rendering.rs`: the filter: viewed switch, kind and type chip rows, summary.
@@ -114,12 +113,12 @@
 //! - `action_panel.rs`: `ActionPanel`, the merge or close panel's options, choices and progress.
 //! - `pull_request_actions.rs`: merging (also as admin), closing and deleting the branch on GitHub.
 //! - `action_panel_rendering.rs`: the side panel's Actions tab: Merge… and Close…, and the open panel.
-//! - `activity_rendering.rs`: the loading indicators: header pill, progress line, loading card.
+//! - `activity_rendering.rs`: the app-title activity LED, progress line and loading card.
 //! - `context_expansion.rs`: revealing unchanged lines around hunks: fetching the file's text, rebuilding its rows.
 //! - `fetch_file_text.rs`: gets a file's text after the change from the cache by blob SHA, else from GitHub.
 //! - `context_loads.rs`: `ContextLoads`, the file texts being fetched and their tasks.
 //! - `detail_mode.rs`: `DetailMode`, the summary, diff, guided review or brief in the main column.
-//! - `detail_mode_switch.rs`: `DetailModeSwitch`, the view tabs with a stack's Layer / Combined inside the selected diff tab (range details on hover), placed in the window's top bar by the queue.
+//! - `detail_mode_switch.rs`: the view tabs with a stack's Layer / Combined inside the selected diff tab (range details on hover).
 //! - `detail_mode_actions.rs`: separate review surfaces, their navigation and retained step selection.
 //! - `brief_pane_tests.rs`: retained saved briefs, stale completion and publication/cancellation regression cases.
 //! - `brief_pane.rs`: `BriefPane`, the briefs written this session, the run in flight, the brief's rows.
@@ -196,7 +195,6 @@ mod file_tree_state;
 mod filter_rendering;
 mod folder_summary;
 mod folder_viewed_state;
-mod github_link;
 mod github_review_actions;
 mod highlighted_diff;
 mod layer_request;
@@ -253,7 +251,6 @@ mod viewed_toggle;
 mod tests;
 
 pub use detail_event::DetailEvent;
-pub use detail_mode_switch::DetailModeSwitch;
 pub use layer_request::LayerRequest;
 pub use pull_request_detail::PullRequestDetail;
 

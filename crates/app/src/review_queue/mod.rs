@@ -17,8 +17,9 @@
 //! - `pull_request_row_rendering.rs`: renders a standalone pull request's sidebar row.
 //! - `stack_row_rendering.rs`: renders a stack's header and its layer rows in the sidebar.
 //! - `review_verdict_badge.rs`: `ReviewVerdictBadge`, the viewer's latest review verdict as a small round mark on a row.
-//! - `top_bar_rendering.rs`: the bar across the window's top (panel toggles, refresh, the shown pull request's view tabs or the app's name) and its height, `TOP_BAR_HEIGHT`, which places the traffic lights.
+//! - `top_bar_rendering.rs`: the bar across the window's top (panel toggles, refresh and the app's name) and its height, `TOP_BAR_HEIGHT`, which places the traffic lights.
 //! - `panel_toggle.rs`: `PanelToggle`, the top bar's icon button showing or hiding a side panel.
+//! - `focus_mode_toggle.rs`: the icon button for entering or leaving Focus Mode.
 //! - `refresh_status.rs`: `RefreshStatus`, the state of the queue's refresh.
 //! - `refresh_schedule.rs`: `RefreshSchedule`, when the queue refreshes on its own.
 //! - `activation_refresh.rs`: `ActivationRefresh`, whether a window activation refreshes.
@@ -48,6 +49,7 @@ mod activation_refresh;
 mod chip_marks;
 mod collapsed_groups;
 mod fetch_queue_lists;
+mod focus_mode_toggle;
 mod hidden_branches;
 mod layer_opening;
 mod open_filter_chips;
@@ -83,4 +85,4 @@ mod startup_selection;
 mod top_bar_rendering;
 
 pub use review_queue::ReviewQueue;
-pub use top_bar_rendering::TOP_BAR_HEIGHT;
+pub use top_bar_rendering::{TOP_BAR_HEIGHT, TRAFFIC_LIGHT_HEIGHT};

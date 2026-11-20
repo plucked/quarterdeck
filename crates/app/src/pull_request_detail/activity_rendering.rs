@@ -7,7 +7,7 @@ use gpui::{
 
 use super::batch_progress::BatchProgress;
 use super::pull_request_detail::PullRequestDetail;
-use crate::controls::{NumberFlow, Pill, PillStyle, TextTooltip, dot_pulse};
+use crate::controls::{NumberFlow, TextTooltip};
 use crate::count_as_f32::count_as_f32;
 use crate::theme;
 
@@ -20,13 +20,15 @@ const PROGRESS_LINE_HEIGHT: f32 = 2.;
 /// The bar of the loading card.
 const LOADING_BAR_HEIGHT: f32 = 4.;
 const LOADING_CARD_WIDTH: f32 = 420.;
+/// The LED's diameter within its larger hover target.
+const ACTIVITY_LED_SIZE: f32 = 6.;
 
-/// What the pane is busy with, for the header pill.
+/// What the pane is busy with, for the progress line and title-bar LED.
 struct Activity {
     label: SharedString,
     /// The share done, when known.
     fraction: Option<f32>,
-    /// Whether it waits on GitHub (the pill says so with its color).
+    /// Whether it waits on GitHub, shown with the accent color.
     is_network: bool,
 }
 
@@ -56,36 +58,32 @@ impl PullRequestDetail {
         })
     }
 
-    /// The header's activity pill: a pulsing dot and what is happening.
-    pub(super) fn render_activity_pill(&self) -> Option<AnyElement> {
-        if let Some(error) = &self.layer_refresh_error {
-            return Some(
-                div()
-                    .id("file-refresh-error")
-                    .tooltip(TextTooltip::builder(format!(
-                        "Showing the last loaded diff. {error}"
-                    )))
-                    .child(Pill::new(
-                        "Refresh failed",
-                        PillStyle::Tinted(theme::danger()),
-                    ))
-                    .into_any_element(),
-            );
-        }
-        let activity = self.activity()?;
-        let color = if activity.is_network {
-            theme::accent()
-        } else {
-            theme::muted()
+    /// The small LED next to the app title. Its hover text names the active step or error.
+    pub(crate) fn render_activity_indicator(&self) -> Option<AnyElement> {
+        let (label, color) = match &self.layer_refresh_error {
+            Some(error) => (
+                format!("Refresh failed. Showing the last loaded diff. {error}").into(),
+                theme::danger(),
+            ),
+            None => {
+                let activity = self.activity()?;
+                let color = if activity.is_network {
+                    theme::accent()
+                } else {
+                    theme::muted()
+                };
+                (activity.label, color)
+            }
         };
         Some(
-            Pill::new(activity.label, PillStyle::Framed)
-                .roomy()
-                .mark(div().size_2().rounded_full().bg(color).with_animation(
-                    "activity-pulse",
-                    dot_pulse(),
-                    Styled::opacity,
-                ))
+            div()
+                .id("detail-activity-led")
+                .size_4()
+                .flex()
+                .items_center()
+                .justify_center()
+                .tooltip(TextTooltip::builder(label))
+                .child(div().size(px(ACTIVITY_LED_SIZE)).rounded_full().bg(color))
                 .into_any_element(),
         )
     }
