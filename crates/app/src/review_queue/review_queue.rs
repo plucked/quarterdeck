@@ -19,6 +19,7 @@ use super::queue_lists::QueueLists;
 use super::queue_row::QueueRow;
 use super::queue_selection::PendingRestore;
 use super::queue_stacks::read_cached_stacks;
+use super::queue_trees::QueueTrees;
 use super::refresh_schedule::RefreshSchedule;
 use super::refresh_status::RefreshStatus;
 use super::restore_phase::RestorePhase;
@@ -95,6 +96,7 @@ pub struct ReviewQueue {
     sidebar_visibility: PanelVisibility,
     /// The sidebar rows of the shown tab.
     rows: Vec<QueueRow>,
+    pub(super) trees: QueueTrees,
     /// The repositories and stacks folded in the sidebar.
     collapsed: CollapsedGroups,
     pub(super) selected: Option<PullRequest>,
@@ -170,7 +172,9 @@ impl ReviewQueue {
 
         let hidden_branch_rules = AppSettings::hidden_branch_rules(cx).to_vec();
         let shown_lists = without_hidden_branches(&lists, &hidden_branch_rules);
+        let trees = QueueTrees::build(shown_lists.iter(), &stacks);
         let mut queue = Self {
+            trees,
             services,
             focus,
             lists: shown_lists,
@@ -374,13 +378,13 @@ impl ReviewQueue {
         let scroll_top = self.queue_list.logical_scroll_top();
         self.rows = match self.tab {
             QueueTab::Authored | QueueTab::ReviewRequested => {
-                QueueRow::build_all(self.shown_list(), &self.collapsed, &self.stacks)
+                QueueRow::build_all(self.shown_list(), &self.collapsed, &self.trees)
             }
             QueueTab::Others => QueueRow::build_others(
                 self.others_tab.shown(),
                 &self.others_tab.repositories(&self.lists),
                 &self.collapsed,
-                &self.stacks,
+                &self.trees,
             ),
         };
         self.queue_list.reset(self.rows.len());

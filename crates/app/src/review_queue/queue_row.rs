@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use qd_github::{PullRequest, PullRequestStack, RepoRef};
+use super::queue_trees::QueueTrees;
+use qd_github::{PullRequest, RepoRef};
 
 use super::collapsed_groups::CollapsedGroups;
 use super::others_group::OthersGroup;
@@ -19,12 +20,12 @@ pub enum QueueRow {
     PullRequest(usize),
     /// The header above a stack's layers.
     StackHeader(StackGroup),
-    /// A layer of the stack above that the shown list has, by its index there.
-    StackLayer(usize),
-    /// A layer of the stack above that the shown list lacks (someone
-    /// else's, or one not asking for the viewer's review), by its index in
-    /// the stack's layers.
-    OtherLayer { key: StackKey, layer: usize },
+    /// A node in the displayed tree, and its index in this tab when listed.
+    Layer {
+        key: StackKey,
+        entry: usize,
+        listed: Option<usize>,
+    },
     /// The Others tab's filter of the repository above, open under its header.
     OthersFilter(RepoRef),
     /// Under a repository of the Others tab that shows no pull request: it
@@ -42,7 +43,7 @@ impl QueueRow {
     pub fn build_all(
         list: &[PullRequest],
         collapsed: &CollapsedGroups,
-        stacks: &HashMap<StackKey, PullRequestStack>,
+        trees: &QueueTrees,
     ) -> Vec<Self> {
         // The repositories in the order they first appear.
         let repositories =
@@ -55,7 +56,7 @@ impl QueueRow {
             let is_collapsed = collapsed.repositories.contains(repo);
             rows.push(repo_header(repo, &indexes, is_collapsed, None));
             if !is_collapsed {
-                rows.extend(repository_rows(list, &indexes, &collapsed.stacks, stacks));
+                rows.extend(repository_rows(list, &indexes, &collapsed.stacks, trees));
             }
         }
         rows
@@ -70,7 +71,7 @@ impl QueueRow {
         shown: &[PullRequest],
         repositories: &[OthersRepository],
         collapsed: &CollapsedGroups,
-        stacks: &HashMap<StackKey, PullRequestStack>,
+        trees: &QueueTrees,
     ) -> Vec<Self> {
         let mut rows = Vec::new();
         for repository in repositories {
@@ -92,7 +93,7 @@ impl QueueRow {
             if indexes.is_empty() {
                 rows.push(Self::NothingShown(repo.clone()));
             } else {
-                rows.extend(repository_rows(shown, &indexes, &collapsed.stacks, stacks));
+                rows.extend(repository_rows(shown, &indexes, &collapsed.stacks, trees));
             }
         }
         rows
@@ -101,10 +102,10 @@ impl QueueRow {
     /// The index in the shown list of the pull request this row shows.
     pub fn pull_request_index(&self) -> Option<usize> {
         match self {
-            Self::PullRequest(index) | Self::StackLayer(index) => Some(*index),
+            Self::PullRequest(index) => Some(*index),
+            Self::Layer { listed, .. } => *listed,
             Self::RepoHeader(_)
             | Self::StackHeader(_)
-            | Self::OtherLayer { .. }
             | Self::OthersFilter(_)
             | Self::NothingShown(_) => None,
         }
@@ -143,108 +144,58 @@ fn repository_rows(
     list: &[PullRequest],
     indexes: &[usize],
     collapsed_stacks: &HashSet<StackKey>,
-    stacks: &HashMap<StackKey, PullRequestStack>,
+    trees: &QueueTrees,
 ) -> Vec<QueueRow> {
     let mut rows = Vec::new();
-    let mut placed: HashSet<StackKey> = HashSet::new();
+    let mut placed = HashSet::new();
+    let listed: HashMap<_, _> = indexes
+        .iter()
+        .map(|&index| (list[index].number, index))
+        .collect();
     for &index in indexes {
         let pull_request = &list[index];
-        let (Some(key), Some(membership)) = (StackKey::of(pull_request), &pull_request.stack)
-        else {
+        let Some(key) = trees.key(&pull_request.repo, pull_request.number) else {
             rows.push(QueueRow::PullRequest(index));
             continue;
         };
-        if !placed.insert(key.clone()) {
+        if !placed.insert(key) {
             continue;
         }
-
-        // Its listed layers, bottom first.
-        let mut listed: Vec<usize> = list
-            .iter()
-            .enumerate()
-            .filter(|(_, candidate)| StackKey::of(candidate).as_ref() == Some(&key))
-            .map(|(layer_index, _)| layer_index)
-            .collect();
-        listed.sort_by_key(|layer_index| {
-            list[*layer_index]
-                .stack
-                .as_ref()
-                .map_or(0, |membership| membership.position)
-        });
-
-        // Count the listed layers separately from the size of the whole stack.
-        let stack = stacks.get(&key);
-        let is_collapsed = collapsed_stacks.contains(&key);
+        let tree = trees.group(key).expect("indexed group");
+        let is_collapsed = collapsed_stacks.contains(key);
         rows.push(QueueRow::StackHeader(StackGroup {
-            size: stack.map_or(membership.size, |stack| {
-                u64::try_from(stack.layers.len()).unwrap_or(u64::MAX)
-            }),
-            base_ref: stack.map_or_else(
-                || membership.base_ref.clone(),
-                |stack| stack.base_ref.clone(),
-            ),
-            listed: listed.len(),
-            is_collapsed,
             key: key.clone(),
+            size: tree.size,
+            base_ref: tree.base_ref.clone(),
+            listed: tree
+                .entries
+                .iter()
+                .filter(|entry| listed.contains_key(&entry.number))
+                .count(),
+            is_collapsed,
+            source: tree.source(),
+            branching: tree.branching,
+            root: tree.entries[0].number,
         }));
-        if is_collapsed {
-            continue;
-        }
-        match stack {
-            Some(stack) => {
-                rows.extend(stack_layer_rows(&key, stack, list, &listed));
-            }
-            None => {
-                rows.extend(listed.into_iter().map(QueueRow::StackLayer));
-            }
+        if !is_collapsed {
+            rows.extend(
+                tree.entries
+                    .iter()
+                    .enumerate()
+                    .map(|(entry, node)| QueueRow::Layer {
+                        key: key.clone(),
+                        entry,
+                        listed: listed.get(&node.number).copied(),
+                    }),
+            );
         }
     }
     rows
 }
 
-/// Every layer of `stack` bottom first: listed ones by their list index,
-/// the others by their place in the stack; listed layers the stack no
-/// longer has (it changed since) follow at the end.
-fn stack_layer_rows(
-    key: &StackKey,
-    stack: &PullRequestStack,
-    list: &[PullRequest],
-    listed: &[usize],
-) -> Vec<QueueRow> {
-    let mut rows: Vec<QueueRow> = stack
-        .layers
-        .iter()
-        .enumerate()
-        .map(|(layer_index, layer)| {
-            listed
-                .iter()
-                .find(|index| list[**index].number == layer.number)
-                .map_or_else(
-                    || QueueRow::OtherLayer {
-                        key: key.clone(),
-                        layer: layer_index,
-                    },
-                    |index| QueueRow::StackLayer(*index),
-                )
-        })
-        .collect();
-    rows.extend(
-        listed
-            .iter()
-            .filter(|index| {
-                !stack
-                    .layers
-                    .iter()
-                    .any(|layer| layer.number == list[**index].number)
-            })
-            .map(|index| QueueRow::StackLayer(*index)),
-    );
-    rows
-}
-
 #[cfg(test)]
 mod tests {
-    use qd_github::{RepoRef, StackLayer, StackMembership, User};
+    use qd_github::{PullRequestStack, RepoRef, StackLayer, StackMembership, User};
 
     use super::*;
 
@@ -290,7 +241,11 @@ mod tests {
             pull_request(11, None),
             pull_request(12, Some((9, 1))),
         ];
-        let rows = QueueRow::build_all(&list, &CollapsedGroups::default(), &HashMap::new());
+        let rows = QueueRow::build_all(
+            &list,
+            &CollapsedGroups::default(),
+            &QueueTrees::build(&list, &HashMap::new()),
+        );
         assert!(matches!(&rows[0], QueueRow::RepoHeader(group) if group.pull_requests == 3));
         assert!(
             matches!(&rows[1], QueueRow::StackHeader(group) if group.listed == 2 && group.size == 3)
@@ -298,8 +253,16 @@ mod tests {
         assert_eq!(
             rows[2..],
             [
-                QueueRow::StackLayer(2),
-                QueueRow::StackLayer(0),
+                QueueRow::Layer {
+                    key: StackKey::of(&list[2]).unwrap(),
+                    entry: 0,
+                    listed: Some(2)
+                },
+                QueueRow::Layer {
+                    key: StackKey::of(&list[0]).unwrap(),
+                    entry: 1,
+                    listed: Some(0)
+                },
                 QueueRow::PullRequest(1)
             ]
         );
@@ -316,7 +279,11 @@ mod tests {
             stacks: HashSet::from([StackKey::of(&list[0]).unwrap()]),
             ..CollapsedGroups::default()
         };
-        let rows = QueueRow::build_all(&list, &collapsed, &HashMap::new());
+        let rows = QueueRow::build_all(
+            &list,
+            &collapsed,
+            &QueueTrees::build(&list, &HashMap::new()),
+        );
         assert_eq!(rows.len(), 2);
         assert!(matches!(&rows[1], QueueRow::StackHeader(group) if group.is_collapsed));
     }
@@ -330,7 +297,11 @@ mod tests {
             in_repo("api", 2, None),
             in_repo("web", 3, None),
         ];
-        let rows = QueueRow::build_all(&list, &CollapsedGroups::default(), &HashMap::new());
+        let rows = QueueRow::build_all(
+            &list,
+            &CollapsedGroups::default(),
+            &QueueTrees::build(&list, &HashMap::new()),
+        );
         let header = |name: &str, count: usize| {
             QueueRow::RepoHeader(RepoGroup {
                 repo: list
@@ -359,7 +330,11 @@ mod tests {
             repositories: HashSet::from([list[0].repo.clone()]),
             ..CollapsedGroups::default()
         };
-        let rows = QueueRow::build_all(&list, &collapsed, &HashMap::new());
+        let rows = QueueRow::build_all(
+            &list,
+            &collapsed,
+            &QueueTrees::build(&list, &HashMap::new()),
+        );
         assert_eq!(rows.len(), 3);
         assert!(matches!(&rows[0], QueueRow::RepoHeader(group) if group.is_collapsed));
     }
@@ -373,6 +348,7 @@ mod tests {
             is_draft: false,
             is_merged: false,
             html_url: String::new(),
+            head_repository: None,
             head_ref: String::new(),
             head_sha: String::new(),
             base_ref: String::new(),
@@ -402,7 +378,7 @@ mod tests {
             &shown,
             &repositories,
             &CollapsedGroups::default(),
-            &HashMap::new(),
+            &QueueTrees::build(&shown, &HashMap::new()),
         );
         assert_eq!(rows.len(), 5);
         assert!(matches!(&rows[0], QueueRow::RepoHeader(group) if group.pull_requests == 1));
@@ -432,7 +408,7 @@ mod tests {
         };
         let stacks = HashMap::from([(key.clone(), stack)]);
         let collapsed = CollapsedGroups::default();
-        let rows = QueueRow::build_all(&list, &collapsed, &stacks);
+        let rows = QueueRow::build_all(&list, &collapsed, &QueueTrees::build(&list, &stacks));
         assert!(matches!(&rows[0], QueueRow::RepoHeader(group) if group.pull_requests == 1));
         assert!(
             matches!(&rows[1], QueueRow::StackHeader(group) if group.listed == 1 && group.size == 3)
@@ -440,13 +416,179 @@ mod tests {
         assert_eq!(
             rows[2..],
             [
-                QueueRow::OtherLayer {
+                QueueRow::Layer {
                     key: key.clone(),
-                    layer: 0
+                    entry: 0,
+                    listed: None
                 },
-                QueueRow::StackLayer(0),
-                QueueRow::OtherLayer { key, layer: 2 },
+                QueueRow::Layer {
+                    key: key.clone(),
+                    entry: 1,
+                    listed: Some(0)
+                },
+                QueueRow::Layer {
+                    key,
+                    entry: 2,
+                    listed: None
+                },
             ]
         );
+    }
+    fn branch(number: u64, head: &str, base: &str) -> PullRequest {
+        let mut request = pull_request(number, None);
+        request.branches = Some(qd_github::PullRequestBranches {
+            head_ref: head.into(),
+            base_ref: base.into(),
+            head_repository: Some(request.repo.full_name()),
+            default_branch: Some("trunk".into()),
+            revision: Some(qd_github::PullRequestRevision {
+                head_sha: format!("head-{number}"),
+                base_sha: format!("base-{number}"),
+            }),
+        });
+        request
+    }
+
+    /// The same PRs produce a series or a fork solely by changing the export PR's base.
+    /// A single requested tip still brings both sibling subtrees into view exactly once.
+    #[test]
+    fn retargeting_changes_the_rail_and_only_the_selected_ancestry() {
+        let mut known = [
+            branch(30, "highlight", "search"),
+            branch(10, "index", "trunk"),
+            branch(40, "export", "trunk"),
+            branch(20, "search", "index"),
+        ];
+        let trees = QueueTrees::build(&known, &HashMap::new());
+        let key = trees.key(&known[0].repo, 30).unwrap();
+        let series = trees.group(key).unwrap();
+        assert!(!series.branching);
+        assert!(
+            series
+                .entries
+                .iter()
+                .all(|entry| entry.rail.lanes.is_empty())
+        );
+        assert!(trees.key(&known[0].repo, 40).is_none());
+        known[2].branches.as_mut().unwrap().base_ref = "index".into();
+        let trees = QueueTrees::build(known.iter().chain([&known[0]]), &HashMap::new());
+        let key = trees.key(&known[0].repo, 30).unwrap();
+        let tree = trees.group(key).unwrap();
+        assert!(tree.branching);
+        assert_eq!(
+            tree.entries
+                .iter()
+                .map(|entry| entry.number)
+                .collect::<Vec<_>>(),
+            [10, 20, 30, 40]
+        );
+        assert_eq!(tree.entries[1].rail.lanes, [true]);
+        assert_eq!(tree.entries[2].rail.lanes, [true, false]);
+        assert_eq!(tree.entries[3].rail.lanes, [false]);
+        let rows = QueueRow::build_all(&known[..1], &CollapsedGroups::default(), &trees);
+        assert!(
+            matches!(&rows[1],QueueRow::StackHeader(group) if group.listed == 1 && group.size == 4)
+        );
+        assert_eq!(rows.len(), 6);
+        for (request, expected) in [
+            (&known[0], vec![10, 20, 30]),
+            (&known[2], vec![10, 40]),
+            (&known[1], vec![10]),
+        ] {
+            assert_eq!(
+                trees
+                    .review_path(request)
+                    .unwrap()
+                    .iter()
+                    .map(|layer| layer.number)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+
+    /// Ambiguous heads, another fork, deleted heads, trunk and cycles provide no parent.
+    #[test]
+    fn unsafe_branch_matches_stay_ungrouped() {
+        let mut known = [
+            branch(1, "x", "trunk"),
+            branch(2, "x", "trunk"),
+            branch(3, "child", "x"),
+            branch(4, "fork-only", "trunk"),
+            branch(5, "child2", "fork-only"),
+            branch(6, "trunk", "release"),
+            branch(7, "cycle-left", "cycle-right"),
+            branch(8, "cycle-right", "cycle-left"),
+            branch(9, "deleted", "trunk"),
+            branch(10, "child3", "deleted"),
+        ];
+        known[3].branches.as_mut().unwrap().head_repository = Some("fork/b".into());
+        known[8].branches.as_mut().unwrap().head_repository = None;
+        let trees = QueueTrees::build(&known, &HashMap::new());
+        for request in &known {
+            assert!(trees.key(&request.repo, request.number).is_none());
+        }
+    }
+
+    /// A changed native order can arrive via the PR lists before the stack endpoint.
+    #[test]
+    fn conflicting_snapshots_do_not_splice_two_prs_into_the_same_native_slot() {
+        let listed = [
+            pull_request(10, Some((99, 1))),
+            pull_request(21, Some((99, 2))),
+        ];
+        let key = StackKey::of(&listed[0]).unwrap();
+        let mut stack = PullRequestStack {
+            repo: key.repo.clone(),
+            number: 99,
+            base_ref: "main".into(),
+            is_open: true,
+            layers: vec![layer(10), layer(20)],
+        };
+        for expected in [vec![10, 21], vec![10, 21, 20]] {
+            let trees = QueueTrees::build(&listed, &HashMap::from([(key.clone(), stack.clone())]));
+            assert_eq!(
+                trees
+                    .group(&key)
+                    .unwrap()
+                    .entries
+                    .iter()
+                    .map(|entry| entry.number)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            stack.layers = vec![layer(10), layer(21), layer(20)];
+        }
+    }
+
+    /// An unlisted native root still owns its branch. A branch-matched sibling uses
+    /// that root's commits and never acquires native membership.
+    #[test]
+    fn inferred_child_can_branch_off_a_native_context_layer() {
+        let native = pull_request(20, Some((99, 2)));
+        let child = branch(40, "export", "index");
+        let key = StackKey::of(&native).unwrap();
+        let mut root = layer(10);
+        root.head_ref = "index".into();
+        root.head_repository = Some(native.repo.full_name());
+        root.base_sha = "trunk-commit".into();
+        let stack = PullRequestStack {
+            repo: native.repo.clone(),
+            number: 99,
+            base_ref: "trunk".into(),
+            is_open: true,
+            layers: vec![root, layer(20)],
+        };
+        let trees = QueueTrees::build([&native, &child], &HashMap::from([(key.clone(), stack)]));
+        let group = trees.group(&key).unwrap();
+        assert!(group.has_native && group.inferred && group.branching);
+        let path = trees.review_path(&child).unwrap();
+        assert_eq!(
+            path.iter().map(|entry| entry.number).collect::<Vec<_>>(),
+            [10, 40]
+        );
+        assert_eq!(path[0].base_sha, "trunk-commit");
+        assert_eq!(path[1].head_sha, "head-40");
+        assert!(child.stack.is_none());
     }
 }

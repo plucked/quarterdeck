@@ -24,6 +24,7 @@ impl CollapsedGroups {
                 .map(|stack| StackKey {
                     repo: stack.repo,
                     number: stack.number,
+                    branch_root: stack.branch_root,
                 })
                 .collect(),
         }
@@ -39,6 +40,7 @@ impl CollapsedGroups {
                 .map(|key| FoldedStack {
                     repo: key.repo.clone(),
                     number: key.number,
+                    branch_root: key.branch_root,
                 })
                 .collect(),
         }

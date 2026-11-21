@@ -151,7 +151,12 @@ impl GitHubClient {
     ) -> Result<(), GitHubError> {
         let missing: Vec<u64> = pull_requests
             .iter()
-            .filter(|pull_request| pull_request.branches.is_none())
+            .filter(|pull_request| {
+                pull_request
+                    .branches
+                    .as_ref()
+                    .is_none_or(|branches| branches.revision.is_none())
+            })
             .map(|pull_request| pull_request.number)
             .collect();
         for numbers in missing.chunks(BRANCH_LOOKUPS_PER_REQUEST) {

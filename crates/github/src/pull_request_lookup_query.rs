@@ -9,7 +9,7 @@ use crate::{PullRequestBranches, ViewerReview};
 const LOOKUP_QUERY: AliasedPullRequestsQuery = AliasedPullRequestsQuery {
     operation: "PullRequestLookup",
     alias_prefix: "pr",
-    selection: "number headRefName baseRefName viewerLatestReview { state } stack { number size baseRefName } stackEntry { position }",
+    selection: "number headRefName baseRefName headRefOid baseRefOid headRepository { nameWithOwner } repository { defaultBranchRef { name } } viewerLatestReview { state } stack { number size baseRefName } stackEntry { position }",
 };
 
 /// What a lookup found of one pull request.
@@ -40,9 +40,30 @@ struct LookupNode {
     number: u64,
     head_ref_name: String,
     base_ref_name: String,
+    head_ref_oid: Option<String>,
+    base_ref_oid: Option<String>,
+    head_repository: Option<HeadRepository>,
+    repository: Option<BaseRepository>,
     stack: Option<Stack>,
     stack_entry: Option<Entry>,
     viewer_latest_review: Option<ReviewNode>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HeadRepository {
+    name_with_owner: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BaseRepository {
+    default_branch_ref: Option<BranchName>,
+}
+
+#[derive(Deserialize)]
+struct BranchName {
+    name: String,
 }
 
 #[derive(Deserialize)]
@@ -81,6 +102,17 @@ impl PullRequestLookupData {
                     branches: PullRequestBranches {
                         head_ref: node.head_ref_name,
                         base_ref: node.base_ref_name,
+                        head_repository: node.head_repository.map(|repo| repo.name_with_owner),
+                        default_branch: node
+                            .repository
+                            .and_then(|repo| repo.default_branch_ref)
+                            .map(|branch| branch.name),
+                        revision: node.head_ref_oid.zip(node.base_ref_oid).map(
+                            |(head_sha, base_sha)| crate::PullRequestRevision {
+                                head_sha,
+                                base_sha,
+                            },
+                        ),
                     },
                     viewer_review: node
                         .viewer_latest_review
@@ -102,7 +134,7 @@ mod tests {
     fn writes_one_aliased_field_per_number() {
         assert_eq!(
             pull_request_lookup_query(&[7, 12]),
-            "query PullRequestLookup($owner: String!, $name: String!) {\n  repository(owner: $owner, name: $name) {\n    pr7: pullRequest(number: 7) { number headRefName baseRefName viewerLatestReview { state } stack { number size baseRefName } stackEntry { position } }\n    pr12: pullRequest(number: 12) { number headRefName baseRefName viewerLatestReview { state } stack { number size baseRefName } stackEntry { position } }\n  }\n}\n"
+            "query PullRequestLookup($owner: String!, $name: String!) {\n  repository(owner: $owner, name: $name) {\n    pr7: pullRequest(number: 7) { number headRefName baseRefName headRefOid baseRefOid headRepository { nameWithOwner } repository { defaultBranchRef { name } } viewerLatestReview { state } stack { number size baseRefName } stackEntry { position } }\n    pr12: pullRequest(number: 12) { number headRefName baseRefName headRefOid baseRefOid headRepository { nameWithOwner } repository { defaultBranchRef { name } } viewerLatestReview { state } stack { number size baseRefName } stackEntry { position } }\n  }\n}\n"
         );
     }
 
@@ -111,7 +143,8 @@ mod tests {
     fn reads_pull_requests_by_number() {
         let json = r#"{"data": {"repository": {
             "pr7": {"number": 7, "headRefName": "feat/x", "baseRefName": "main",
-                    "viewerLatestReview": {"state": "APPROVED"},"stack":{"number":2,"size":3,"baseRefName":"main"},"stackEntry":{"position":1}},
+                    "headRepository":{"nameWithOwner":"octo/fork"},"repository":{"defaultBranchRef":{"name":"trunk"}},
+                    "headRefOid":"a1","baseRefOid":"b2","viewerLatestReview": {"state": "APPROVED"},"stack":{"number":2,"size":3,"baseRefName":"main"},"stackEntry":{"position":1}},
             "pr8": {"number": 8, "headRefName": "fix/y", "baseRefName": "main",
                     "viewerLatestReview": {"state": "PENDING"}},
             "pr9": null
@@ -120,6 +153,12 @@ mod tests {
         let found = response.into_data().unwrap().into_pull_requests();
         assert_eq!(found.len(), 2);
         assert_eq!(found[&7].branches.head_ref, "feat/x");
+        assert_eq!(
+            found[&7].branches.head_repository.as_deref(),
+            Some("octo/fork")
+        );
+        assert_eq!(found[&7].branches.default_branch.as_deref(), Some("trunk"));
+        assert_eq!(found[&7].branches.revision.as_ref().unwrap().base_sha, "b2");
         assert_eq!(found[&7].stack.as_ref().unwrap().number, 2);
         assert_eq!(found[&8].stack, None);
         assert_eq!(found[&7].viewer_review, Some(ViewerReview::Approved));

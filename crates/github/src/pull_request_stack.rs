@@ -46,7 +46,13 @@ struct StackPullRequest {
 }
 
 #[derive(Deserialize)]
+struct BranchRepository {
+    full_name: String,
+}
+
+#[derive(Deserialize)]
 struct BranchTip {
+    repo: Option<BranchRepository>,
     #[serde(rename = "ref")]
     name: String,
     sha: String,
@@ -77,6 +83,7 @@ impl StackResponse {
                     is_merged: layer.merged_at.is_some(),
                     html_url: layer.html_url,
                     head_ref: layer.head.name,
+                    head_repository: layer.head.repo.map(|repo| repo.full_name),
                     head_sha: layer.head.sha,
                     base_ref: layer.base.name,
                     base_sha: layer.base.sha,

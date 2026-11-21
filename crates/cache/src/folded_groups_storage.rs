@@ -20,8 +20,8 @@ impl UiStateStore {
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let mut stacks = self.connection().prepare(
-            "SELECT repo_owner, repo_name, stack_number FROM folded_stacks
-             ORDER BY repo_owner, repo_name, stack_number",
+            "SELECT repo_owner, repo_name, stack_number, branch_root FROM folded_stacks
+             ORDER BY repo_owner, repo_name, stack_number, branch_root",
         )?;
         let stacks = stacks
             .query_map([], |row| {
@@ -31,6 +31,7 @@ impl UiStateStore {
                         name: row.get(1)?,
                     },
                     number: read_u64(row, 2)?,
+                    branch_root: row.get(3)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -53,8 +54,8 @@ impl UiStateStore {
         }
         for stack in &groups.stacks {
             transaction.execute(
-                "INSERT INTO folded_stacks (repo_owner, repo_name, stack_number) VALUES (?1, ?2, ?3)",
-                params![stack.repo.owner, stack.repo.name, sql_integer(stack.number)?],
+                "INSERT INTO folded_stacks (repo_owner, repo_name, stack_number, branch_root) VALUES (?1, ?2, ?3, ?4)",
+                params![stack.repo.owner, stack.repo.name, sql_integer(stack.number)?, stack.branch_root],
             )?;
         }
         transaction.commit()?;
@@ -81,10 +82,18 @@ mod tests {
 
         let folded = FoldedGroups {
             repositories: vec![repo("seed"), repo("web")],
-            stacks: vec![FoldedStack {
-                repo: repo("seed"),
-                number: 35_799,
-            }],
+            stacks: vec![
+                FoldedStack {
+                    repo: repo("seed"),
+                    number: 35_799,
+                    branch_root: false,
+                },
+                FoldedStack {
+                    repo: repo("seed"),
+                    number: 35_799,
+                    branch_root: true,
+                },
+            ],
         };
         store.put_folded_groups(&folded).unwrap();
         assert_eq!(store.folded_groups().unwrap(), folded);

@@ -67,6 +67,24 @@ impl ReviewQueue {
         cx.notify();
     }
 
+    /// Opens by repository and PR number, including context rows from another tab.
+    pub(super) fn open_tree_layer(
+        &mut self,
+        repo: &qd_github::RepoRef,
+        number: u64,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(listed) = self.lists.find_by_number(repo, number).cloned() {
+            self.select_pull_request(listed, SelectionOrigin::Listed, cx);
+        } else if let Some((key, index)) = self
+            .trees
+            .entry(repo, number)
+            .and_then(|node| node.native.clone())
+        {
+            self.open_other_layer(&key, index, cx);
+        }
+    }
+
     /// Shows a layer of stack `key` that the shown list lacks (a click on its row).
     pub(super) fn open_other_layer(
         &mut self,

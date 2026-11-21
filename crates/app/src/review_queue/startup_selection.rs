@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
 use qd_github::PullRequest;
 
 use super::collapsed_groups::CollapsedGroups;
 use super::queue_row::QueueRow;
+use super::queue_trees::QueueTrees;
 use super::restore_phase::RestorePhase;
 use super::stack_key::StackKey;
 
@@ -14,7 +13,7 @@ pub(super) enum StartupSelection {
     Wait,
     /// The first fetched queue resolved without needing a fallback.
     Complete,
-    /// Open the stack's combined review, as a click on its header would.
+    /// Open the stack’s combined review.
     Stack(StackKey),
     /// Open a standalone pull request at this index in Mine.
     PullRequest(usize),
@@ -27,6 +26,7 @@ impl StartupSelection {
         pending_restore_id: Option<u64>,
         phase: RestorePhase,
         authored: &[PullRequest],
+        trees: &QueueTrees,
     ) -> Self {
         if pending_restore_id.is_some() {
             return Self::Wait;
@@ -35,18 +35,18 @@ impl StartupSelection {
             (Some(_), RestorePhase::Cached | RestorePhase::Refreshing) => Self::Wait,
             (Some(_), RestorePhase::Refreshed | RestorePhase::Unavailable) => Self::Complete,
             (None, RestorePhase::Cached | RestorePhase::Refreshing) => {
-                Self::from_authored(authored).unwrap_or(Self::Wait)
+                Self::from_authored(authored, trees).unwrap_or(Self::Wait)
             }
             (None, RestorePhase::Refreshed | RestorePhase::Unavailable) => {
-                Self::from_authored(authored).unwrap_or(Self::Complete)
+                Self::from_authored(authored, trees).unwrap_or(Self::Complete)
             }
         }
     }
 
     /// Chooses the first stack in sidebar order, else the first standalone pull request.
-    fn from_authored(authored: &[PullRequest]) -> Option<Self> {
+    fn from_authored(authored: &[PullRequest], trees: &QueueTrees) -> Option<Self> {
         // Repository grouping determines visual order; folded groups still contain candidates.
-        let rows = QueueRow::build_all(authored, &CollapsedGroups::default(), &HashMap::new());
+        let rows = QueueRow::build_all(authored, &CollapsedGroups::default(), trees);
         rows.iter()
             .find_map(|row| match row {
                 QueueRow::StackHeader(group) => Some(Self::Stack(group.key.clone())),
@@ -66,6 +66,26 @@ mod tests {
     use qd_github::{RepoRef, StackMembership, User};
 
     use super::*;
+    fn decide(
+        selected: Option<&PullRequest>,
+        pending: Option<u64>,
+        phase: RestorePhase,
+        authored: &[PullRequest],
+    ) -> StartupSelection {
+        StartupSelection::decide(
+            selected,
+            pending,
+            phase,
+            authored,
+            &QueueTrees::build(authored, &std::collections::HashMap::new()),
+        )
+    }
+    fn from_authored(authored: &[PullRequest]) -> Option<StartupSelection> {
+        StartupSelection::from_authored(
+            authored,
+            &QueueTrees::build(authored, &std::collections::HashMap::new()),
+        )
+    }
 
     /// A queue fixture whose input order is newest first, as the cache and API supply it.
     fn pull_request(repo: &str, number: u64, stack: Option<(u64, u64)>) -> PullRequest {
@@ -108,7 +128,7 @@ mod tests {
             pull_request("first", 4, Some((10, 2))),
         ];
         assert_eq!(
-            StartupSelection::from_authored(&authored),
+            from_authored(&authored),
             Some(StartupSelection::Stack(StackKey::of(&authored[2]).unwrap()))
         );
     }
@@ -121,26 +141,26 @@ mod tests {
             pull_request("second", 2, None),
         ];
         assert_eq!(
-            StartupSelection::from_authored(&authored),
+            from_authored(&authored),
             Some(StartupSelection::PullRequest(0))
         );
-        assert_eq!(StartupSelection::from_authored(&[]), None);
+        assert_eq!(from_authored(&[]), None);
     }
 
     /// Cold-cache launch waits for Mine, then selects once the first refreshed list arrives.
     #[test]
     fn cold_cache_waits_for_mine() {
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Cached, &[]),
+            decide(None, None, RestorePhase::Cached, &[]),
             StartupSelection::Wait
         );
         let authored = [pull_request("repo", 1, None)];
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Refreshed, &authored),
+            decide(None, None, RestorePhase::Refreshed, &authored),
             StartupSelection::PullRequest(0)
         );
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Refreshed, &[]),
+            decide(None, None, RestorePhase::Refreshed, &[]),
             StartupSelection::Complete
         );
     }
@@ -150,12 +170,12 @@ mod tests {
     fn pending_restore_keeps_priority() {
         let authored = [pull_request("repo", 1, None)];
         assert_eq!(
-            StartupSelection::decide(None, Some(2), RestorePhase::Cached, &authored),
+            decide(None, Some(2), RestorePhase::Cached, &authored),
             StartupSelection::Wait
         );
         // Once restoration abandons a missing ID, the refreshed Mine becomes the fallback.
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Refreshed, &authored),
+            decide(None, None, RestorePhase::Refreshed, &authored),
             StartupSelection::PullRequest(0)
         );
     }
@@ -166,15 +186,15 @@ mod tests {
         let selected = pull_request("repo", 2, None);
         let authored = [pull_request("repo", 1, None)];
         assert_eq!(
-            StartupSelection::decide(Some(&selected), None, RestorePhase::Cached, &authored),
+            decide(Some(&selected), None, RestorePhase::Cached, &authored),
             StartupSelection::Wait
         );
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Refreshed, &authored),
+            decide(None, None, RestorePhase::Refreshed, &authored),
             StartupSelection::PullRequest(0)
         );
         assert_eq!(
-            StartupSelection::decide(Some(&selected), None, RestorePhase::Refreshed, &authored),
+            decide(Some(&selected), None, RestorePhase::Refreshed, &authored),
             StartupSelection::Complete
         );
     }
@@ -184,11 +204,11 @@ mod tests {
     fn unavailable_refresh_uses_cached_mine() {
         let authored = [pull_request("repo", 1, None)];
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Unavailable, &authored),
+            decide(None, None, RestorePhase::Unavailable, &authored),
             StartupSelection::PullRequest(0)
         );
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Unavailable, &[]),
+            decide(None, None, RestorePhase::Unavailable, &[]),
             StartupSelection::Complete
         );
     }
@@ -198,18 +218,18 @@ mod tests {
     fn stale_automatic_pick_remains_eligible_during_startup() {
         let cached = [pull_request("repo", 1, None)];
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Cached, &cached),
+            decide(None, None, RestorePhase::Cached, &cached),
             StartupSelection::PullRequest(0)
         );
         assert!(RestorePhase::Cached.is_provisional());
         let fresh = [pull_request("repo", 2, None)];
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Refreshing, &fresh),
+            decide(None, None, RestorePhase::Refreshing, &fresh),
             StartupSelection::PullRequest(0)
         );
         assert!(RestorePhase::Refreshing.is_provisional());
         assert_eq!(
-            StartupSelection::decide(Some(&fresh[0]), None, RestorePhase::Refreshed, &fresh),
+            decide(Some(&fresh[0]), None, RestorePhase::Refreshed, &fresh),
             StartupSelection::Complete
         );
         assert!(!RestorePhase::Refreshed.is_provisional());
@@ -221,12 +241,12 @@ mod tests {
         let selected = pull_request("others", 2, None);
         let authored = [pull_request("mine", 1, None)];
         assert_eq!(
-            StartupSelection::decide(Some(&selected), None, RestorePhase::Refreshing, &authored),
+            decide(Some(&selected), None, RestorePhase::Refreshing, &authored),
             StartupSelection::Wait
         );
         // Once Others removes that PR, the fallback is still available.
         assert_eq!(
-            StartupSelection::decide(None, None, RestorePhase::Refreshing, &authored),
+            decide(None, None, RestorePhase::Refreshing, &authored),
             StartupSelection::PullRequest(0)
         );
         // A saved Others ID absent from the cache gets the same full-refresh opportunity.
@@ -238,7 +258,7 @@ mod tests {
             super::super::selection_restore::SelectionRestore::WaitForRefresh
         );
         assert_eq!(
-            StartupSelection::decide(None, Some(selected.id), RestorePhase::Refreshing, &authored),
+            decide(None, Some(selected.id), RestorePhase::Refreshing, &authored),
             StartupSelection::Wait
         );
     }

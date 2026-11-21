@@ -368,6 +368,23 @@ impl PullRequestDetail {
         &self.target
     }
 
+    /// The layers available for reading, in ancestry order. Merge and delete use
+    /// the native stack separately, since inference grants no GitHub membership.
+    pub(super) fn review_layers(&self) -> Option<&[qd_github::StackLayer]> {
+        self.stack
+            .queue_path
+            .as_deref()
+            .or_else(|| self.stack().map(|stack| stack.layers.as_slice()))
+    }
+
+    pub(super) fn has_review_stack(&self) -> bool {
+        self.stack.queue_path.is_some()
+            || self
+                .pull_request
+                .as_ref()
+                .is_some_and(|request| request.stack.is_some())
+    }
+
     pub(super) fn stack(&self) -> Option<&PullRequestStack> {
         self.stack.loaded.as_ref()
     }
@@ -654,6 +671,52 @@ impl PullRequestDetail {
         }
         // A stack update can also have arrived while the editor held its range.
         self.retarget(cx);
+    }
+
+    /// Installs the review path before the first file request for a selection.
+    pub(crate) fn show_queue_selection(
+        &mut self,
+        pull_request: Option<PullRequest>,
+        restore: Option<DetailScrollPosition>,
+        path: Option<Vec<qd_github::StackLayer>>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.pull_request.as_ref().map(|pr| &pr.repo) != pull_request.as_ref().map(|pr| &pr.repo)
+            || self
+                .stack
+                .queue_path
+                .as_ref()
+                .and_then(|layers| layers.first())
+                .map(|layer| layer.number)
+                != path
+                    .as_ref()
+                    .and_then(|layers| layers.first())
+                    .map(|layer| layer.number)
+        {
+            self.stack.combined_start = None;
+        }
+        let changed = self.stack.queue_path != path;
+        self.stack.queue_path = path;
+        self.show(pull_request, restore, cx);
+        if changed {
+            self.retarget(cx);
+            self.follow_checks(cx);
+            cx.notify();
+        }
+    }
+
+    /// Re-evaluates an open comparison after the queue learns new parent links or commits.
+    pub(crate) fn set_queue_path(
+        &mut self,
+        path: Option<Vec<qd_github::StackLayer>>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.stack.queue_path != path {
+            self.stack.queue_path = path;
+            self.retarget(cx);
+            self.follow_checks(cx);
+            cx.notify();
+        }
     }
 
     /// Shows a version of `pull_request` not shown before: the header and
@@ -977,10 +1040,64 @@ mod refresh_tests {
         });
     }
 
+    fn layer(number: u64) -> qd_github::StackLayer {
+        qd_github::StackLayer {
+            number,
+            pull_request_id: number,
+            title: String::new(),
+            is_open: true,
+            is_draft: false,
+            is_merged: false,
+            html_url: String::new(),
+            head_repository: None,
+            head_ref: format!("layer-{number}"),
+            head_sha: format!("head-{number}"),
+            base_ref: "main".into(),
+            base_sha: "base".into(),
+            author_login: String::new(),
+        }
+    }
+
+    /// An inferred path drives the displayed compare even when the selected PR has no native stack.
+    #[gpui::test]
+    fn inferred_review_follows_the_selected_ancestry_on_refresh(cx: &mut gpui::TestAppContext) {
+        let directory = tempfile::tempdir().unwrap();
+        let (detail, cache) = cached_detail(cx, directory.path());
+        let leaf = pull_request(4, "t1");
+        let mut path = vec![layer(1), layer(4)];
+        for base in ["base", "new-base"] {
+            cache
+                .lock()
+                .put_compare_files(&leaf.repo, base, "head-4", &[])
+                .unwrap();
+        }
+        detail.update(cx, |detail, cx| {
+            detail.prepare_combined_stack_review(cx);
+            detail.show_queue_selection(Some(leaf.clone()), None, Some(path.clone()), cx);
+        });
+        cx.run_until_parked();
+        detail.update(cx, |detail, cx| {
+            assert_eq!(detail.shown_base_sha.as_deref(), Some("base"));
+            assert_eq!(detail.shown_head_sha.as_deref(), Some("head-4"));
+            assert!(detail.stack().is_none());
+            assert!(!detail.start_combined_at(&leaf.repo, 2, cx));
+
+            path[0].base_sha = "new-base".into();
+            detail.set_queue_path(Some(path), cx);
+        });
+        cx.run_until_parked();
+        detail.update(cx, |detail, cx| {
+            assert_eq!(detail.shown_base_sha.as_deref(), Some("new-base"));
+            assert_eq!(detail.shown_head_sha.as_deref(), Some("head-4"));
+            detail.set_queue_path(None, cx);
+            assert_eq!(detail.target, ReviewTarget::Layer);
+        });
+    }
+
     /// A combined review keeps its range on metadata updates and follows a changed lower base.
     #[gpui::test]
     fn stack_refresh_follows_the_combined_range(cx: &mut gpui::TestAppContext) {
-        use qd_github::{StackLayer, StackMembership};
+        use qd_github::StackMembership;
 
         let directory = tempfile::tempdir().unwrap();
         let (detail, cache) = cached_detail(cx, directory.path());
@@ -991,20 +1108,6 @@ mod refresh_tests {
             size: 2,
             base_ref: "main".into(),
         });
-        let layer = |number: u64| StackLayer {
-            number,
-            pull_request_id: number,
-            title: String::new(),
-            is_open: true,
-            is_draft: false,
-            is_merged: false,
-            html_url: String::new(),
-            head_ref: format!("layer-{number}"),
-            head_sha: format!("head-{number}"),
-            base_ref: "main".into(),
-            base_sha: "base".into(),
-            author_login: String::new(),
-        };
         let mut stack = PullRequestStack {
             repo: top.repo.clone(),
             number: 9,

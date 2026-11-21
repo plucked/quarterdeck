@@ -1,5 +1,5 @@
 use qd_file_tree::FileKind;
-use qd_github::{PullRequest, PullRequestStack};
+use qd_github::{PullRequest, StackLayer};
 use qd_studio::{
     CodeAccess, FileListing, ReaderFamiliarity, RequestLayer, StudioRequest, StudioRequestFile,
 };
@@ -14,13 +14,12 @@ use super::review_target::ReviewTarget;
 pub(super) fn studio_request(
     pull_request: &PullRequest,
     target: &ReviewTarget,
-    stack: Option<&PullRequestStack>,
+    stack: Option<&[StackLayer]>,
     files: &[LoadedFile],
     reader: ReaderFamiliarity,
 ) -> StudioRequest {
     let layers = match (target, stack) {
-        (ReviewTarget::Combined(range), Some(stack)) => stack
-            .layers
+        (ReviewTarget::Combined(range), Some(layers)) => layers
             .get(range.first_index..=range.last_index)
             .unwrap_or_default()
             .iter()

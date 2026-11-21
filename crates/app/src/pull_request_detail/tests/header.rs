@@ -20,6 +20,7 @@ fn long_title_uses_its_slot_at_rest_and_on_hover(cx: &mut TestAppContext) {
     request.branches = Some(PullRequestBranches {
         head_ref: "feat/switch-transport-and-keep-settings".into(),
         base_ref: "main".into(),
+        ..Default::default()
     });
     let (_, visual) = cx.add_window_view(|_, cx| {
         HeaderTestView(cx.new(|cx| {
@@ -70,6 +71,7 @@ fn header_fields_expand_and_restore_the_tabs(cx: &mut TestAppContext) {
     request.branches = Some(PullRequestBranches {
         head_ref: "feat/example-with-a-long-branch-name".into(),
         base_ref: "main".into(),
+        ..Default::default()
     });
     let (_, visual) = cx.add_window_view(|_, cx| {
         let mut detail = PullRequestDetail::new(services, cx);

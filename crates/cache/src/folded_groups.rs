@@ -13,4 +13,5 @@ pub struct FoldedGroups {
 pub struct FoldedStack {
     pub repo: RepoRef,
     pub number: u64,
+    pub branch_root: bool,
 }

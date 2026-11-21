@@ -11,7 +11,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 
 **Your review queue**
 - Three lists: **Mine** (pull requests you opened), **To review** (open PRs with a pending request for you personally, including repeat requests) and **Others** (everyone else's open pull requests in repositories you choose), with counts.
-- PRs are grouped by repository and stack. **To review** shows the whole stack when any layer needs your review. Other layers are dimmed and can still be opened. Only pending requests count toward the tab total. Groups fold, and stay folded across launches.
+- PRs are grouped by repository and stack. GitHub stacks and PRs linked by matching base and head branches share the same queue rows. A single chain reads straight down from base to tip. When a parent has multiple children, the rail forks and siblings align at the same depth. **To review** shows the whole stack when any layer needs your review. Other layers are dimmed and can still be opened. Only pending requests count toward the tab total. Groups fold, and stay folded across launches.
 - Each row shows whether it is a draft, its number, author, how long ago it changed, the branch it goes into and the one it comes from (`main ← feat/login`), and how you last reviewed it: a green check (approved), a red cross (changes requested), a ring with … (commented) or a dash (your review was dismissed); hover it for the words. A pending request on a PR you previously reviewed is labeled **Review again**. Requested stack layers carry a **Review** or **Review again** badge.
 - Refreshes on its own (at launch, every 5 minutes, and when you come back to the window after a while) or with ⌘R. An unchanged review keeps your scroll position, file search and folded files.
 
@@ -21,7 +21,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - Hide pull requests by branch in all three lists at once (Settings → Filters): add a pattern such as `feat/legacy-*` (`*` matches anything, `?` one character) and pick whether it looks at the branch a pull request comes from, the one it goes into, or either.
 
 **Stacked pull requests**
-- Review a stack layer by layer, or combined: every change from the bottom of the stack up to the layer you are on, as one diff.
+- Review one layer or combine the path from the lowest unmerged ancestor through the selected PR. Sibling branches stay outside that diff. At a fork, choose the next child in the sidebar.
 - In **Diff** and **Guided review**, the selected tab extends to show **Layer / Combined**. Summary and Brief tuck those options away. Choose individual layers in the sidebar.
 - Step through layers with `{` and `}`, switch between layer and combined with `c`, and ⇧-click a layer in the sidebar to start the combined range there.
 
@@ -62,7 +62,7 @@ A fast native macOS app for reviewing GitHub pull requests: the ones you opened 
 - **Window → Brief Gallery** shows every part a brief can have on sample text, without running Claude.
 
 **Acting on a pull request**
-- From the side panel's Actions tab: merge with any merge method the repository allows, as admin when you may bypass its rules, or through its merge queue. Merging a stack layer merges the layers below it too.
+- From the side panel's Actions tab: merge with any merge method the repository allows, as admin when you may bypass its rules, or through its merge queue. Merging a GitHub stack layer also merges the native layers below it. A branch match is used for reading and navigation only.
 - The side panel's Checks tab shows how the CI checks of the shown pull request stand (in a stack, the shown layer's). It uses the latest run of each workflow, so superseded failures and cancellations do not count. It leads with a verdict and an outcome bar, lists what failed, what still runs and which required checks have not reported yet (GitHub's "Expected": the base branch requires them, but nothing has started them), then every check by workflow and called workflow, folded, with skipped ones hidden until asked for. It refreshes every 30 s while checks run, and a click on a check opens its page. When GitHub refuses check runs to the token (a fine-grained token without the Checks permission), the tab reads the GitHub Actions jobs instead, which needs read access to Actions and Commit statuses; required checks are then matched by name and other apps' checks are missing. When a merge conflict keeps GitHub from running the workflows (in a stack, often a layer further down), the tab says so and names the pull request to fix.
 - Close a pull request, and delete its branch.
 

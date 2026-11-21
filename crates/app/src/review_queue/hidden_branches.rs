@@ -100,6 +100,7 @@ mod tests {
             branches: Some(PullRequestBranches {
                 head_ref: head_ref.into(),
                 base_ref: base_ref.into(),
+                ..Default::default()
             }),
             viewer_review: None,
         }

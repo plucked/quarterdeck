@@ -7,7 +7,6 @@ use super::queue_row::QueueRow;
 use super::restore_phase::RestorePhase;
 use super::selection_origin::SelectionOrigin;
 use super::selection_restore::SelectionRestore;
-use super::stack_key::StackKey;
 use super::startup_selection::StartupSelection;
 use crate::ui_state::UiStateRecorder;
 
@@ -70,6 +69,7 @@ impl ReviewQueue {
                 .map(|pending| pending.pull_request_id),
             phase,
             &self.lists.authored,
+            &self.trees,
         );
         let repo = match &selection {
             StartupSelection::Wait => return,
@@ -107,8 +107,12 @@ impl ReviewQueue {
     ) {
         self.selected.clone_from(&pull_request);
         self.selection_origin = origin;
-        self.detail()
-            .update(cx, |detail, cx| detail.show(pull_request, restore, cx));
+        let path = pull_request
+            .as_ref()
+            .and_then(|request| self.trees.review_path(request));
+        self.detail().update(cx, |detail, cx| {
+            detail.show_queue_selection(pull_request, restore, path, cx);
+        });
         cx.notify();
     }
 
@@ -191,6 +195,13 @@ impl ReviewQueue {
             .rows()
             .iter()
             .position(|row| {
+                if let QueueRow::Layer { key, entry, .. } = row {
+                    return self
+                        .trees
+                        .group(key)
+                        .and_then(|tree| tree.entries.get(*entry))
+                        .is_some_and(|node| self.is_selected(&key.repo, node.number));
+                }
                 row.pull_request_index().is_some_and(|index| {
                     list.get(index)
                         .is_some_and(|pull_request| pull_request.id == selected_id)
@@ -198,10 +209,11 @@ impl ReviewQueue {
             })
             .or_else(|| {
                 // A folded stack still has a selectable header to reveal.
-                let key = self.selected.as_ref().and_then(StackKey::of)?;
-                self.rows()
-                    .iter()
-                    .position(|row| matches!(row, QueueRow::StackHeader(group) if group.key == key))
+                let selected = self.selected.as_ref()?;
+                let key = self.trees.key(&selected.repo, selected.number)?;
+                self.rows().iter().position(
+                    |row| matches!(row, QueueRow::StackHeader(group) if &group.key == key),
+                )
             });
         if let Some(row) = row {
             self.queue_list().scroll_to_reveal_item(row);

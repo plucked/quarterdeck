@@ -17,6 +17,7 @@ impl ReviewQueue {
     pub(super) fn on_detail_event(&mut self, event: &DetailEvent, cx: &mut Context<Self>) {
         match event {
             DetailEvent::Scrolled => self.record_view_state(cx),
+            DetailEvent::OpenQueueLayer { repo, number } => self.open_tree_layer(repo, *number, cx),
             DetailEvent::OpenLayer(request) => self.open_layer(request, cx),
             DetailEvent::PullRequestChanged(id) => {
                 // Keep it in view after the refresh drops it from the lists.

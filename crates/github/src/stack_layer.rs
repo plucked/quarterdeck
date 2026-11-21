@@ -11,6 +11,7 @@ pub struct StackLayer {
     pub is_merged: bool,
     pub html_url: String,
     pub head_ref: String,
+    pub head_repository: Option<String>,
     pub head_sha: String,
     /// The branch this layer targets: the layer below's head, or the trunk.
     pub base_ref: String,

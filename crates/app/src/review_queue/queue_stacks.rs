@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use gpui::{App, Context};
+use gpui::Context;
 use qd_github::PullRequestStack;
 
 use super::ReviewQueue;
@@ -68,7 +68,12 @@ impl ReviewQueue {
                         }
                     }
                     if changed {
+                        queue.trees = super::queue_trees::QueueTrees::build(
+                            queue.lists.iter(),
+                            &queue.stacks,
+                        );
                         queue.rebuild_rows();
+                        queue.sync_review_path(cx);
                         cx.notify();
                     }
                 })
@@ -81,20 +86,25 @@ impl ReviewQueue {
         self.stacks.get(key)
     }
 
-    /// Opens the combined review of a stack (a click on its header in the
-    /// sidebar): its highest listed layer, combined from the lowest unmerged one.
+    /// Opens a combined review on launch, preferring a listed tip.
     pub(super) fn open_stack(&mut self, key: &StackKey, cx: &mut Context<Self>) {
         self.startup_selection_pending = false;
-        let Some(top) = self
+        let Some(tree) = self.trees.group(key) else {
+            return;
+        };
+        // A fork has several tips. Open the first listed tip in sidebar order.
+        let listed: HashMap<_, _> = self
             .shown_list()
             .iter()
-            .filter(|pull_request| StackKey::of(pull_request).as_ref() == Some(key))
-            .max_by_key(|pull_request| {
-                pull_request
-                    .stack
-                    .as_ref()
-                    .map_or(0, |membership| membership.position)
-            })
+            .filter(|request| request.repo == key.repo)
+            .map(|request| (request.number, request))
+            .collect();
+        let Some(top) = tree
+            .entries
+            .iter()
+            .filter(|entry| entry.children == 0)
+            .chain(tree.entries.iter().rev())
+            .find_map(|entry| listed.get(&entry.number).copied())
             .cloned()
         else {
             return;
@@ -113,14 +123,14 @@ impl ReviewQueue {
         self.select_pull_request(top, SelectionOrigin::Listed, cx);
     }
 
-    /// Whether the detail shows the combined review of stack `key`, so its
-    /// header is highlighted.
-    pub(super) fn is_stack_reviewed(&self, key: &StackKey, cx: &App) -> bool {
-        self.selected
+    /// Refresh the comparison even when only an ancestor changed.
+    pub(super) fn sync_review_path(&mut self, cx: &mut Context<Self>) {
+        let path = self
+            .selected
             .as_ref()
-            .and_then(StackKey::of)
-            .is_some_and(|selected| &selected == key)
-            && self.detail().read(cx).is_combined_review()
+            .and_then(|pr| self.trees.review_path(pr));
+        self.detail()
+            .update(cx, |detail, cx| detail.set_queue_path(path, cx));
     }
 }
 

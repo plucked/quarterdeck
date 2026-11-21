@@ -245,6 +245,7 @@ impl ReviewQueue {
         // Relative date filters can change the sidebar even when GitHub returns identical lists.
         let others_changed = self.update_others_shown();
         if lists_changed {
+            self.trees = super::queue_trees::QueueTrees::build(self.lists.iter(), &self.stacks);
             self.request_author_avatars(cx);
         }
         if lists_changed || others_changed {
@@ -259,7 +260,7 @@ impl ReviewQueue {
                     self.record_view_state(cx);
                 }
             }
-            SelectionAfterRefresh::Unchanged => {}
+            SelectionAfterRefresh::Unchanged => self.sync_review_path(cx),
             SelectionAfterRefresh::Refreshed(pull_request) => {
                 let pull_request = pull_request.clone();
                 self.set_selected(Some(pull_request), SelectionOrigin::Listed, None, cx);

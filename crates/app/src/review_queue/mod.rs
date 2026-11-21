@@ -10,6 +10,7 @@
 //! - `queue_refresh.rs`: the refresh: fetching, showing the lists, scheduling the next one.
 //! - `fetch_queue_lists.rs`: the blocking reads behind a refresh: the cached lists, the viewer's own, others', their details.
 //! - `queue_selection.rs`: selecting a pull request, restoring the saved selection, recording the view state.
+//! - `queue_trees.rs`: joins native memberships and repository-qualified branches, orders rows and resolves the selected path.
 //! - `queue_stacks.rs`: the listed stacks' layers (cached, checked with GitHub), opening a stack's combined review.
 //! - `layer_opening.rs`: opening a stack layer the detail asks for, fetched when it is in no list.
 //! - `queue_actions.rs`: the queue's action handlers (tabs, files, layers, panels).
@@ -42,7 +43,7 @@
 //! - `others_group.rs`: `OthersGroup`, an Others repository's count before its filter, and the filter's state.
 //! - `others_repository.rs`: `OthersRepository`, a repository the Others tab shows, with its `OthersGroup`.
 //! - `collapsed_groups.rs`: `CollapsedGroups`, the repositories and stacks folded in the sidebar.
-//! - `stack_key.rs`: `StackKey`, a stack's repository and number.
+//! - `stack_key.rs`: `StackKey`, a native stack or branch root within a repository.
 //! - `selection_origin.rs`: `SelectionOrigin`, picked from a list or opened from a stack.
 
 mod activation_refresh;
@@ -68,6 +69,7 @@ mod queue_refresh;
 mod queue_row;
 mod queue_selection;
 mod queue_stacks;
+mod queue_trees;
 mod refresh_schedule;
 mod refresh_status;
 mod repo_group;

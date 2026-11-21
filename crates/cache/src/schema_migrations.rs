@@ -825,6 +825,24 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     // Preserve existing diff preferences and start double-click commenting off.
     "ALTER TABLE diff_view_settings ADD COLUMN double_click_to_comment INTEGER NOT NULL
         DEFAULT 0 CHECK (double_click_to_comment IN (0, 1));",
+    r"
+    ALTER TABLE pull_requests ADD COLUMN head_repository TEXT;
+    ALTER TABLE pull_requests ADD COLUMN default_branch TEXT;
+    ALTER TABLE pull_requests ADD COLUMN head_oid TEXT;
+    ALTER TABLE pull_requests ADD COLUMN base_oid TEXT;
+    ALTER TABLE pr_stack_layers ADD COLUMN head_repository TEXT;
+    UPDATE pr_stacks SET etag = NULL;
+
+    ALTER TABLE folded_stacks RENAME TO old_folded_stacks;
+    CREATE TABLE folded_stacks (
+        repo_owner TEXT NOT NULL, repo_name TEXT NOT NULL,
+        stack_number INTEGER NOT NULL CHECK (stack_number > 0),
+        branch_root INTEGER NOT NULL CHECK (branch_root IN (0, 1)),
+        PRIMARY KEY (repo_owner, repo_name, stack_number, branch_root)
+    );
+    INSERT INTO folded_stacks SELECT repo_owner, repo_name, stack_number, 0 FROM old_folded_stacks;
+    DROP TABLE old_folded_stacks;
+    ",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in

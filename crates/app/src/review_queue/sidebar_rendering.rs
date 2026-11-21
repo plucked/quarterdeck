@@ -179,34 +179,40 @@ impl ReviewQueue {
                     cx,
                 )
             }
-            QueueRow::StackLayer(list_index) => {
-                let list_index = *list_index;
-                let pull_request = self.shown_list().get(list_index)?;
-                let row = self.listed_layer_row(pull_request, selected_id);
+            QueueRow::Layer { key, entry, listed } => {
+                let tree = self.trees.group(key)?;
+                let node = tree.entries.get(*entry)?;
+                let number = node.number;
+                let pull_request = listed
+                    .and_then(|index| self.shown_list().get(index))
+                    .or_else(|| self.lists().find_by_number(&key.repo, number));
+                let row = if let Some(pull_request) = pull_request {
+                    self.listed_layer_row(pull_request, selected_id, listed.is_some())
+                } else {
+                    let (native, index) = node.native.as_ref()?;
+                    self.other_layer_row(&key.repo, self.stack(native)?.layers.get(*index)?)
+                };
+                let repo = key.repo.clone();
                 let on_click = on_layer_click(
-                    pull_request.repo.clone(),
-                    pull_request.number,
-                    move |queue, cx| queue.select(list_index, cx),
+                    repo.clone(),
+                    number,
+                    move |queue, cx| queue.open_tree_layer(&repo, number, cx),
                     cx,
                 );
-                render_layer_row(self.tab(), row, on_click)
+                let on_path = self
+                    .selected_pull_request()
+                    .is_some_and(|selected| self.trees.on_path(key, *entry, selected));
+                render_layer_row(
+                    self.tab(),
+                    row,
+                    &node.rail,
+                    tree.max_depth,
+                    on_path,
+                    tree.parent_hint(*entry),
+                    on_click,
+                )
             }
-            QueueRow::OtherLayer { key, layer } => {
-                let stack_layer = self.stack(key)?.layers.get(*layer)?;
-                let row = self.other_layer_row(&key.repo, *layer, stack_layer);
-                let (open_key, layer) = (key.clone(), *layer);
-                let on_click = on_layer_click(
-                    key.repo.clone(),
-                    stack_layer.number,
-                    move |queue, cx| queue.open_other_layer(&open_key, layer, cx),
-                    cx,
-                );
-                render_layer_row(self.tab(), row, on_click)
-            }
-            QueueRow::StackHeader(group) => {
-                let is_reviewed = self.is_stack_reviewed(&group.key, cx);
-                render_stack_header(index, group, self.tab(), is_reviewed, cx)
-            }
+            QueueRow::StackHeader(group) => render_stack_header(index, group, self.tab(), cx),
         };
         // Inset from the sidebar's edges; the row keeps the full width inside
         // (`w_full`: the list's width bounds it, so wrapping content such as
@@ -217,7 +223,9 @@ impl ReviewQueue {
             div()
                 .w_full()
                 .px_2()
-                .pb_0p5()
+                .when(!matches!(row, QueueRow::Layer { .. }), |frame| {
+                    frame.pb_0p5()
+                })
                 .when(starts_later_group, |row| {
                     row.pt_2()
                         .child(div().mx_2().mb_2().h(px(1.)).bg(theme::border()))

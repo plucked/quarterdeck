@@ -1,5 +1,5 @@
 use qd_cache::{ReviewScope, StackReviewMode};
-use qd_github::{PullRequest, PullRequestStack, RepoRef};
+use qd_github::{PullRequest, RepoRef, StackLayer};
 
 /// What the detail pane shows the files of: the shown pull request alone,
 /// or several layers of its stack combined into one diff.
@@ -44,17 +44,16 @@ impl ReviewTarget {
     pub fn decide(
         mode: StackReviewMode,
         pull_request: &PullRequest,
-        stack: Option<&PullRequestStack>,
+        layers: Option<&[StackLayer]>,
         range_start: Option<u64>,
     ) -> Self {
-        if mode == StackReviewMode::Layer || pull_request.stack.is_none() {
+        if mode == StackReviewMode::Layer || (layers.is_none() && pull_request.stack.is_none()) {
             return Self::Layer;
         }
-        let Some(stack) = stack else {
+        let Some(layers) = layers else {
             return Self::AwaitingStack;
         };
-        let Some(last_index) = stack
-            .layers
+        let Some(last_index) = layers
             .iter()
             .position(|layer| layer.number == pull_request.number)
         else {
@@ -63,19 +62,19 @@ impl ReviewTarget {
 
         // Start where asked when it is not above the shown layer; else at the lowest unmerged layer.
         let asked_start = range_start.and_then(|number| {
-            stack.layers[..=last_index]
+            layers[..=last_index]
                 .iter()
                 .position(|layer| layer.number == number)
         });
-        let lowest_unmerged = stack.layers[..=last_index]
+        let lowest_unmerged = layers[..=last_index]
             .iter()
             .position(|layer| !layer.is_merged)
             .unwrap_or(last_index);
         let first_index = asked_start.unwrap_or(lowest_unmerged);
-        let first = &stack.layers[first_index];
-        let last = &stack.layers[last_index];
+        let first = &layers[first_index];
+        let last = &layers[last_index];
         Self::Combined(CombinedRange {
-            repo: stack.repo.clone(),
+            repo: pull_request.repo.clone(),
             base_sha: first.base_sha.clone(),
             head_sha: last.head_sha.clone(),
             first_number: first.number,
@@ -100,7 +99,7 @@ impl ReviewTarget {
 
 #[cfg(test)]
 mod tests {
-    use qd_github::{StackLayer, StackMembership, User};
+    use qd_github::{PullRequestStack, StackMembership, User};
 
     use super::*;
 
@@ -147,6 +146,7 @@ mod tests {
             is_draft: false,
             is_merged,
             html_url: String::new(),
+            head_repository: None,
             head_ref: String::new(),
             head_sha: format!("head-{number}"),
             base_ref: String::new(),
@@ -179,7 +179,7 @@ mod tests {
         let layer_mode = ReviewTarget::decide(
             StackReviewMode::Layer,
             &pull_request(1, true),
-            Some(&stack),
+            Some(&stack.layers),
             None,
         );
         assert_eq!(layer_mode, ReviewTarget::Layer);
@@ -216,7 +216,7 @@ mod tests {
         let range = combined(ReviewTarget::decide(
             StackReviewMode::Combined,
             &pull_request(3, true),
-            Some(&stack),
+            Some(&stack.layers),
             None,
         ));
         assert_eq!((range.first_number, range.last_number), (2, 3));
@@ -235,21 +235,21 @@ mod tests {
         let from_first = combined(ReviewTarget::decide(
             StackReviewMode::Combined,
             &shown,
-            Some(&stack),
+            Some(&stack.layers),
             Some(1),
         ));
         assert_eq!(from_first.first_number, 1);
         let from_above = combined(ReviewTarget::decide(
             StackReviewMode::Combined,
             &shown,
-            Some(&stack),
+            Some(&stack.layers),
             Some(3),
         ));
         assert_eq!(from_above.first_number, 1);
         let from_itself = combined(ReviewTarget::decide(
             StackReviewMode::Combined,
             &shown,
-            Some(&stack),
+            Some(&stack.layers),
             Some(2),
         ));
         assert_eq!(from_itself.layer_count(), 1);

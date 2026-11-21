@@ -167,7 +167,7 @@ impl PullRequestDetail {
             request: studio_request(
                 &pull_request,
                 &key.target,
-                self.stack(),
+                self.review_layers(),
                 self.loaded_files(),
                 self.current_familiarity(),
             ),

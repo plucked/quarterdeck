@@ -41,7 +41,7 @@ impl GitHubCache {
 
         let mut statement = self.connection().prepare(
             "SELECT pr_id, pr_number, title, is_open, is_draft, is_merged, html_url,
-                    head_ref, head_sha, base_ref, base_sha, author_login
+                    head_ref, head_sha, base_ref, base_sha, author_login, head_repository
              FROM pr_stack_layers
              WHERE repo_owner = ?1 AND repo_name = ?2 AND stack_number = ?3
              ORDER BY position",
@@ -99,8 +99,8 @@ impl GitHubCache {
                 "INSERT INTO pr_stack_layers (
                     repo_owner, repo_name, stack_number, position, pr_id, pr_number, title,
                     is_open, is_draft, is_merged, html_url, head_ref, head_sha, base_ref,
-                    base_sha, author_login)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                    base_sha, author_login, head_repository)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
                 params![
                     stack.repo.owner,
                     stack.repo.name,
@@ -117,7 +117,7 @@ impl GitHubCache {
                     layer.head_sha,
                     layer.base_ref,
                     layer.base_sha,
-                    layer.author_login
+                    layer.author_login, layer.head_repository
                 ],
             )?;
         }
@@ -151,6 +151,7 @@ fn stack_layer_from_row(row: &Row<'_>) -> rusqlite::Result<StackLayer> {
         base_ref: row.get(9)?,
         base_sha: row.get(10)?,
         author_login: row.get(11)?,
+        head_repository: row.get(12)?,
     })
 }
 
@@ -167,6 +168,7 @@ mod tests {
             is_draft: number == 2,
             is_merged: false,
             html_url: String::new(),
+            head_repository: Some("octo/example".into()),
             head_ref: format!("branch-{number}"),
             head_sha: format!("h{number}"),
             base_ref: base_ref.into(),

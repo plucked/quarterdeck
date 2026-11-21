@@ -13,7 +13,7 @@ use crate::{GitHubCache, PullRequestListKey};
 /// The columns [`pull_request_from_row`] reads, in order, from `pull_requests p`.
 const PULL_REQUEST_COLUMNS: &str = "p.id, p.repo_owner, p.repo_name, p.number, p.title, p.body,
     p.author_login, p.author_avatar_url, p.html_url, p.draft, p.created_at, p.updated_at,
-    p.stack_number, p.stack_position, p.stack_size, p.stack_base_ref, p.head_ref, p.base_ref, p.viewer_review";
+    p.stack_number, p.stack_position, p.stack_size, p.stack_base_ref, p.head_ref, p.base_ref, p.viewer_review, p.head_repository, p.default_branch, p.head_oid, p.base_oid";
 
 impl GitHubCache {
     /// Replaces the members of a list with `pull_requests`, in that order,
@@ -186,9 +186,9 @@ fn upsert_pull_request_row(
             id, repo_owner, repo_name, number, title, body, author_login,
             author_avatar_url, html_url, draft, created_at, updated_at, fetched_at,
             stack_number, stack_position, stack_size, stack_base_ref, head_ref, base_ref,
-            viewer_review)
+            viewer_review, head_repository, default_branch, head_oid, base_oid)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-            ?18, ?19, ?20)
+            ?18, ?19, ?20, ?21, ?22, ?23, ?24)
          ON CONFLICT (id) DO UPDATE SET
             repo_owner        = excluded.repo_owner,
             repo_name         = excluded.repo_name,
@@ -208,7 +208,11 @@ fn upsert_pull_request_row(
             stack_base_ref    = excluded.stack_base_ref,
             head_ref          = excluded.head_ref,
             base_ref          = excluded.base_ref,
-            viewer_review     = excluded.viewer_review",
+            viewer_review     = excluded.viewer_review,
+            head_repository = excluded.head_repository,
+            default_branch = excluded.default_branch,
+            head_oid = excluded.head_oid,
+            base_oid = excluded.base_oid",
         params![
             id,
             pull_request.repo.owner,
@@ -230,6 +234,14 @@ fn upsert_pull_request_row(
             branches.map(|branches| branches.head_ref.as_str()),
             branches.map(|branches| branches.base_ref.as_str()),
             pull_request.viewer_review.map(viewer_review_as_sql_text),
+            branches.and_then(|branch| branch.head_repository.as_deref()),
+            branches.and_then(|branch| branch.default_branch.as_deref()),
+            branches
+                .and_then(|branch| branch.revision.as_ref())
+                .map(|rev| &rev.head_sha),
+            branches
+                .and_then(|branch| branch.revision.as_ref())
+                .map(|rev| &rev.base_sha),
         ],
     )?;
     Ok(())
@@ -270,9 +282,19 @@ fn pull_request_from_row(row: &Row<'_>) -> rusqlite::Result<PullRequest> {
 fn branches_from_row(row: &Row<'_>) -> rusqlite::Result<Option<PullRequestBranches>> {
     let head_ref: Option<String> = row.get(16)?;
     let base_ref: Option<String> = row.get(17)?;
-    Ok(head_ref
-        .zip(base_ref)
-        .map(|(head_ref, base_ref)| PullRequestBranches { head_ref, base_ref }))
+    let Some((head_ref, base_ref)) = head_ref.zip(base_ref) else {
+        return Ok(None);
+    };
+    let head_sha: Option<String> = row.get(21)?;
+    Ok(Some(PullRequestBranches {
+        head_ref,
+        base_ref,
+        head_repository: row.get(19)?,
+        default_branch: row.get(20)?,
+        revision: head_sha
+            .zip(row.get(22)?)
+            .map(|(head_sha, base_sha)| qd_github::PullRequestRevision { head_sha, base_sha }),
+    }))
 }
 
 /// The stack columns of a pull request row; `None` unless all are set.
@@ -354,6 +376,12 @@ mod tests {
         stored.branches = Some(PullRequestBranches {
             head_ref: "feat/x".into(),
             base_ref: "main".into(),
+            head_repository: Some("octo/fork".into()),
+            default_branch: Some("trunk".into()),
+            revision: Some(qd_github::PullRequestRevision {
+                head_sha: "head".into(),
+                base_sha: "base".into(),
+            }),
         });
         stored.viewer_review = Some(qd_github::ViewerReview::ChangesRequested);
         cache

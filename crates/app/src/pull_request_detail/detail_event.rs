@@ -7,6 +7,11 @@ pub enum DetailEvent {
     Scrolled,
     /// The user asked to show another layer of the shown stack.
     OpenLayer(LayerRequest),
+    /// Navigate within the branch-derived queue tree.
+    OpenQueueLayer {
+        repo: qd_github::RepoRef,
+        number: u64,
+    },
     /// A merge, close or submitted review may change queue membership.
     PullRequestChanged(u64),
     /// The files shown are of another target (one layer or combined

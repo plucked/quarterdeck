@@ -45,10 +45,7 @@ fn stack_mode_choice(
     detail: &PullRequestDetail,
     handle: &WeakEntity<PullRequestDetail>,
 ) -> Option<impl IntoElement + use<>> {
-    let is_stacked = detail
-        .pull_request()
-        .is_some_and(|pull_request| pull_request.stack.is_some());
-    if !is_stacked || !detail.brief().mode.shows_diff() {
+    if !detail.has_review_stack() || !detail.brief().mode.shows_diff() {
         return None;
     }
     let mode = detail.review_mode();

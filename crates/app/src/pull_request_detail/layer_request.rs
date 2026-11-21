@@ -43,6 +43,7 @@ mod tests {
             is_draft: false,
             is_merged: false,
             html_url: String::new(),
+            head_repository: None,
             head_ref: String::new(),
             head_sha: String::new(),
             base_ref: String::new(),

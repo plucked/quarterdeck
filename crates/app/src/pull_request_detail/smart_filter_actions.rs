@@ -79,7 +79,7 @@ impl PullRequestDetail {
             request: studio_request(
                 &pull_request,
                 self.target(),
-                self.stack(),
+                self.review_layers(),
                 self.loaded_files(),
                 ReaderFamiliarity::default(),
             ),

@@ -9,6 +9,8 @@ use qd_github::PullRequestStack;
 /// combined) is the reader's preference and lives beside it, not in it.
 #[derive(Default)]
 pub struct StackState {
+    /// A branch-derived path for reading. Native operations use only `loaded`.
+    pub(super) queue_path: Option<Vec<qd_github::StackLayer>>,
     /// The stack with its layers, once loaded (from the cache, then GitHub).
     pub(super) loaded: Option<PullRequestStack>,
     /// Whether the stack is being read or checked with GitHub.

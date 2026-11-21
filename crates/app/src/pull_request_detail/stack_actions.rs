@@ -17,9 +17,8 @@ impl PullRequestDetail {
     /// shown layer, with the open layers below it once the stack is
     /// known), or at nothing.
     pub(super) fn follow_checks(&mut self, cx: &mut Context<Self>) {
-        let layers_below: Vec<u64> = match (self.stack.loaded.as_ref(), self.current_layer_index())
-        {
-            (Some(stack), Some(current)) => stack.layers[..current]
+        let layers_below: Vec<u64> = match (self.review_layers(), self.review_layer_index()) {
+            (Some(layers), Some(current)) => layers[..current]
                 .iter()
                 .filter(|layer| layer.is_open)
                 .map(|layer| layer.number)
@@ -57,7 +56,7 @@ impl PullRequestDetail {
                 ReviewTarget::decide(
                     self.review_mode,
                     pull_request,
-                    self.stack.loaded.as_ref(),
+                    self.review_layers(),
                     self.stack.combined_start,
                 )
             })
@@ -87,6 +86,7 @@ impl PullRequestDetail {
             ))
         }) else {
             self.stack.stop_loading();
+            self.stack.error = None;
             return;
         };
         let cache = self.services.cache.clone();
@@ -177,11 +177,7 @@ impl PullRequestDetail {
 
     /// Switches between one layer and combined layers (`c`), and saves it.
     pub fn toggle_review_mode(&mut self, cx: &mut Context<Self>) {
-        let is_stacked = self
-            .pull_request
-            .as_ref()
-            .is_some_and(|pull_request| pull_request.stack.is_some());
-        if !is_stacked {
+        if !self.has_review_stack() {
             return;
         }
         self.review_mode = self.review_mode.toggled();
@@ -208,14 +204,6 @@ impl PullRequestDetail {
         }
     }
 
-    /// Whether the files shown (or awaited) are a combined stack review.
-    pub fn is_combined_review(&self) -> bool {
-        match self.target {
-            ReviewTarget::Combined(_) | ReviewTarget::AwaitingStack => true,
-            ReviewTarget::Layer => false,
-        }
-    }
-
     /// Sets the review mode, from the header's control.
     pub(super) fn set_review_mode(&mut self, mode: StackReviewMode, cx: &mut Context<Self>) {
         if self.review_mode != mode {
@@ -232,12 +220,16 @@ impl PullRequestDetail {
         number: u64,
         cx: &mut Context<Self>,
     ) -> bool {
-        let index = self
-            .stack
-            .loaded
+        if self
+            .pull_request
             .as_ref()
-            .filter(|stack| stack.repo == *repo)
-            .and_then(|stack| stack.layers.iter().position(|layer| layer.number == number));
+            .is_none_or(|request| &request.repo != repo)
+        {
+            return false;
+        }
+        let index = self
+            .review_layers()
+            .and_then(|layers| layers.iter().position(|layer| layer.number == number));
         let Some(index) = index else {
             return false;
         };
@@ -249,16 +241,14 @@ impl PullRequestDetail {
     /// review; a layer above the shown one is not a start.
     fn set_combined_start(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(number) = self
-            .stack
-            .loaded
-            .as_ref()
-            .and_then(|stack| stack.layers.get(index))
+            .review_layers()
+            .and_then(|layers| layers.get(index))
             .map(|layer| layer.number)
         else {
             return;
         };
         if self
-            .current_layer_index()
+            .review_layer_index()
             .is_none_or(|current| index > current)
         {
             return;
@@ -272,8 +262,24 @@ impl PullRequestDetail {
         cx.notify();
     }
 
+    fn review_layer_index(&self) -> Option<usize> {
+        let number = self.pull_request.as_ref()?.number;
+        self.review_layers()?
+            .iter()
+            .position(|layer| layer.number == number)
+    }
+
     /// Asks the owner to show layer `index` of the stack.
     pub(super) fn open_layer(&mut self, index: usize, cx: &mut Context<Self>) {
+        if let Some(path) = &self.stack.queue_path {
+            if let (Some(request), Some(layer)) = (&self.pull_request, path.get(index)) {
+                cx.emit(DetailEvent::OpenQueueLayer {
+                    repo: request.repo.clone(),
+                    number: layer.number,
+                });
+            }
+            return;
+        }
         let Some(request) = self
             .stack
             .loaded
@@ -297,7 +303,7 @@ impl PullRequestDetail {
 
     /// Shows the layer above or below the shown one.
     fn open_neighbour_layer(&mut self, direction: FileDirection, cx: &mut Context<Self>) {
-        let Some(current) = self.current_layer_index() else {
+        let Some(current) = self.review_layer_index() else {
             return;
         };
         let target = match direction {
