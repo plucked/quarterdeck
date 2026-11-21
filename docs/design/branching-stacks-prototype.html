@@ -1,0 +1,440 @@
+<!doctype html>
+<!-- Standalone Quarterdeck design prototype. Compare ?variant=tree, map, or paths. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Branching stacks · Quarterdeck design proposal</title>
+<style>
+@font-face {font-family:Schibsted;src:local("Schibsted Grotesk"),url("../../crates/app/assets/fonts/SchibstedGrotesk-Regular.ttf")}
+@font-face {font-family:Schibsted;src:local("Schibsted Grotesk Bold"),url("../../crates/app/assets/fonts/SchibstedGrotesk-Bold.ttf");font-weight:700}
+@font-face {font-family:JetBrains;src:local("JetBrains Mono"),url("../../crates/app/assets/fonts/JetBrainsMono-Regular.ttf")}
+:root {--paper:#f6f6f2;--ink:#20231f;--soft:#595e59;--blue:#214e9e;--line:#d6d8d1;--ui:Schibsted,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--mono:JetBrains,ui-monospace,Menlo,monospace}
+* {box-sizing:border-box}
+body {margin:0;background:var(--paper);color:var(--ink);font:15px/1.45 var(--ui);padding-bottom:34px}
+button,select {font:inherit;color:inherit}
+button,a,select,summary {touch-action:manipulation}
+button {cursor:pointer}
+button {background:none;border:0}
+:focus-visible {outline:3px solid #739ff6;outline-offset:3px}
+::selection {background:#bcd5fe;color:#17283d}
+a {color:inherit;text-underline-offset:.24em}
+h1,h2,h3,p {margin:0}
+code,.mono {font-family:var(--mono);font-size:.91em}
+.icon {width:16px;height:16px;display:inline-block;vertical-align:-.18em;flex:none;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.wrap {width:min(1224px,calc(100% - clamp(32px,7vw,104px)));margin:auto}
+.mast {border-bottom:1px solid var(--line)}
+.mast .wrap,.brand,.notes-link,.windowbar,.controls,.group-top,.titleline,.file-title,.source,.route-label,.scope-switch,.range-head,.detail-id {display:flex;align-items:center}
+.mast .wrap {min-height:62px;justify-content:space-between}
+.brand {gap:10px;letter-spacing:-.025em;font-size:17px}
+.symbol {width:27px;height:27px;background:var(--ink);color:var(--paper);border-radius:7px;display:grid;place-items:center}
+.symbol .icon {width:18px;height:18px}
+.mast .doc {margin-left:6px;padding-left:16px;border-left:1px solid var(--line);font-size:13px;color:var(--soft);letter-spacing:0}
+.notes-link {gap:7px;text-decoration:none;font-weight:700;font-size:13px}
+.notes-link:hover {color:var(--blue)}
+.intro {display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin:29px 0 22px}
+h1 {font-size:clamp(36px,4.3vw,62px);line-height:1.1;letter-spacing:-.04em}
+.intro p {margin-top:8px;color:var(--soft);font-size:clamp(14px,1.3vw,17px);max-width:66ch;text-wrap:pretty}
+.controls {justify-content:space-between;gap:12px;margin:0 0 12px}.example {display:flex;align-items:center;gap:9px;flex:none;font-size:12px;color:var(--soft)}
+select {appearance:none;background:transparent;cursor:pointer}
+.select-wrap {display:flex;align-items:center;position:relative}
+.select-wrap select {padding:7px 34px 7px 12px;border:1px solid #bfc3bc;border-radius:7px;color:var(--ink);font-weight:700;font-size:13px;background:#fdfdfa;width:100%}
+.select-wrap .icon {position:absolute;pointer-events:none;right:10px;width:13px}
+.window {--surface:#1c1e21;--sidebar:#17191c;--border:#35383e;--text:#e5e3df;--muted:#abb1b8;--dim:#9099a4;--accent:#95cbfe;--active:#243b52;--wire:#687681;--mark:#8ce199;background:var(--surface);color:var(--text);border-radius:12px;overflow:hidden;box-shadow:0 9px 27px #17191c1f;color-scheme:dark}
+.windowbar {position:relative;justify-content:center;height:35px;background:#222529;border-bottom:1px solid var(--border);font-weight:700;font-size:12px;color:#ccd0d2}
+.lights {position:absolute;left:15px;display:flex;gap:6px}
+.lights i {width:9px;height:9px;border-radius:100%;background:#ef7f71}
+.lights i:nth-child(2) {background:#f0bd61}
+.lights i:nth-child(3) {background:#81bd80}
+.workspace {display:grid;grid-template-columns:minmax(315px,32%) minmax(0,1fr);min-height:490px}
+.queue {min-width:0;padding:20px 13px 20px;background:var(--sidebar);border-right:1px solid var(--border)}
+.queue-title {display:flex;gap:9px;align-items:center;margin:0 8px 20px;font-size:16px;font-weight:700}
+.count {padding:1px 7px;font:11px/1.6 var(--mono);color:var(--muted);border-radius:5px;background:#2a2d32}
+.repo {font-weight:700;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:7px;margin:0 7px 9px}
+.group-top {width:100%;padding:10px 8px;gap:9px;text-align:left;border-radius:6px;background:#24282d}
+.group-top:hover {background:#2b3036}
+.group-top .group-icon {width:24px;height:24px;color:var(--accent)}
+.group-name {font-weight:700;font-size:13px}
+.group-info {display:block;margin-top:1px;font-size:11px;color:var(--muted)}
+.chev {margin-left:auto;transition:transform .15s ease-out}
+[aria-expanded="true"] > .chev {transform:rotate(90deg)}
+.queue-body {margin:6px 0}
+.tree,.tree ul,.map,.map ul {margin:0;padding:0;list-style:none}
+.tree {margin-left:6px}
+.tree ul {margin-left:17px}
+.tree li,.tree .pr-row {position:relative}
+.tree ul > li:not(:last-child)::before {content:"";position:absolute;left:-6px;top:0;bottom:0;border-left:1px solid var(--wire)}
+.tree ul > li > .pr-row::before {content:"";position:absolute;left:-7px;top:-1px;bottom:50%;width:10px;border:solid var(--wire);border-width:0 0 1px 1px;pointer-events:none}
+.tree li:has(>ul) > .pr-row::after {content:"";position:absolute;left:10px;top:calc(50% + 6px);bottom:-1px;border-left:1px solid var(--wire);pointer-events:none}
+.tree .pr-row {padding-left:2px}
+.pr-row {display:flex;align-items:center;gap:7px;width:100%;border:1px solid transparent;text-align:left;border-radius:6px;padding:6px;min-height:47px;background:transparent}
+.pr-row:hover,.route-choice:hover {background:#242a30}
+.pr-row.selected,.map-node.selected {background:var(--active);border-color:#45627e;color:#eef6ff}
+.pr-row.context {color:#b0b6bd}
+.pr-row .node-dot {width:12px;height:12px;margin:0 2px;flex:none;border-radius:50%;background:var(--sidebar);border:2px solid var(--wire)}
+.on-route > .pr-row .node-dot,.pr-row.selected .node-dot {border-color:var(--accent)}
+.pr-row.selected .node-dot {background:var(--accent);box-shadow:inset 0 0 0 2px var(--active)}
+.row-text {min-width:0;flex:1}
+.row-name {display:block;line-height:1.3;font-weight:700;font-size:13px}
+.row-meta {display:block;color:var(--muted);margin-top:2px;font:10.5px/1.35 var(--mono);overflow-wrap:anywhere}
+.tag {flex:none;background:#20364a;color:#a9d5ff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700}
+.solo {border-top:1px solid var(--border);margin-top:12px;padding-top:10px}
+.solo .node-dot {border-color:var(--mark)}
+.detail {min-width:0;padding:22px clamp(16px,2.6vw,37px) 23px}
+.detail-id {gap:7px;font:12px var(--mono);color:var(--accent);margin-bottom:7px}
+.detail-id .icon {width:15px}
+.titleline {gap:10px;flex-wrap:wrap}
+.titleline h2 {font-size:clamp(23px,2.3vw,34px);letter-spacing:-.035em;line-height:1.16}
+.refs {display:block;margin-top:6px;color:var(--muted);font:11.5px/1.6 var(--mono);overflow-wrap:anywhere}
+.review-block {margin-top:21px}
+.range-head {justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.range-head h3,.file-title {font-size:14px;font-weight:700}
+.scope-switch {padding:2px;border:1px solid #41464e;border-radius:7px;background:var(--sidebar);font-size:11px}
+.scope-switch button {border-radius:4px;padding:4px 10px;color:var(--muted)}
+.scope-switch button[aria-pressed="true"] {background:#364651;color:#eff6fa}
+.scope-switch button:hover {color:white}
+.route {padding:13px 14px;background:#22262b;border:1px solid var(--border);border-radius:8px}
+.route-flow {display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.route-flow .icon {width:13px;color:var(--dim)}
+.base {color:var(--muted);font:11px var(--mono)}
+.crumb {font:11px var(--mono);border:1px solid #505c68;padding:3px 6px;border-radius:4px;color:#ced9e4}
+.crumb:hover {background:#33404b}
+.crumb.current {border-color:#5981a5;color:#b7ddff;background:var(--active)}
+.range-caption {font-size:12px;color:#c6cbd0;margin-top:9px;line-height:1.5}
+.evidence {display:flex;align-items:baseline;gap:6px;margin:8px 1px 0;color:var(--muted);font-size:11px}
+.evidence .icon {width:12px;height:12px;align-self:flex-start;margin-top:2px;color:var(--accent)}
+.file-title {gap:7px;margin:17px 0 6px}
+.file-title small {margin-left:auto;color:var(--dim);font-weight:400;font-size:11px}
+.file-list {margin:0;padding:0;list-style:none}
+.file-list li {border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:7px 0;font:11px var(--mono)}
+.file-list .icon {color:var(--dim);width:13px;height:13px}
+.file-list .file-path {min-width:0;overflow-wrap:anywhere}
+.file-list .num {color:var(--muted);margin-left:auto;flex:none}
+.file-list .delta {color:var(--accent);width:4ch;text-align:right}
+.caption {display:flex;align-items:baseline;gap:10px;margin:15px 0 23px;font-size:13px;color:var(--soft)}
+.caption strong {color:var(--ink);white-space:nowrap}
+.design-notes {border:solid var(--line);border-width:1px 0;scroll-margin-top:18px}
+.design-notes summary {cursor:pointer;padding:15px 0;display:flex;align-items:center;gap:8px;list-style:none;font-weight:700}
+.design-notes summary::-webkit-details-marker {display:none}
+.design-notes[open] summary .icon {transform:rotate(90deg)}
+.notes-body {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 42px;padding:6px 0 26px}
+.notes-body h3 {font-size:15px;margin-bottom:5px}
+.notes-body p {color:var(--soft);line-height:1.6;font-size:13px}
+.dock {background:#fffefa;color:var(--ink);border:1px solid #c7cbc4;border-radius:12px;display:flex;align-items:center;gap:3px;padding:5px;max-width:calc(100% - 14px)}
+.dock button {display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;padding:7px 11px;border-radius:7px;font-size:12px;font-weight:700}
+.dock button:hover {background:#eaede8}
+.dock .choice[aria-pressed="true"] {background:#273128;color:#fffefa}
+.dock .step {color:#475146;padding:8px 5px}
+.dock .step .icon {width:13px;height:13px}
+.flip {transform:rotate(180deg)}
+.map-box {border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:17px;overflow-x:auto;background:#202429}
+.map-box h3 {font-size:13px;margin-bottom:12px}
+.map,.map ul {display:flex;flex-direction:column;gap:10px}
+.map li {display:flex;align-items:center;position:relative}
+.map ul {margin-left:20px;position:relative}
+.map ul > li::before,.map ul > li::after {content:"";position:absolute;left:-11px;width:11px;pointer-events:none}
+.map ul > li::before {top:50%;border-top:1px solid var(--wire)}
+.map ul > li::after {top:-5px;bottom:-5px;border-left:1px solid var(--wire)}
+.map ul > li:first-child::after {top:50%}
+.map ul > li:last-child::after {bottom:50%}
+.map li:has(>ul) > .map-node::after {content:"";position:absolute;left:100%;top:50%;width:10px;border-top:1px solid var(--wire)}
+.map-node {position:relative;min-width:77px;padding:6px 8px;border:1px solid #4b5259;background:#272d33;color:#d1d5d9;border-radius:5px;text-align:left}
+.map-node:hover {border-color:var(--accent)}
+.map-node b {font:11px var(--mono)}
+.map-node span {display:block;font:10px var(--mono);color:var(--muted)}
+.route-choice {width:100%;text-align:left;padding:8px;border-radius:5px;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px}
+.route-choice.active {color:var(--accent);background:#222c35}
+.route-choice .chev {width:12px}
+.route-list {padding-left:12px;border-left:1px solid var(--wire);margin:2px 0 8px 13px}
+.open-map {width:100%;padding:9px 8px;text-align:left;border-radius:5px;font-size:12px;color:var(--accent);display:flex;align-items:center;gap:8px}
+.open-map:hover {background:#242a30}
+.mobile-back {display:none}
+.state-note {color:var(--muted);font-size:12px;margin:8px}
+@media(max-width:820px) {.workspace{grid-template-columns:minmax(275px,40%) minmax(0,1fr)}.wrap{width:calc(100% - 32px)}.detail{padding:17px 15px}.queue{padding:17px 9px}.intro{margin-top:22px}}
+@media(max-width:650px) {.controls{flex-wrap:wrap;align-items:center;gap:9px}.controls .example{font-size:11px}.dock{max-width:100%}.mobile-back{display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-size:12px;padding:0 0 12px;text-decoration:none}.mobile-back .icon{width:12px}.workspace{display:block}.queue{border-right:0;border-bottom:1px solid var(--border)}.queue-title{margin-bottom:10px}.intro{align-items:flex-start;flex-direction:column;gap:12px}.example{display:flex;align-items:center;gap:10px}.mast .wrap{min-height:49px}.brand .doc{font-size:11px;padding-left:9px;margin-left:1px}.brand{gap:7px;font-size:15px}.notes-link{font-size:12px}.detail{padding:20px 15px}.notes-body{grid-template-columns:1fr}.caption{display:block}.caption strong{display:block;margin-bottom:4px}.dock button{padding:7px 8px;font-size:11px}.dock .choice .icon{display:none}.map-box{padding:10px}.map ul{margin-left:16px}.map-node{min-width:68px}.wrap{width:calc(100% - 24px)}}
+@media(prefers-reduced-motion:reduce) {*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="mast"><div class="wrap">
+  <div class="brand"><span class="symbol" data-icon="tree"></span><b>Quarterdeck</b><span class="doc">Design proposal</span></div>
+  <a class="notes-link" href="#notes" id="notes-link">Design notes <span data-icon="down"></span></a>
+</div></header>
+<main class="wrap">
+  <div class="intro">
+    <div><h1>Branching stacks</h1><p>See which pull requests build on each other and choose one path to review.</p></div>
+  </div>
+  <div class="controls">
+    <nav class="dock" aria-label="Compare proposed layouts">
+  <button class="step" data-step="-1" aria-label="Previous layout" title="Previous layout (←)"><span class="flip" data-icon="right"></span></button>
+  <button class="choice" data-variant="tree"><span data-icon="tree"></span>Queue tree</button>
+  <button class="choice" data-variant="map"><span data-icon="map"></span>Stack map</button>
+  <button class="choice" data-variant="paths"><span data-icon="paths"></span>Tip paths</button>
+  <button class="step" data-step="1" aria-label="Next layout" title="Next layout (→)"><span data-icon="right"></span></button>
+</nav>
+    <label class="example">Example <span class="select-wrap"><select id="scenario">
+      <option value="inferred">Branch matches</option><option value="mixed">Mixed stack</option><option value="native">GitHub stack</option>
+    </select><span data-icon="down"></span></span></label>
+  </div>
+  <section class="window" aria-label="Interactive Quarterdeck review queue with example pull requests">
+    <div class="windowbar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>Quarterdeck</div>
+    <div class="workspace">
+      <aside class="queue" id="queue" aria-label="Review queue" tabindex="-1"><h2 class="queue-title">To review <span class="count" id="request-count"></span></h2><div class="repo"><span data-icon="repo"></span>plucked / quarterdeck</div><div id="queue-content"></div></aside>
+      <section class="detail" id="detail" aria-label="Selected pull request" tabindex="-1"></section>
+    </div>
+  </section>
+  <noscript><p>This mockup uses JavaScript to select PRs. In the example, #416 and #418 both target the branch introduced by #412. #421 builds on #416. Its combined review includes #412, #416 and #421.</p></noscript>
+  <p class="caption" id="caption"></p>
+  <details class="design-notes" id="notes"><summary><span data-icon="right"></span> Design notes</summary>
+    <div class="notes-body">
+      <section><h3>How a PR gets a parent</h3><p>Use the order supplied by a GitHub stack first. For other links, match a child’s base repository and branch to one known open PR’s head repository and branch. Multiple children can match the same parent. Treat the default branch as a boundary. Unrelated PRs into <code>main</code> stay separate.</p></section>
+      <section><h3>What a combined review covers</h3><p>Walk from the lowest unmerged ancestor to the selected PR. Compare the first layer’s base with the selected head. The other side of a fork stays outside the diff. Layer mode shows the selected PR’s own changes.</p></section>
+      <section><h3>What the queue counts</h3><p>Show the connected stack when any member needs review. Only requested PRs count toward “To review”. Dimmed ancestors remain selectable. A group header folds the group, leaving the selected PR and review path in place.</p></section>
+      <section><h3>When evidence is incomplete</h3><p>Start with PRs already known to Quarterdeck. Missing branch or fork identity, ambiguous parents, and links that would form a cycle leave the inferred connection unresolved. Recompute links after a retarget. Preserve selection by repository and PR number.</p></section>
+      <section><h3>What inference enables</h3><p>A branch match groups PRs for navigation and combined reading. GitHub’s declared stack controls its native stack actions. For an inferred link, merge still targets the individual PR.</p></section>
+      <section><h3>Decision for this prototype</h3><p>Try switching from #421 to #418, on the other side of the fork. Which view makes it easiest to tell that they share #412 and which changes you would review? If two PRs target the same feature branch but its parent PR is missing, should that branch appear as a group? This proposal waits for a known parent PR.</p></section>
+    </div>
+  </details>
+</main>
+
+<script>
+"use strict";
+const paths = {
+  tree: '<path d="M5 4v12a3 3 0 0 0 3 3h8M5 9h11"/><circle cx="18" cy="9" r="2"/><circle cx="18" cy="19" r="2"/>',
+  map: '<rect x="2" y="9" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="16" y="15" width="5" height="5" rx="1"/><path d="M7 11.5h4.5v-6H16m-4.5 6v6H16"/>',
+  paths: '<path d="M3 6h11m-4-4 4 4-4 4M3 17h17m-4-4 4 4-4 4"/>',
+  right:'<path d="m9 5 7 7-7 7"/>', down:'<path d="m6 9 6 6 6-6"/>',
+  repo:'<path d="M5 5a2 2 0 0 1 2-2h12v17H7a2 2 0 0 1-2-2Zm0 12a2 2 0 0 1 2-2h12M9 6h5"/>',
+  pr:'<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7v10m12 0v-6a6 6 0 0 0-6-6m2-3-3 3 3 3"/>',
+  link:'<path d="m9 15 6-6m-2-1 2-2a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-4 1m-2 1-2 2a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 4-1"/>',
+  file:'<path d="M6 3h8l5 5v13H6Zm8 0v6h5"/>',
+  arrow:'<path d="M3 12h17m-5-5 5 5-5 5"/>'
+};
+function icon(name, extra = '') {
+  return '<svg aria-hidden="true" class="icon ' + extra + '" viewBox="0 0 24 24">' + paths[name] + '</svg>';
+}
+document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
+const repo = 'plucked/quarterdeck';
+const records = [
+  {id:412, title:'Index review notes', head:'notes/index', base:'main', file:'src/notes/index.rs', added:48},
+  {id:416, title:'Search review notes', head:'notes/search', base:'notes/index', file:'src/notes/search.rs', added:32},
+  {id:421, title:'Highlight search matches', head:'notes/highlights', base:'notes/search', file:'src/notes/highlights.rs', added:19, requested:true},
+  {id:418, title:'Export review notes', head:'notes/export', base:'notes/index', file:'src/notes/export.rs', added:26, requested:true},
+  {id:429, title:'Keep the selected file on refresh', head:'queue/selection', base:'main', file:'src/queue/selection.rs', added:12, requested:true}
+].map(pr => ({...pr, baseRepo:repo, headRepo:repo}));
+const layouts = {
+  tree:['Queue tree', 'Trace the fork beside the PR titles. The full tree stays visible while you review either side.'],
+  map:['Stack map', 'Keep the queue compact and pick a PR on the map. The overview takes space in the review pane.'],
+  paths:['Tip paths', 'Choose a tip to follow one route at a time. Shared ancestors appear on each route that includes them.']
+};
+const examples = {
+  inferred:{name:'Branch matches', declared:[], ids:[412,416,418,421,429]},
+  mixed:{name:'Mixed stack', declared:[412,416,421], ids:[412,416,418,421,429]},
+  native:{name:'GitHub stack', declared:[412,416,421], ids:[412,416,421,429]}
+};
+const url = new URL(location.href);
+let variant = Object.hasOwn(layouts,url.searchParams.get('variant')) ? url.searchParams.get('variant') : 'tree';
+let scenario = Object.hasOwn(examples,url.searchParams.get('example')) ? url.searchParams.get('example') : 'inferred';
+let selected = 421, tip = 421, mode = 'combined', folded = false;
+const groupRoot = 412;
+function graph(example) {
+  const items = records.filter(pr => example.ids.includes(pr.id));
+  const byId = new Map(items.map(pr => [pr.id,pr]));
+  const parent = new Map(), source = new Map();
+  for (const pr of items) {
+    const position = example.declared.indexOf(pr.id);
+    if (position > 0) {
+      parent.set(pr.id,example.declared[position - 1]);
+      source.set(pr.id,'GitHub stack');
+    } else if (pr.base && pr.baseRepo && pr.base !== 'main') {
+      const matches = items.filter(candidate => candidate.id !== pr.id &&
+        candidate.head === pr.base && candidate.headRepo === pr.baseRepo);
+      if (matches.length === 1) {
+        parent.set(pr.id,matches[0].id);
+        source.set(pr.id,'Branch match');
+      }
+    }
+  }
+  // Drop inferred edges in a cycle before traversing ancestry.
+  for (const pr of items) {
+    const visited = [];
+    let id = pr.id;
+    while (parent.has(id)) {
+      const seenAt = visited.indexOf(id);
+      if (seenAt !== -1) {
+        for (const member of visited.slice(seenAt)) {
+          if (source.get(member) === 'Branch match') {
+            parent.delete(member);
+            source.delete(member);
+          }
+        }
+        break;
+      }
+      visited.push(id);
+      id = parent.get(id);
+    }
+  }
+  const children = id => items.filter(pr => parent.get(pr.id) === id).sort((a,b) => a.id-b.id);
+  function ancestry(id) {
+    const path = [id];
+    while (parent.has(path[0])) path.unshift(parent.get(path[0]));
+    return path;
+  }
+  return {items,byId,parent,source,children,ancestry};
+}
+function row(pr, path) {
+  const active = selected === pr.id;
+  return `<button class="pr-row ${active?'selected':''} ${pr.requested?'':'context'}" data-pr="${pr.id}" aria-pressed="${active}">
+    <span class="node-dot"></span><span class="row-text"><span class="row-name">${pr.title}</span>
+    <span class="row-meta">#${pr.id} · ${pr.head}</span></span>${pr.requested && path?'<span class="tag">Review</span>':''}</button>`;
+}
+function drawTree(g, id, isMap) {
+  const pr = g.byId.get(id), children = g.children(id);
+  const path = g.ancestry(selected);
+  const content = isMap ? `<button class="map-node ${id === selected?'selected':''}" data-pr="${id}" aria-pressed="${id === selected}" aria-label="#${id} ${pr.title}">
+    <b>#${id}</b><span>${pr.head.split('/').pop()}</span></button>` : row(pr,true);
+  return `<li class="${path.includes(id)?'on-route':''}">${content}${children.length ? '<ul>'+children.map(child=>drawTree(g,child.id,isMap)).join('')+'</ul>' : ''}</li>`;
+}
+function drawRoutes(g, tips) {
+  return tips.map(pr => {
+    const active = pr.id === tip;
+    return `<button class="route-choice ${active?'active':''}" data-tip="${pr.id}" aria-expanded="${active}">${icon('paths')}
+      <strong>${pr.head}</strong><span>· ${g.ancestry(pr.id).length} PRs</span>${icon('right','chev')}</button>
+      ${active ? '<div class="route-list">'+g.ancestry(tip).map(id=>row(g.byId.get(id),true)).join('')+'</div>' : ''}`;
+  }).join('');
+}
+function renderQueue(g, members, tips) {
+  const requested = members.filter(pr=>pr.requested).length;
+  const source = examples[scenario].name;
+  const title = scenario === 'native' ? 'Stack #27' : 'Stack from #412';
+  const group = `<button class="group-top" data-fold aria-expanded="${!folded}">${icon('tree','group-icon')}
+    <span><span class="group-name">${title}</span><span class="group-info">${source} · ${requested} of ${members.length} to review</span></span>${icon('right','chev')}</button>`;
+  let content = '';
+  if (!folded) {
+    if (variant === 'tree') content = '<ul class="tree">'+drawTree(g,groupRoot,false)+'</ul>';
+    else if (variant === 'paths') content = drawRoutes(g,tips);
+    else content = `<button class="open-map" data-show-map>${icon('map')}${members.some(pr=>pr.id===selected)?'Focus stack map':'Open stack map'} · ${members.length} PRs</button>`;
+  }
+  document.getElementById('request-count').textContent = g.items.filter(pr=>pr.requested).length;
+  const mixedEvidence = scenario === 'mixed' && !folded
+    ? '<p class="state-note">GitHub stack #27 contains #412, #416 and #421. A branch match adds #418.</p>' : '';
+  document.getElementById('queue-content').innerHTML = group+mixedEvidence+'<div class="queue-body">'+content+'</div>'+
+    g.items.filter(pr=>!members.includes(pr)).map(pr=>'<div class="solo">'+row(pr,false)+'</div>').join('');
+}
+function renderDetail(g, members) {
+  const pr = g.byId.get(selected), inGroup = members.includes(pr);
+  const chain = g.ancestry(selected);
+  const combined = inGroup && mode === 'combined';
+  const included = combined ? chain : [selected];
+  const start = g.byId.get(included[0]);
+  const outside = members.filter(node=>!included.includes(node.id));
+  const parent = g.parent.get(selected);
+  let evidence;
+  if (parent) evidence = g.source.get(selected) === 'GitHub stack'
+    ? `GitHub stack #27 places #${selected} above #${parent}.`
+    : `Branch match · #${selected} targets <code>${pr.base}</code>, the head of #${parent}.`;
+  else evidence = inGroup ? `Root PR · #${selected} targets <code>${pr.base}</code>.`
+    : `Standalone PR · targets <code>${pr.base}</code> directly.`;
+  const map = variant === 'map' && inGroup ? `<div class="map-box"><h3>Stack map</h3><ul class="map">${drawTree(g,groupRoot,true)}</ul></div>` : '';
+  const control = inGroup ? `<div class="scope-switch" role="group" aria-label="Diff scope">
+    <button data-mode="layer" aria-pressed="${!combined}">Layer</button><button data-mode="combined" aria-pressed="${combined}">Combined</button></div>` : '';
+  const flow = included.map(id=>icon('arrow')+`<button class="crumb ${id===selected?'current':''}" data-pr="${id}" aria-label="Select #${id} ${g.byId.get(id).title}">#${id}</button>`).join('');
+  const scope = combined ? `${included.length} ${included.length===1?'PR':'PRs'} in this diff.` : `Changes from #${selected} only.`;
+  const others = combined && outside.length ? ' '+outside.map(node=>'#'+node.id).join(', ')+(outside.length===1?' is':' are')+' outside this path.' : '';
+  document.getElementById('detail').innerHTML = `<a class="mobile-back" href="#queue">${icon('right','flip')}Back to queue</a>${map}<div class="detail-id">${icon('pr')}Pull request #${selected}</div>
+    <div class="titleline"><h2>${pr.title}</h2></div><span class="refs">${pr.base} ← ${pr.head}</span>
+    <div class="review-block"><div class="range-head"><h3>${inGroup?'Review path':'Review scope'}</h3>${control}</div>
+    <div class="route"><div class="route-flow"><span class="base">${start.base}</span>${flow}</div>
+    <p class="range-caption">${scope}${others}</p></div>
+    <p class="evidence">${icon('link')}<span>${evidence}</span></p></div>
+    <div class="file-title">Changed files <span class="count">${included.length}</span><small>Example diff</small></div>
+    <ul class="file-list">${included.map(id=>{const item=g.byId.get(id);return `<li>${icon('file')}<span class="file-path">${item.file}</span><span class="num">#${id}</span><span class="delta">+${item.added}</span></li>`}).join('')}</ul>`;
+}
+function render() {
+  const g = graph(examples[scenario]);
+  const members = g.items.filter(pr=>g.ancestry(pr.id)[0]===groupRoot);
+  const tips = members.filter(pr=>!g.children(pr.id).length);
+  renderQueue(g,members,tips);
+  renderDetail(g,members);
+  document.getElementById('scenario').value = scenario;
+  document.querySelectorAll('[data-variant]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.variant === variant)));
+  document.getElementById('caption').innerHTML = '<strong>'+layouts[variant][0]+'</strong> '+layouts[variant][1];
+}
+function updateURL() {
+  const next = new URL(location.href);
+  next.searchParams.set('variant',variant);
+  next.searchParams.set('example',scenario);
+  // Some browsers restrict history changes on local files.
+  try {history.replaceState(null,'',next)} catch {location.replace(next.href)}
+}
+function chooseVariant(value) {
+  variant = value;
+  updateURL();
+  render();
+}
+function step(delta) {
+  const keys = Object.keys(layouts);
+  chooseVariant(keys[(keys.indexOf(variant)+delta+keys.length)%keys.length]);
+}
+document.addEventListener('click',event=>{
+  const button = event.target.closest('button');
+  if (!button) return;
+  const data = button.dataset;
+  if (data.variant) return chooseVariant(data.variant);
+  if (data.step) return step(Number(data.step));
+  let focusSelector;
+  if ('showMap' in data) {
+    const g = graph(examples[scenario]);
+    if (g.ancestry(selected)[0] !== groupRoot) selected = tip;
+    render();
+    document.querySelector('.map-node.selected').focus();
+    return;
+  }
+  if (data.pr) {
+    selected = Number(data.pr);
+    const g = graph(examples[scenario]);
+    if (g.ancestry(selected)[0] === groupRoot && !g.ancestry(tip).includes(selected)) {
+      tip = g.items.find(pr=>!g.children(pr.id).length && g.ancestry(pr.id).includes(selected)).id;
+    }
+    focusSelector = '.'+button.classList[0]+'[data-pr="'+selected+'"]';
+  } else if (data.tip) {
+    tip = selected = Number(data.tip);
+    focusSelector = '[data-tip="'+tip+'"]';
+  } else if ('fold' in data) {
+    folded = !folded;
+    focusSelector = '[data-fold]';
+  } else if (data.mode) {
+    mode = data.mode;
+    focusSelector = '[data-mode="'+mode+'"]';
+  } else return;
+  const fromQueue = button.closest('.queue');
+  render();
+  if (fromQueue && (data.pr || data.tip) && matchMedia('(max-width:650px)').matches) {
+    const detail = document.getElementById('detail');
+    detail.focus({preventScroll:true});
+    detail.scrollIntoView({block:'start'});
+  } else {
+    document.querySelector(focusSelector)?.focus({preventScroll:true});
+  }
+});
+document.getElementById('scenario').addEventListener('change',event=>{
+  scenario = event.target.value;
+  if (!examples[scenario].ids.includes(selected)) selected = 421;
+  if (!examples[scenario].ids.includes(tip)) tip = 421;
+  folded = false;
+  updateURL();
+  render();
+});
+document.addEventListener('keydown',event=>{
+  if (event.target.closest('input,textarea,select,[contenteditable]') || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault();
+    step(event.key === 'ArrowRight' ? 1 : -1);
+    document.querySelector('[data-variant="'+variant+'"]').focus({preventScroll:true});
+  }
+});
+document.getElementById('notes-link').addEventListener('click',()=>document.getElementById('notes').open = true);
+render();
+</script>
+</body>
+</html>
