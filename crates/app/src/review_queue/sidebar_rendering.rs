@@ -89,11 +89,18 @@ impl ReviewQueue {
             .flex()
             .flex_col()
             .gap_2()
-            .px_3()
             .pt_3()
             .pb_2()
-            .child(self.render_tabs(cx))
-            .children(status)
+            .child(
+                div()
+                    .id("queue-tabs-scroll")
+                    .flex()
+                    .overflow_x_scroll()
+                    // Auto margins center the tabs when they fit and leave the first tab
+                    // reachable when large counts need more than the sidebar's width.
+                    .child(div().flex_none().mx_auto().child(self.render_tabs(cx))),
+            )
+            .children(status.map(|line| div().px_3().child(line)))
     }
 
     /// The Mine / To review / Others tabs with their counts (Others: those its
@@ -106,7 +113,7 @@ impl ReviewQueue {
         let queue = cx.entity().downgrade();
         let show_tab = |tab| view_option(&queue, tab, ReviewQueue::show_tab);
         SegmentedControl::new("queue-tabs")
-            .fill_width()
+            .quiet()
             .option(
                 format!("Mine  {authored}"),
                 tab == QueueTab::Authored,
