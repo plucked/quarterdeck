@@ -18,5 +18,5 @@
 | `inline_changes` | `InlineChanges::between`: word (code-aware split) or char diff via `similar`, skipped below 0.4 similarity, 5 ms timeout |
 
 - UI-free; the app's `diff_view` renders it. Patches come from GitHub; no full-file diffing here: context lines come from the new file's text, numbered on the old side by the gap's fixed offset (nothing changes in a gap). `DiffHunk` keeps its header's `old_start`/`new_start` (for a side without lines, the line after which it sits).
-- Whitespace Ignore: a removed/added pair equal without whitespace becomes one context line (new text, both numbers, `LineOrigin::FoldedReplacement`); hunks left without changes are dropped.
+- Whitespace Ignore: each hunk with both removals and additions is re-diffed ignoring whitespace (`similar` Patience diff, sliding pure insertions/deletions downward across matching lines); genuine original context stays `LineOrigin::Patch`, re-paired lines become context with new text, both numbers and `LineOrigin::FoldedReplacement`; hunks left without changes are dropped.
 - Public-API tests in `tests/build_file_diff.rs`.

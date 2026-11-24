@@ -4,7 +4,8 @@ pub enum WhitespaceMode {
     /// Every change is shown, as in the patch.
     #[default]
     Show,
-    /// A removed line replaced by one equal to it but for whitespace shows
-    /// as unchanged, and whitespace-only parts of a line are not highlighted.
+    /// Re-diffs each hunk ignoring whitespace so lines differing only in
+    /// indentation or spacing show as unchanged, and whitespace-only parts of
+    /// a line are not highlighted.
     Ignore,
 }

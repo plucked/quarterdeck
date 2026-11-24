@@ -40,9 +40,4 @@ impl ChangeBlock {
     pub fn pairs(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
         self.removed.clone().zip(self.added.clone())
     }
-
-    /// The block's first and one-past-last line index.
-    pub fn span(&self) -> Range<usize> {
-        self.removed.start..self.added.end
-    }
 }

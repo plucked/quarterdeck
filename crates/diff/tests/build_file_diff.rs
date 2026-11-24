@@ -102,6 +102,186 @@ fn folds_whitespace_only_changes() {
     assert_eq!(lines[1].origin, LineOrigin::Patch);
 }
 
+/// Ignoring whitespace folds a re-indented block wrapped in a new `if`,
+/// even when the raw patch split the block across a spurious context brace or blank line.
+#[test]
+fn folds_block_wrapped_in_if_across_spurious_context() {
+    let patch = "\
+@@ -324,19 +331,21 @@ void Tick() {
+     if (active == null) {
+         return;
+     }
+ 
+-    // Multi-agent
+-    if (multi != null) {
+-        if (hold) {
+-            return;
++    if (!authorityLossImminent) {
++        // Multi-agent
++        if (multi != null) {
++            if (hold) {
++                return;
++            }
++        }
++
++        // Issuer destroyed
++        if (destroyed) {
++            abort();
+         }
+-    }
+ 
+-    // Issuer destroyed
+-    if (destroyed) {
+-        abort();
+-    }
+-
+-    if (exhausted) {
+-        stop();
++        if (exhausted) {
++            stop();
++        }
+     }
+";
+    let diff = FileDiff::build(
+        patch,
+        options(WhitespaceMode::Ignore, ChangeHighlight::Words),
+    );
+    let lines = &diff.hunks()[0].lines;
+    let changed: Vec<_> = lines
+        .iter()
+        .filter(|line| line.kind != DiffLineKind::Context)
+        .map(|line| {
+            (
+                line.kind,
+                line.old_number,
+                line.new_number,
+                line.text.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        changed,
+        [
+            (
+                DiffLineKind::Added,
+                None,
+                Some(335),
+                "    if (!authorityLossImminent) {"
+            ),
+            (DiffLineKind::Added, None, Some(351), "    }"),
+        ]
+    );
+    // Original unchanged context keeps Patch origin; re-paired lines keep FoldedReplacement.
+    assert_eq!(lines[0].origin, LineOrigin::Patch);
+    assert_eq!(lines[5].origin, LineOrigin::FoldedReplacement);
+    assert_eq!(
+        (lines[5].old_number, lines[5].new_number),
+        (Some(328), Some(336))
+    );
+}
+
+/// Ignoring whitespace folds an unwrapped block and marks only the removed wrapper lines.
+#[test]
+fn folds_unwrapped_block_and_marks_outer_closing_brace() {
+    let patch = "\
+@@ -1,7 +1,5 @@
+ before();
+-if (cond) {
+-    if (a) {
+-        foo();
+-    }
++if (a) {
++    foo();
+ }
+ after();
+";
+    let diff = FileDiff::build(
+        patch,
+        options(WhitespaceMode::Ignore, ChangeHighlight::Words),
+    );
+    let lines = &diff.hunks()[0].lines;
+    let changed: Vec<_> = lines
+        .iter()
+        .filter(|line| line.kind != DiffLineKind::Context)
+        .map(|line| {
+            (
+                line.kind,
+                line.old_number,
+                line.new_number,
+                line.text.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        changed,
+        [
+            (DiffLineKind::Removed, Some(2), None, "if (cond) {"),
+            (DiffLineKind::Removed, Some(6), None, "}"),
+        ]
+    );
+    // The trailing unchanged line stays genuine Patch context.
+    assert_eq!(lines.last().unwrap().origin, LineOrigin::Patch);
+}
+
+/// Ignoring whitespace still pairs and highlights an edited line inside a re-indented block.
+#[test]
+fn highlights_edited_line_inside_wrapped_block() {
+    let patch = "\
+@@ -1,5 +1,7 @@
+ before();
+-a();
+-foo(1);
+-b();
++if (cond) {
++    a();
++    foo(2);
++    b();
++}
+ after();
+";
+    let diff = FileDiff::build(
+        patch,
+        options(WhitespaceMode::Ignore, ChangeHighlight::Words),
+    );
+    let lines = &diff.hunks()[0].lines;
+    let removed = lines
+        .iter()
+        .find(|line| line.kind == DiffLineKind::Removed)
+        .unwrap();
+    let added = lines
+        .iter()
+        .find(|line| line.kind == DiffLineKind::Added && line.text.contains("foo"))
+        .unwrap();
+    assert_eq!(removed.text, "foo(1);");
+    assert_eq!(added.text, "    foo(2);");
+    assert_eq!(&removed.text[removed.changed_ranges[0].clone()], "1");
+    assert_eq!(&added.text[added.changed_ranges[0].clone()], "2");
+}
+
+/// Pure-addition hunks keep every original context line untouched when whitespace is ignored.
+#[test]
+fn pure_addition_hunk_preserves_original_context_origin() {
+    let patch = "@@ -1,3 +1,5 @@\n a\n+b\n+c\n b\n d\n";
+    let diff = FileDiff::build(
+        patch,
+        options(WhitespaceMode::Ignore, ChangeHighlight::Words),
+    );
+    let lines = &diff.hunks()[0].lines;
+    assert_eq!(
+        lines
+            .iter()
+            .map(|line| (line.kind, line.origin, line.text.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            (DiffLineKind::Context, LineOrigin::Patch, "a"),
+            (DiffLineKind::Added, LineOrigin::Patch, "b"),
+            (DiffLineKind::Added, LineOrigin::Patch, "c"),
+            (DiffLineKind::Context, LineOrigin::Patch, "b"),
+            (DiffLineKind::Context, LineOrigin::Patch, "d"),
+        ]
+    );
+}
+
 /// A hunk of only whitespace changes disappears when whitespace is ignored.
 #[test]
 fn drops_whitespace_only_hunks() {
