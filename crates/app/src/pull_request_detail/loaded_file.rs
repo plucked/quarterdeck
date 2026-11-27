@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use qd_cache::PatchFingerprint;
 use qd_diff::{ContextGap, DiffOptions, FileDiff, GapPlace, RevealedLines, SourceLines};
-use qd_file_tree::FileFacets;
+use qd_file_tree::{FileChange, FileFacets};
 use qd_github::PullRequestFile;
 use qd_syntax::DiffSyntax;
 
@@ -62,7 +62,7 @@ impl LoadedFile {
     ) -> Self {
         let file = Arc::new(file);
         let diff = Arc::new(build_diff(&file, options));
-        let facets = Arc::new(FileFacets::of(&file.filename, is_unchanged_move(&file)));
+        let facets = Arc::new(FileFacets::of(&file.filename, file_change_of(&file)));
         Self {
             facets,
             gutter_width: gutter_width(diff.max_line_number()),
@@ -205,6 +205,15 @@ fn build_diff(file: &PullRequestFile, options: DiffOptions) -> FileDiff {
         .as_deref()
         .map(|patch| FileDiff::build(patch, options))
         .unwrap_or_default()
+}
+
+/// How `file` changed, for classifying its `FileKind`.
+fn file_change_of(file: &PullRequestFile) -> FileChange {
+    match file.status.as_str() {
+        "removed" => FileChange::Deleted,
+        _ if is_unchanged_move(file) => FileChange::UnchangedMove,
+        _ => FileChange::Content,
+    }
 }
 
 /// Whether `file` was moved or copied with its content unchanged.

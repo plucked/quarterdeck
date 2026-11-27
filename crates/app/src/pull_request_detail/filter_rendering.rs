@@ -68,7 +68,7 @@ impl PullRequestDetail {
         )
     }
 
-    /// The kind chips: Code, Tests, Generated, Moved (those present).
+    /// The kind chips: Code, Tests, Generated, Moved, Deleted (those present).
     fn render_kind_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let filter = self.file_tree().filter();
         let chips: Vec<AnyElement> = self

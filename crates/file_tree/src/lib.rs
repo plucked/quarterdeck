@@ -12,7 +12,8 @@
 //! - `file_filter.rs`: `FileFilter`, which files show, and the chips' counts.
 //! - `filtered_file.rs`: `FilteredFile`, what the filter looks at in a file.
 //! - `file_facets.rs`: `FileFacets`, a file's kind and type, worked out once from its path.
-//! - `file_kind.rs`: `FileKind`, a file's one kind (code, tests, generated, moved).
+//! - `file_change.rs`: `FileChange`, git-level change kind (content, unchanged move, deleted).
+//! - `file_kind.rs`: `FileKind`, a file's one kind (code, tests, generated, moved, deleted).
 //! - `facet_filter.rs`: `FacetFilter`, one chip row: picked and hidden values.
 //! - `facet_choice.rs`: `FacetChoice`, what one chip is set to.
 //! - `facet_count.rs`: `FacetCount`, one chip's total and matching counts.
@@ -24,6 +25,7 @@ mod facet_choice;
 mod facet_count;
 mod facet_filter;
 mod file_category;
+mod file_change;
 mod file_facets;
 mod file_filter;
 mod file_icon;
@@ -38,6 +40,7 @@ mod tree_row;
 pub use facet_choice::FacetChoice;
 pub use facet_count::FacetCount;
 pub use facet_filter::FacetFilter;
+pub use file_change::FileChange;
 pub use file_facets::FileFacets;
 pub use file_filter::FileFilter;
 pub use file_icon::FileIcon;

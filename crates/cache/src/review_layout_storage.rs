@@ -24,6 +24,7 @@ fn kind_column(kind: FileKind) -> &'static str {
         FileKind::Tests => "hide_tests",
         FileKind::Generated => "hide_generated",
         FileKind::Moved => "hide_unchanged_moves",
+        FileKind::Deleted => "hide_deleted",
     }
 }
 
@@ -96,8 +97,9 @@ impl UiStateStore {
         let hides = |kind| layout.hidden_kinds.contains(&kind);
         self.connection().execute(
             "INSERT INTO review_layout (id, file_tree_visible, stack_review, hide_viewed,
-                hide_code, hide_tests, hide_generated, hide_unchanged_moves, comment_destination, files_mode)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                hide_code, hide_tests, hide_generated, hide_unchanged_moves, hide_deleted,
+                comment_destination, files_mode)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT (id) DO UPDATE SET
                 file_tree_visible = excluded.file_tree_visible,
                 stack_review = excluded.stack_review,
@@ -105,6 +107,7 @@ impl UiStateStore {
                 hide_code = excluded.hide_code, hide_tests = excluded.hide_tests,
                 hide_generated = excluded.hide_generated,
                 hide_unchanged_moves = excluded.hide_unchanged_moves,
+                hide_deleted = excluded.hide_deleted,
                 comment_destination = excluded.comment_destination,
                 files_mode = excluded.files_mode",
             params![
@@ -116,6 +119,7 @@ impl UiStateStore {
                 hides(FileKind::Tests),
                 hides(FileKind::Generated),
                 hides(FileKind::Moved),
+                hides(FileKind::Deleted),
                 layout.comment_destination.as_sql_text(),
                 layout.files_mode.as_sql_text()
             ],
@@ -137,7 +141,7 @@ mod tests {
             file_tree: PanelVisibility::Hidden,
             files_mode: crate::FilesMode::Plan,
             hide_viewed: true,
-            hidden_kinds: BTreeSet::from([FileKind::Code, FileKind::Moved]),
+            hidden_kinds: BTreeSet::from([FileKind::Code, FileKind::Moved, FileKind::Deleted]),
             stack_review: StackReviewMode::Combined,
             comment_destination: NoteDestination::Local,
         };

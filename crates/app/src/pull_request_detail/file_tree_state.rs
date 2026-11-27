@@ -779,4 +779,68 @@ mod tests {
         assert!(state.is_folder_collapsed("srcx"));
         assert!(state.row_of_file(main_file).is_some());
     }
+
+    /// Removed files appear under the Deleted kind chip, can be picked or hidden,
+    /// and hiding Deleted persists in the saved layout.
+    #[test]
+    fn deleted_kind_filters_removed_files_and_persists_when_hidden() {
+        let paths = ["src/kept.rs", "src/gone.rs", "tests/gone_test.rs"];
+        let files = [
+            modified_file("src/kept.rs"),
+            LoadedFile::build(
+                PullRequestFile {
+                    filename: "src/gone.rs".into(),
+                    previous_filename: None,
+                    status: "removed".into(),
+                    additions: 0,
+                    deletions: 10,
+                    patch: Some("@@ -1 +0,0 @@\n-old\n".into()),
+                    sha: None,
+                },
+                DiffOptions::default(),
+            ),
+            LoadedFile::build(
+                PullRequestFile {
+                    filename: "tests/gone_test.rs".into(),
+                    previous_filename: None,
+                    status: "removed".into(),
+                    additions: 0,
+                    deletions: 5,
+                    patch: Some("@@ -1 +0,0 @@\n-old\n".into()),
+                    sha: None,
+                },
+                DiffOptions::default(),
+            ),
+        ];
+        let mut state = FileTreeState::new(ReviewLayoutState::default());
+        state.reset_for(FileTree::build(&paths));
+        let review = FileReviewState::default();
+        state.refresh_rows(&files, &review);
+
+        // Deleted counts both removed files, even the removed test file.
+        let deleted_count = state
+            .kind_counts()
+            .iter()
+            .find(|count| count.value == FileKind::Deleted)
+            .unwrap();
+        assert_eq!(deleted_count.total, 2);
+        assert_eq!(deleted_count.matching, 2);
+
+        // Picking Deleted shows only the two removed files.
+        state.click_kind(FileKind::Deleted, ChipClick::Pick);
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (2, 3));
+        assert!(!state.shows(&files[0], &review));
+        assert!(state.shows(&files[1], &review));
+        assert!(state.shows(&files[2], &review));
+
+        // Hiding Deleted shows only the kept file and saves into the review layout.
+        state.click_kind(FileKind::Deleted, ChipClick::Hide);
+        state.refresh_rows(&files, &review);
+        assert_eq!(state.shown_of_total(), (1, 3));
+        assert!(state.shows(&files[0], &review));
+        assert!(!state.shows(&files[1], &review));
+        assert!(!state.shows(&files[2], &review));
+        assert!(state.layout().hidden_kinds.contains(&FileKind::Deleted));
+    }
 }

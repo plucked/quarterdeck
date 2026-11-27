@@ -78,9 +78,11 @@ fn listing_of(loaded: &LoadedFile) -> FileListing {
     match (loaded.facets.kind, loaded.file.patch.is_some()) {
         (FileKind::Generated, _) => FileListing::LeftOut("generated".into()),
         (FileKind::Moved, _) => FileListing::LeftOut("moved without changes".into()),
-        (FileKind::Code | FileKind::Tests, false) => {
+        (FileKind::Code | FileKind::Tests | FileKind::Deleted, false) => {
             FileListing::LeftOut("no patch (binary, or too large for GitHub to show)".into())
         }
-        (FileKind::Code | FileKind::Tests, true) => FileListing::Diff(loaded.diff.clone()),
+        (FileKind::Code | FileKind::Tests | FileKind::Deleted, true) => {
+            FileListing::Diff(loaded.diff.clone())
+        }
     }
 }

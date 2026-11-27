@@ -124,10 +124,10 @@ fn sort_name(file_type: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::FileFacets;
+    use crate::{FileChange, FileFacets};
 
-    fn facets(path: &str, is_unchanged_move: bool) -> FileFacets {
-        FileFacets::of(path, is_unchanged_move)
+    fn facets(path: &str, change: FileChange) -> FileFacets {
+        FileFacets::of(path, change)
     }
 
     fn file(facets: &FileFacets) -> FilteredFile<'_> {
@@ -142,8 +142,33 @@ mod tests {
     fn picking_a_kind_ignores_other_types() {
         let mut filter = FileFilter::default();
         filter.kinds.toggle_only(&FileKind::Moved);
-        assert!(filter.shows(&file(&facets("contracts/a.schema", true))));
-        assert!(!filter.shows(&file(&facets("src/a.rs", false))));
+        assert!(filter.shows(&file(&facets(
+            "contracts/a.schema",
+            FileChange::UnchangedMove
+        ))));
+        assert!(!filter.shows(&file(&facets("src/a.rs", FileChange::Content))));
+    }
+
+    /// Picking or hiding Deleted filters removed files regardless of path category.
+    #[test]
+    fn deleted_kind_picks_and_hides_removed_files() {
+        let deleted_code = facets("src/old.rs", FileChange::Deleted);
+        let deleted_test = facets("tests/old_test.rs", FileChange::Deleted);
+        let modified_code = facets("src/main.rs", FileChange::Content);
+
+        let mut pick_deleted = FileFilter::default();
+        pick_deleted.kinds.toggle_only(&FileKind::Deleted);
+        assert!(pick_deleted.shows(&file(&deleted_code)));
+        assert!(pick_deleted.shows(&file(&deleted_test)));
+        assert!(!pick_deleted.shows(&file(&modified_code)));
+        assert_eq!(pick_deleted.describe(), ["Deleted"]);
+
+        let mut hide_deleted = FileFilter::default();
+        hide_deleted.kinds.toggle_hidden(&FileKind::Deleted);
+        assert!(!hide_deleted.shows(&file(&deleted_code)));
+        assert!(!hide_deleted.shows(&file(&deleted_test)));
+        assert!(hide_deleted.shows(&file(&modified_code)));
+        assert_eq!(hide_deleted.describe(), ["not Deleted"]);
     }
 
     /// The rows narrow together: Moved and `.schema` together show moved schemas only.
@@ -152,8 +177,8 @@ mod tests {
         let mut filter = FileFilter::default();
         filter.kinds.toggle_only(&FileKind::Moved);
         filter.file_types.toggle_only(&".schema".to_owned());
-        assert!(filter.shows(&file(&facets("a.schema", true))));
-        assert!(!filter.shows(&file(&facets("a.cs", true))));
+        assert!(filter.shows(&file(&facets("a.schema", FileChange::UnchangedMove))));
+        assert!(!filter.shows(&file(&facets("a.cs", FileChange::UnchangedMove))));
         assert_eq!(filter.describe(), ["Moved", ".schema"]);
     }
 
@@ -161,11 +186,11 @@ mod tests {
     #[test]
     fn file_types_sort_alphabetically() {
         let all_facets = [
-            facets("a.rs", false),
-            facets("b.rs", false),
-            facets("Dockerfile", false),
-            facets(".gitignore", false),
-            facets("c.cs", false),
+            facets("a.rs", FileChange::Content),
+            facets("b.rs", FileChange::Content),
+            facets("Dockerfile", FileChange::Content),
+            facets(".gitignore", FileChange::Content),
+            facets("c.cs", FileChange::Content),
         ];
         let files: Vec<FilteredFile<'_>> = all_facets.iter().map(file).collect();
         let order: Vec<String> = FileFilter::default()
@@ -180,10 +205,10 @@ mod tests {
     #[test]
     fn counts_follow_the_other_row() {
         let all_facets = [
-            facets("a.schema", true),
-            facets("b.schema", true),
-            facets("c.cs", true),
-            facets("d.cs", false),
+            facets("a.schema", FileChange::UnchangedMove),
+            facets("b.schema", FileChange::UnchangedMove),
+            facets("c.cs", FileChange::UnchangedMove),
+            facets("d.cs", FileChange::Content),
         ];
         let files: Vec<FilteredFile<'_>> = all_facets.iter().map(file).collect();
         let mut filter = FileFilter::default();
@@ -221,7 +246,7 @@ mod tests {
             hide_viewed: true,
             ..FileFilter::default()
         };
-        let rust = facets("a.rs", false);
+        let rust = facets("a.rs", FileChange::Content);
         let viewed = FilteredFile {
             is_viewed: true,
             ..file(&rust)

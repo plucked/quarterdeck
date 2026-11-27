@@ -847,6 +847,9 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     // per-PR patch budget. Drop cached file sets containing any patchless file
     // so they reload cleanly on next open.
     "DELETE FROM pr_file_sets WHERE pr_id IN (SELECT pr_id FROM pr_files WHERE patch IS NULL);",
+    // Persist the Deleted kind filter toggle alongside the other hidden kinds.
+    "ALTER TABLE review_layout ADD COLUMN hide_deleted INTEGER NOT NULL DEFAULT 0
+        CHECK (hide_deleted IN (0, 1));",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in
@@ -1066,5 +1069,41 @@ mod tests {
             .collect();
         assert_eq!(remaining_sets, [1]);
         assert_eq!(remaining_files, [1]);
+    }
+
+    /// Upgrading preserves an existing review layout row and starts `hide_deleted` off.
+    #[test]
+    fn hide_deleted_migration_preserves_review_layout() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        let before_deleted = SCHEMA_MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("ADD COLUMN hide_deleted"))
+            .unwrap();
+        for sql in &SCHEMA_MIGRATIONS[..before_deleted] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection
+            .pragma_update(None, "user_version", i64::try_from(before_deleted).unwrap())
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO review_layout (
+                    id, file_tree_visible, stack_review, hide_viewed,
+                    hide_code, hide_tests, hide_generated, hide_unchanged_moves,
+                    comment_destination, files_mode
+                 ) VALUES (1, 1, 'layer', 0, 0, 1, 0, 1, 'github', 'tree')",
+                [],
+            )
+            .unwrap();
+
+        apply_schema_migrations(&mut connection).unwrap();
+        let flags: (bool, bool, bool) = connection
+            .query_row(
+                "SELECT hide_tests, hide_unchanged_moves, hide_deleted FROM review_layout",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(flags, (true, true, false));
     }
 }

@@ -1,5 +1,5 @@
 use crate::file_category::file_type_of;
-use crate::{FileIcon, FileKind};
+use crate::{FileChange, FileIcon, FileKind};
 
 /// What the filter sorts a changed file by: its one kind and its type, and
 /// the icon the tree shows for it. Worked out from the path once per file
@@ -15,11 +15,10 @@ pub struct FileFacets {
 }
 
 impl FileFacets {
-    /// The facets of the file at `path`; `is_unchanged_move` for a file
-    /// moved or copied with its content unchanged.
-    pub fn of(path: &str, is_unchanged_move: bool) -> Self {
+    /// The facets of the file at `path` with git-level `change`.
+    pub fn of(path: &str, change: FileChange) -> Self {
         Self {
-            kind: FileKind::of(path, is_unchanged_move),
+            kind: FileKind::of(path, change),
             file_type: file_type_of(path),
             icon: FileIcon::of(path),
         }
