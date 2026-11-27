@@ -33,7 +33,7 @@
 //! - `paged_requests.rs`: reading a list page by page, by `Link` header (`linked_pages`) or by page number and total (`numbered_pages`, `NumberedPage`).
 //! - `rate_limit.rs`: `RateLimit` and `RateLimitResource`, a budget GitHub reported.
 //! - `api_usage.rs`: `ApiUsage`, requests sent and budgets left, shared by clones.
-//! - `revision_check.rs`: `RevisionCheck`, a pull request's commits and file count.
+//! - `revision_check.rs`: `RevisionCheck`, a pull request's commits, file count, and line counts.
 //! - `download_progress.rs`: `DownloadProgress`, the bytes of a body received so far.
 //! - `stack_membership.rs`: `StackMembership`, where a pull request sits in its stack.
 //! - `pull_request_branches.rs`: `PullRequestBranches`, the branches a pull request comes from and goes into.

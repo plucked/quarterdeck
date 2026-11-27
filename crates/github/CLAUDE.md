@@ -20,7 +20,7 @@
 | `pull_request_file` | `PullRequestFile` (changed file + patch) |
 | `search_issue` | raw search-API issue shape → `PullRequest` (crate-private) |
 | `search_response` | search envelope (crate-private) |
-| `pull_request_revision` / `revision_check` | `PullRequestRevision` (head + base commit) and `RevisionCheck` (+ changed file count) from `GET /pulls/{n}` |
+| `pull_request_revision` / `revision_check` | `PullRequestRevision` (head + base commit) and `RevisionCheck` (+ changed file, addition and deletion counts) from `GET /pulls/{n}` |
 | `stack_membership` | The stack number, position, size and base branch for a pull request. The batch lookup reads memberships alongside branches and viewer reviews. |
 | `pull_request_branches` / `viewer_review` / `pull_request_lookup_query` | `PullRequestBranches` (head and base refs and commit IDs, head repository and base repository’s default branch, on `PullRequest::branches`); `ViewerReview` (approved, changes requested, commented, dismissed; from `viewerLatestReview.state`, `PENDING` is none; on `PullRequest::viewer_review`); the GraphQL text looking up chosen pull requests' branches and viewer review in one repository (aliased `pullRequest(number:)` fields, 100 per request), used by `other_pull_requests` for the ones read anew |
 | `pull_request_stack` / `stack_layer` | `PullRequestStack` and its `StackLayer`s from `GET /repos/{o}/{r}/stacks/{n}` |

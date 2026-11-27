@@ -7,13 +7,30 @@ use super::file_set_update::FileSetUpdate;
 use super::load_progress::LoadProgress;
 use crate::shared_cache::SharedCache;
 
-/// Above this count, try one diff download before fetching individual API pages.
+/// Above this file count, try one diff download before fetching individual API pages.
 const DIFF_DOWNLOAD_FILE_THRESHOLD: u64 = 500;
+/// Above this changed-line count, try one diff download first so the files API's
+/// cumulative per-PR patch budget does not drop patches from tail files.
+const DIFF_DOWNLOAD_LINE_THRESHOLD: u64 = 10_000;
 
 /// Files and the two immutable commits that identify the displayed diff.
 pub(super) struct FileSnapshot {
     pub files: Vec<PullRequestFile>,
     pub revision: qd_github::PullRequestRevision,
+}
+
+/// The file and line counts GitHub reported for a revision before fetching its files.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ExpectedChanges {
+    files: u64,
+    additions: u64,
+    deletions: u64,
+}
+
+impl ExpectedChanges {
+    fn changed_lines(self) -> u64 {
+        self.additions.saturating_add(self.deletions)
+    }
 }
 
 /// Where a pull request's files come from.
@@ -26,11 +43,17 @@ enum FileSource {
 }
 
 impl FileSource {
-    /// API pages through 500 files; a diff download first above that threshold.
-    fn for_file_count(changed_files: u64) -> Self {
-        match changed_files.cmp(&DIFF_DOWNLOAD_FILE_THRESHOLD) {
-            std::cmp::Ordering::Less | std::cmp::Ordering::Equal => Self::Pages,
-            std::cmp::Ordering::Greater => Self::WholeDiff,
+    /// API pages through 500 files and 10,000 changed lines; a diff download first above either.
+    fn for_changes(expected: ExpectedChanges) -> Self {
+        match (
+            expected.files.cmp(&DIFF_DOWNLOAD_FILE_THRESHOLD),
+            expected.changed_lines().cmp(&DIFF_DOWNLOAD_LINE_THRESHOLD),
+        ) {
+            (std::cmp::Ordering::Greater, _) | (_, std::cmp::Ordering::Greater) => Self::WholeDiff,
+            (
+                std::cmp::Ordering::Less | std::cmp::Ordering::Equal,
+                std::cmp::Ordering::Less | std::cmp::Ordering::Equal,
+            ) => Self::Pages,
         }
     }
 }
@@ -41,8 +64,10 @@ impl FileSource {
 /// 2. Otherwise one request for its head and base commits, conditional on the
 ///    tag of the last such answer (free when unchanged). Unchanged commits
 ///    keep the cached files: a comment or review moved `updated_at`.
-/// 3. Only new commits (or nothing cached) fetch files. Above 500 files, try
-///    the whole diff first, then API pages if GitHub has not prepared it.
+/// 3. Only new commits (or nothing cached) fetch files. Above 500 files or
+///    10,000 changed lines, try the whole diff first, then API pages if GitHub
+///    has not prepared it. Below both thresholds, fetch API pages and try the
+///    whole diff once if GitHub truncated patches in the paged response.
 ///
 /// Both sources must return the revision's full file count before caching.
 /// An API fallback capped at 3000 is an error for a larger pull request;
@@ -122,12 +147,19 @@ fn fetch_once(
         FileSetUpdate::Refetch {
             revision,
             expected_files,
+            expected_additions,
+            expected_deletions,
         } => {
-            let files = fetch_uncached_files(expected_files, |source| match source {
+            let expected = ExpectedChanges {
+                files: expected_files,
+                additions: expected_additions,
+                deletions: expected_deletions,
+            };
+            let files = fetch_uncached_files(expected, |source| match source {
                 FileSource::Pages => {
                     on_progress(LoadProgress::FetchingFiles {
                         fetched: 0,
-                        total: Some(expected_files),
+                        total: Some(expected.files),
                     });
                     let files = client.pull_request_files(
                         &pull_request.repo,
@@ -135,7 +167,7 @@ fn fetch_once(
                         &mut |fetched| {
                             on_progress(LoadProgress::FetchingFiles {
                                 fetched,
-                                total: Some(expected_files),
+                                total: Some(expected.files),
                             });
                         },
                     )?;
@@ -185,18 +217,30 @@ fn verify_page_revision(
     }
 }
 
-/// Tries the preferred source, then API pages for an unavailable or incomplete diff.
+/// Tries the preferred source, falling back between the whole diff and API
+/// pages when one is unavailable, incomplete, or truncated.
 fn fetch_uncached_files(
-    expected_files: u64,
+    expected: ExpectedChanges,
     mut fetch: impl FnMut(FileSource) -> Result<Vec<PullRequestFile>>,
 ) -> Result<Vec<PullRequestFile>> {
     // Validate at this boundary so no partial response can reach the file cache.
     let mut fetch_complete = |source| {
         let files = fetch(source)?;
-        require_complete_files(source, expected_files, files)
+        require_complete_files(source, expected.files, files)
     };
-    match FileSource::for_file_count(expected_files) {
-        FileSource::Pages => fetch_complete(FileSource::Pages),
+    match FileSource::for_changes(expected) {
+        FileSource::Pages => {
+            let files = fetch_complete(FileSource::Pages)?;
+            if !has_truncated_patches(&files, expected) {
+                return Ok(files);
+            }
+            // GitHub's files API dropped patches (per-file or per-PR budget);
+            // try the whole diff once, keeping the paged list if it fails.
+            match fetch_complete(FileSource::WholeDiff) {
+                Ok(diff_files) => Ok(diff_files),
+                Err(_) => Ok(files),
+            }
+        }
         FileSource::WholeDiff => match fetch_complete(FileSource::WholeDiff) {
             Ok(files) => Ok(files),
             // A shared exhausted budget or slowdown also forbids the API fallback.
@@ -214,6 +258,25 @@ fn fetch_uncached_files(
             }),
         },
     }
+}
+
+/// Whether the files API omitted patches that the pull request actually has:
+/// either a file reports changed lines without a patch, or GitHub stopped
+/// computing diffs partway through and zeroed the remaining files' line counts.
+fn has_truncated_patches(files: &[PullRequestFile], expected: ExpectedChanges) -> bool {
+    let has_patchless_line_changes = files
+        .iter()
+        .any(|file| file.patch.is_none() && (file.additions > 0 || file.deletions > 0));
+    if has_patchless_line_changes {
+        return true;
+    }
+    let reported_additions = files
+        .iter()
+        .fold(0_u64, |sum, file| sum.saturating_add(file.additions));
+    let reported_deletions = files
+        .iter()
+        .fold(0_u64, |sum, file| sum.saturating_add(file.deletions));
+    reported_additions < expected.additions || reported_deletions < expected.deletions
 }
 
 /// Rejects a pending response, truncated API list, or revision that changed during loading.
@@ -260,6 +323,28 @@ mod tests {
             .collect()
     }
 
+    /// Creates one entry with a non-empty patch and explicit line counts.
+    fn patched_file(filename: &str, additions: u64, deletions: u64) -> PullRequestFile {
+        PullRequestFile {
+            filename: filename.into(),
+            previous_filename: None,
+            status: "modified".into(),
+            additions,
+            deletions,
+            patch: Some("@@ -1 +1 @@\n-old\n+new".into()),
+            sha: None,
+        }
+    }
+
+    /// Expected changes with zero line counts (matching `files(count)`).
+    fn expected_only_files(count: u64) -> ExpectedChanges {
+        ExpectedChanges {
+            files: count,
+            additions: 0,
+            deletions: 0,
+        }
+    }
+
     /// An ordinary API response whose diff is not available yet.
     fn pending_diff() -> anyhow::Error {
         GitHubError::Api {
@@ -269,37 +354,162 @@ mod tests {
         .into()
     }
 
-    /// At most 500 files use only the files API, including an empty revision.
+    /// At most 500 files and 10,000 changed lines use only the files API, including an empty revision.
     #[test]
     fn small_pull_requests_use_pages() {
-        for count in [0, 12, 500] {
-            let fetched = fetch_uncached_files(count, |source| {
+        for expected in [
+            expected_only_files(0),
+            expected_only_files(12),
+            expected_only_files(500),
+            ExpectedChanges {
+                files: 500,
+                additions: 6_000,
+                deletions: 4_000,
+            },
+        ] {
+            let fetched = fetch_uncached_files(expected, |source| {
                 assert_eq!(source, FileSource::Pages);
-                Ok(files(usize::try_from(count).unwrap()))
+                let mut page_files = files(usize::try_from(expected.files).unwrap());
+                if let Some(first) = page_files.first_mut()
+                    && (expected.additions > 0 || expected.deletions > 0)
+                {
+                    *first = patched_file("file-0.rs", expected.additions, expected.deletions);
+                }
+                Ok(page_files)
             })
             .unwrap();
-            assert_eq!(u64::try_from(fetched.len()).unwrap(), count);
+            assert_eq!(u64::try_from(fetched.len()).unwrap(), expected.files);
         }
     }
 
-    /// More than 500 files prefer the diff, with no API request after complete success.
+    /// More than 500 files or more than 10,000 changed lines prefer the whole diff.
     #[test]
     fn large_pull_requests_download_the_whole_diff() {
-        for count in [501, 3000, 3001] {
-            let fetched = fetch_uncached_files(count, |source| {
+        for expected in [
+            expected_only_files(501),
+            expected_only_files(3000),
+            expected_only_files(3001),
+            ExpectedChanges {
+                files: 288,
+                additions: 28_118,
+                deletions: 14_838,
+            },
+            ExpectedChanges {
+                files: 1,
+                additions: 10_001,
+                deletions: 0,
+            },
+        ] {
+            let fetched = fetch_uncached_files(expected, |source| {
                 assert_eq!(source, FileSource::WholeDiff);
-                Ok(files(usize::try_from(count).unwrap()))
+                Ok(files(usize::try_from(expected.files).unwrap()))
             })
             .unwrap();
-            assert_eq!(u64::try_from(fetched.len()).unwrap(), count);
+            assert_eq!(u64::try_from(fetched.len()).unwrap(), expected.files);
         }
+    }
+
+    /// When the files API drops tail patches (zeroing their line counts), fall back to the whole diff.
+    #[test]
+    fn truncated_page_totals_fall_back_to_whole_diff() {
+        let expected = ExpectedChanges {
+            files: 2,
+            additions: 10,
+            deletions: 2,
+        };
+        let mut sources = Vec::new();
+        let fetched = fetch_uncached_files(expected, |source| {
+            sources.push(source);
+            Ok(match source {
+                FileSource::Pages => vec![
+                    patched_file("a.rs", 8, 2),
+                    PullRequestFile {
+                        filename: "b.rs".into(),
+                        previous_filename: None,
+                        status: "modified".into(),
+                        additions: 0,
+                        deletions: 0,
+                        patch: None,
+                        sha: None,
+                    },
+                ],
+                FileSource::WholeDiff => {
+                    vec![patched_file("a.rs", 8, 2), patched_file("b.rs", 2, 0)]
+                }
+            })
+        })
+        .unwrap();
+        assert_eq!(sources, [FileSource::Pages, FileSource::WholeDiff]);
+        assert!(fetched.iter().all(|file| file.patch.is_some()));
+    }
+
+    /// When the files API omits a single file's patch while reporting its line changes, fall back to the whole diff.
+    #[test]
+    fn patchless_line_changes_fall_back_to_whole_diff() {
+        let expected = ExpectedChanges {
+            files: 1,
+            additions: 500,
+            deletions: 0,
+        };
+        let mut sources = Vec::new();
+        let fetched = fetch_uncached_files(expected, |source| {
+            sources.push(source);
+            Ok(match source {
+                FileSource::Pages => vec![PullRequestFile {
+                    filename: "wide.json".into(),
+                    previous_filename: None,
+                    status: "modified".into(),
+                    additions: 500,
+                    deletions: 0,
+                    patch: None,
+                    sha: None,
+                }],
+                FileSource::WholeDiff => vec![patched_file("wide.json", 500, 0)],
+            })
+        })
+        .unwrap();
+        assert_eq!(sources, [FileSource::Pages, FileSource::WholeDiff]);
+        assert!(fetched[0].patch.is_some());
+    }
+
+    /// If the truncation fallback diff fails or is incomplete, keep the paged files instead of failing.
+    #[test]
+    fn failed_truncation_fallback_keeps_paged_files() {
+        let expected = ExpectedChanges {
+            files: 2,
+            additions: 10,
+            deletions: 0,
+        };
+        let mut sources = Vec::new();
+        let fetched = fetch_uncached_files(expected, |source| {
+            sources.push(source);
+            match source {
+                FileSource::Pages => Ok(vec![
+                    patched_file("a.rs", 8, 0),
+                    PullRequestFile {
+                        filename: "b.rs".into(),
+                        previous_filename: None,
+                        status: "modified".into(),
+                        additions: 0,
+                        deletions: 0,
+                        patch: None,
+                        sha: None,
+                    },
+                ]),
+                FileSource::WholeDiff => Err(pending_diff()),
+            }
+        })
+        .unwrap();
+        assert_eq!(sources, [FileSource::Pages, FileSource::WholeDiff]);
+        assert_eq!(fetched.len(), 2);
+        assert!(fetched[1].patch.is_none());
     }
 
     /// A diff still being generated falls back once to the normal files API.
     #[test]
     fn unavailable_diff_falls_back_to_pages() {
         let mut sources = Vec::new();
-        let fetched = fetch_uncached_files(501, |source| {
+        let fetched = fetch_uncached_files(expected_only_files(501), |source| {
             sources.push(source);
             match source {
                 FileSource::WholeDiff => Err(pending_diff()),
@@ -316,7 +526,7 @@ mod tests {
     fn incomplete_diff_falls_back_to_pages() {
         for count in [0, 500, 502] {
             let mut sources = Vec::new();
-            let fetched = fetch_uncached_files(501, |source| {
+            let fetched = fetch_uncached_files(expected_only_files(501), |source| {
                 sources.push(source);
                 Ok(match source {
                     FileSource::WholeDiff => files(count),
@@ -333,7 +543,7 @@ mod tests {
     #[test]
     fn truncated_api_fallback_is_an_error() {
         let mut sources = Vec::new();
-        let error = fetch_uncached_files(3001, |source| {
+        let error = fetch_uncached_files(expected_only_files(3001), |source| {
             sources.push(source);
             match source {
                 FileSource::WholeDiff => Err(pending_diff()),
@@ -351,7 +561,7 @@ mod tests {
     /// If both requests fail, the result explains the diff failure and retains the API error type.
     #[test]
     fn failed_fallback_keeps_both_errors() {
-        let error = fetch_uncached_files(501, |source| match source {
+        let error = fetch_uncached_files(expected_only_files(501), |source| match source {
             FileSource::WholeDiff => Err(pending_diff()),
             FileSource::Pages => Err(GitHubError::Api {
                 status: 502,
@@ -382,7 +592,7 @@ mod tests {
             },
         ] {
             let mut throttle = Some(throttle);
-            let error = fetch_uncached_files(501, |source| {
+            let error = fetch_uncached_files(expected_only_files(501), |source| {
                 assert_eq!(source, FileSource::WholeDiff);
                 Err(throttle.take().expect("only one request").into())
             })
@@ -409,7 +619,9 @@ mod revision_tests {
                     ConditionalResponse::Modified {
                         value: RevisionCheck {
                             revision: rev(head, base),
-                            changed_files: 2
+                            changed_files: 2,
+                            additions: 10,
+                            deletions: 4,
                         },
                         etag: None
                     }

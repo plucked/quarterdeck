@@ -12,10 +12,13 @@ pub enum FileSetUpdate {
         revision: FileSetRevision,
     },
     /// The commits changed, or nothing is cached: fetch the files (GitHub
-    /// counts `expected_files`) for this revision.
+    /// counts `expected_files`, `expected_additions`, and `expected_deletions`)
+    /// for this revision.
     Refetch {
         revision: FileSetRevision,
         expected_files: u64,
+        expected_additions: u64,
+        expected_deletions: u64,
     },
     /// GitHub said "not modified" for a tag nothing cached belongs to; ask
     /// again without a tag.
@@ -53,6 +56,8 @@ impl FileSetUpdate {
                     etag,
                 },
                 expected_files: value.changed_files,
+                expected_additions: value.additions,
+                expected_deletions: value.deletions,
             },
         }
     }
@@ -87,6 +92,8 @@ mod tests {
             value: RevisionCheck {
                 revision: commits(head),
                 changed_files: 4,
+                additions: 120,
+                deletions: 30,
             },
             etag: Some(ETag::new("new")),
         }
@@ -115,13 +122,21 @@ mod tests {
         assert_eq!(revision.etag, Some(ETag::new("new")));
     }
 
-    /// A push changes the head: refetch.
+    /// A push changes the head: refetch with the reported file and line counts.
     #[test]
     fn new_commits_refetch() {
-        assert!(matches!(
+        assert_eq!(
             FileSetUpdate::decide(Some(cached("a")), modified("b")),
-            FileSetUpdate::Refetch { .. }
-        ));
+            FileSetUpdate::Refetch {
+                revision: FileSetRevision {
+                    commits: commits("b"),
+                    etag: Some(ETag::new("new")),
+                },
+                expected_files: 4,
+                expected_additions: 120,
+                expected_deletions: 30,
+            }
+        );
     }
 
     /// Nothing cached: refetch, or ask again if GitHub claims nothing changed.

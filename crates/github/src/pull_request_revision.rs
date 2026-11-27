@@ -17,6 +17,8 @@ pub(crate) struct PullRequestRefs {
     head: CommitRef,
     base: CommitRef,
     changed_files: u64,
+    additions: u64,
+    deletions: u64,
 }
 
 #[derive(Deserialize)]
@@ -32,6 +34,8 @@ impl PullRequestRefs {
                 base_sha: self.base.sha,
             },
             changed_files: self.changed_files,
+            additions: self.additions,
+            deletions: self.deletions,
         }
     }
 }
@@ -40,10 +44,10 @@ impl PullRequestRefs {
 mod tests {
     use super::*;
 
-    /// The head and base commits and the file count are read from a pull request response.
+    /// The head and base commits and the file and line counts are read from a pull request response.
     #[test]
     fn reads_head_and_base_commits() {
-        let json = r#"{"number": 1, "changed_files": 12, "head": {"sha": "aaa", "ref": "x"}, "base": {"sha": "bbb", "ref": "main"}}"#;
+        let json = r#"{"number": 1, "changed_files": 12, "additions": 250, "deletions": 40, "head": {"sha": "aaa", "ref": "x"}, "base": {"sha": "bbb", "ref": "main"}}"#;
         let refs: PullRequestRefs = serde_json::from_str(json).unwrap();
         assert_eq!(
             refs.into_check(),
@@ -52,7 +56,9 @@ mod tests {
                     head_sha: "aaa".into(),
                     base_sha: "bbb".into()
                 },
-                changed_files: 12
+                changed_files: 12,
+                additions: 250,
+                deletions: 40,
             }
         );
     }

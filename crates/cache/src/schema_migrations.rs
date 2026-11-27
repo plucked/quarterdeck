@@ -843,6 +843,10 @@ const SCHEMA_MIGRATIONS: &[&str] = &[
     INSERT INTO folded_stacks SELECT repo_owner, repo_name, stack_number, 0 FROM old_folded_stacks;
     DROP TABLE old_folded_stacks;
     ",
+    // Earlier fetches via the files API could drop patches once GitHub hit its
+    // per-PR patch budget. Drop cached file sets containing any patchless file
+    // so they reload cleanly on next open.
+    "DELETE FROM pr_file_sets WHERE pr_id IN (SELECT pr_id FROM pr_files WHERE patch IS NULL);",
 ];
 
 /// Applies every migration newer than the database's `user_version`, each in
@@ -1003,5 +1007,64 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
         assert_eq!(version, newer);
+    }
+
+    /// Dropping patchless file sets clears truncated caches while keeping complete ones.
+    #[test]
+    fn patchless_file_set_migration_drops_only_sets_with_missing_patches() {
+        // Set up: a database right before the cleanup migration with one complete
+        // file set and one file set containing a patchless entry.
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .unwrap();
+        let before_cleanup = SCHEMA_MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("WHERE patch IS NULL"))
+            .unwrap();
+        for sql in &SCHEMA_MIGRATIONS[..before_cleanup] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection
+            .pragma_update(None, "user_version", i64::try_from(before_cleanup).unwrap())
+            .unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO pull_requests (
+                    id, repo_owner, repo_name, number, title, author_login,
+                    author_avatar_url, html_url, draft, created_at, updated_at, fetched_at
+                 ) VALUES
+                    (1, 'o', 'r', 1, 'complete', 'a', '', 'https://example.com/1', 0, 't1', 't1', 1),
+                    (2, 'o', 'r', 2, 'truncated', 'a', '', 'https://example.com/2', 0, 't1', 't1', 1);
+                 INSERT INTO pr_file_sets (pr_id, updated_at, head_sha, base_sha, last_used_at)
+                 VALUES
+                    (1, 't1', 'h1', 'b1', 1),
+                    (2, 't1', 'h2', 'b2', 1);
+                 INSERT INTO pr_files (pr_id, position, filename, status, additions, deletions, patch)
+                 VALUES
+                    (1, 0, 'a.rs', 'modified', 1, 0, '@@ -1 +1 @@\n+x'),
+                    (2, 0, 'a.rs', 'modified', 1, 0, '@@ -1 +1 @@\n+x'),
+                    (2, 1, 'b.rs', 'modified', 0, 0, NULL);",
+            )
+            .unwrap();
+
+        // Act and expect: only the set with a patchless file is removed (and its rows cascade).
+        apply_schema_migrations(&mut connection).unwrap();
+        let remaining_sets: Vec<i64> = connection
+            .prepare("SELECT pr_id FROM pr_file_sets ORDER BY pr_id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        let remaining_files: Vec<i64> = connection
+            .prepare("SELECT pr_id FROM pr_files ORDER BY pr_id, position")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(remaining_sets, [1]);
+        assert_eq!(remaining_files, [1]);
     }
 }
